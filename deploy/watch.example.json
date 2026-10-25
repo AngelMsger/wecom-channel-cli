@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "bot_id": "BOT_ID",
+  "callback_listen": "127.0.0.1:8787",
+  "contexts": [{
+    "name": "engineering",
+    "state_dir": "/var/lib/wecom-channel/engineering",
+    "agent_socket": "/run/wecom-channel/engineering-agent/agent.sock",
+    "admin_socket": "/run/wecom-channel/engineering-admin/admin.sock",
+    "read_only": true,
+    "events": ["topic_event", "topic_reply_event", "topic_at_bot"],
+    "channels": [{
+      "id": "CHANNEL_ID",
+      "senders": ["AUTHORIZED_REQUESTER_ID"],
+      "read_all": true,
+      "observe_all": true,
+      "allow_posts": false,
+      "allow_replies": false
+    }]
+  }]
+}

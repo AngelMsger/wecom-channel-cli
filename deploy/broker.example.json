@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "bot_id": "BOT_ID",
+  "state_dir": "/var/lib/wecom-channel",
+  "agent_socket": "/run/wecom-channel-agent/agent.sock",
+  "admin_socket": "/run/wecom-channel-admin/admin.sock",
+  "callback_listen": "127.0.0.1:8787",
+  "read_only": true,
+  "channels": [
+    {
+      "id": "CHANNEL_ID",
+      "senders": ["AUTHORIZED_USER_ID"],
+      "read_all": false,
+      "allow_posts": false,
+      "allow_replies": true
+    }
+  ],
+  "events": ["topic_at_bot"],
+  "max_events": 5000,
+  "max_proposals": 1000,
+  "retention_hours": 48,
+  "proposal_ttl_seconds": 3600,
+  "requests_per_minute": 60
+}

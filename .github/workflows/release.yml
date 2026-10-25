@@ -1,0 +1,56 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+  id-token: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      TAG: ${{ github.ref_name }}
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Validate the reviewed source
+        run: |
+          make lint test e2e docs-check site-check
+          go test -race ./...
+          make vuln
+          npm test --prefix build/npm
+      - name: Build and verify the release candidate
+        run: |
+          test "$TAG" = "v$(node -p "require('./build/npm/package.json').version")"
+          make package
+          python3 scripts/release-check.py --publish
+      - name: Create or refresh the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/wecom-channel-cli-* dist/checksums.txt dist/release-manifest.json dist/*.tgz --clobber
+          else
+            gh release create "$TAG" dist/wecom-channel-cli-* dist/checksums.txt dist/release-manifest.json dist/*.tgz --title "$TAG" --notes-file docs/release-notes.md --verify-tag
+          fi
+      - name: Publish npm package through its configured trusted publisher
+        working-directory: build/npm
+        run: |
+          VERSION="${TAG#v}"
+          if npm view "@angelmsger/wecom-channel-cli@$VERSION" version >/dev/null 2>&1; then
+            echo 'This version is already published.'
+          else
+            npm publish --access public --provenance
+          fi

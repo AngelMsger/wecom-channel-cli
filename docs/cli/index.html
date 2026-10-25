@@ -1,0 +1,716 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="../guide.html">Operator guide</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, approval, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose reviewed replies through an isolated broker</p><pre><code>Usage:
+  wecom-channel-cli [flags]
+  wecom-channel-cli [command]
+
+Available Commands:
+  approval    Operator-only review and execution; requires the private operator socket
+  auth        Explain credential ownership and verify through the broker
+  broker      Run the isolated credential-holding broker
+  channel     Inspect channel data through broker policy
+  config      Inspect operator policy offline
+  doctor      Check broker connectivity and read-only policy
+  event       Read or watch authenticated channel events
+  member      Inspect member data through broker policy
+  post        Inspect post data through broker policy
+  proposal    Inspect immutable proposal status
+  reply       Inspect reply data through broker policy
+  search      Inspect search data through broker policy
+  skill       Inspect or install the embedded companion Skill
+  version     Print build metadata
+
+Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-approval"><h2>wecom-channel-cli approval</h2><p>Operator-only review and execution; requires the private operator socket</p><pre><code>Usage:
+  wecom-channel-cli approval [flags]
+  wecom-channel-cli approval [command]
+
+Available Commands:
+  approve     Operator: approve immutable proposals
+  list        Operator: list immutable proposals
+  reject      Operator: reject immutable proposals
+  resolve     Operator: resolve immutable proposals
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli approval [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-approval-approve"><h2>wecom-channel-cli approval approve</h2><p>Operator: approve immutable proposals</p><pre><code>Usage:
+  wecom-channel-cli approval approve [flags]
+
+Flags:
+      --digest string   Exact digest from the reviewed immutable proposal
+      --dry-run         Preview without a state change or remote write
+      --id string       Exact proposal ID
+      --yes             Confirm this exact operator action; never inferred from channel content
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-approval-list"><h2>wecom-channel-cli approval list</h2><p>Operator: list immutable proposals</p><pre><code>Usage:
+  wecom-channel-cli approval list [flags]
+
+Flags:
+      --cursor string   Previous approval-list cursor
+      --limit int       Page size (1–100) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-approval-reject"><h2>wecom-channel-cli approval reject</h2><p>Operator: reject immutable proposals</p><pre><code>Usage:
+  wecom-channel-cli approval reject [flags]
+
+Flags:
+      --digest string   Exact digest from the reviewed immutable proposal
+      --dry-run         Preview without a state change or remote write
+      --id string       Exact proposal ID
+      --yes             Confirm this exact operator action; never inferred from channel content
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-approval-resolve"><h2>wecom-channel-cli approval resolve</h2><p>Operator: resolve immutable proposals</p><pre><code>Usage:
+  wecom-channel-cli approval resolve [flags]
+
+Flags:
+      --digest string      Exact digest from the reviewed immutable proposal
+      --dry-run            Preview without a state change or remote write
+      --id string          Exact proposal ID
+      --outcome string     Independently verified outcome: sent or not_sent (never retries)
+      --remote-id string   Verified resource ID when outcome is sent
+      --yes                Confirm this exact operator action; never inferred from channel content
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-auth"><h2>wecom-channel-cli auth</h2><p>Explain credential ownership and verify through the broker</p><pre><code>Usage:
+  wecom-channel-cli auth [flags]
+  wecom-channel-cli auth [command]
+
+Available Commands:
+  check       Operator-only: verify authentication with a bounded channel-list request
+  guide       Read offline authentication and official CLI compatibility guidance
+  status      Read broker readiness (does not verify WeCom authentication)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli auth [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-auth-check"><h2>wecom-channel-cli auth check</h2><p>Operator-only: verify authentication with a bounded channel-list request</p><pre><code>Usage:
+  wecom-channel-cli auth check [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-auth-guide"><h2>wecom-channel-cli auth guide</h2><p>Read offline authentication and official CLI compatibility guidance</p><pre><code>Usage:
+  wecom-channel-cli auth guide [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-auth-status"><h2>wecom-channel-cli auth status</h2><p>Read broker readiness (does not verify WeCom authentication)</p><pre><code>Usage:
+  wecom-channel-cli auth status [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-broker"><h2>wecom-channel-cli broker</h2><p>Run the isolated credential-holding broker</p><pre><code>Usage:
+  wecom-channel-cli broker [flags]
+  wecom-channel-cli broker [command]
+
+Available Commands:
+  serve       Serve agent/operator Unix sockets and optional encrypted callbacks
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli broker [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-broker-serve"><h2>wecom-channel-cli broker serve</h2><p>Serve agent/operator Unix sockets and optional encrypted callbacks</p><pre><code>Usage:
+  wecom-channel-cli broker serve [flags]
+
+Flags:
+      --config string   Absolute operator-owned policy file
+      --dry-run         Validate and preview without credentials, sockets or state writes
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-channel"><h2>wecom-channel-cli channel</h2><p>Inspect channel data through broker policy</p><pre><code>Usage:
+  wecom-channel-cli channel [flags]
+  wecom-channel-cli channel [command]
+
+Available Commands:
+  list        Read one bounded page of channel data
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli channel [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-channel-list"><h2>wecom-channel-cli channel list</h2><p>Read one bounded page of channel data</p><pre><code>Usage:
+  wecom-channel-cli channel list [flags]
+
+Flags:
+      --cursor string   Opaque continuation from the previous response
+      --limit int       Maximum records in one page (1–50; search results 1–20) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config"><h2>wecom-channel-cli config</h2><p>Inspect operator policy offline</p><pre><code>Usage:
+  wecom-channel-cli config [flags]
+  wecom-channel-cli config [command]
+
+Available Commands:
+  delete-context delete-context in the client configuration
+  example        Print a deny-by-default operator policy template
+  get-contexts   List named channel security contexts
+  path           Show the client configuration path
+  set-context    Prepare an offline channel context without credentials or changing broker policy
+  use-context    use-context in the client configuration
+  validate       Strictly validate an operator policy file without credentials or I/O effects
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli config [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-config-delete-context"><h2>wecom-channel-cli config delete-context</h2><p>delete-context in the client configuration</p><pre><code>Usage:
+  wecom-channel-cli config delete-context NAME [flags]
+
+Flags:
+      --dry-run   Preview without modifying client configuration
+      --yes       Confirm deleting this saved connection only
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-example"><h2>wecom-channel-cli config example</h2><p>Print a deny-by-default operator policy template</p><pre><code>Usage:
+  wecom-channel-cli config example [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-get-contexts"><h2>wecom-channel-cli config get-contexts</h2><p>List named channel security contexts</p><pre><code>Usage:
+  wecom-channel-cli config get-contexts [flags]
+
+Aliases:
+  get-contexts, contexts
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-path"><h2>wecom-channel-cli config path</h2><p>Show the client configuration path</p><pre><code>Usage:
+  wecom-channel-cli config path [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-set-context"><h2>wecom-channel-cli config set-context</h2><p>Prepare an offline channel context without credentials or changing broker policy</p><pre><code>Usage:
+  wecom-channel-cli config set-context NAME [flags]
+
+Flags:
+      --activate         Make this context current
+      --bot-id string    Expected broker bot ID
+      --channel string   Expected channel ID
+      --dry-run          Preview the exact context merge without writing
+      --overwrite        Replace conflicting public context coordinates
+      --socket string    Agent socket for this channel context
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-use-context"><h2>wecom-channel-cli config use-context</h2><p>use-context in the client configuration</p><pre><code>Usage:
+  wecom-channel-cli config use-context NAME [flags]
+
+Flags:
+      --dry-run   Preview without modifying client configuration
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-validate"><h2>wecom-channel-cli config validate</h2><p>Strictly validate an operator policy file without credentials or I/O effects</p><pre><code>Usage:
+  wecom-channel-cli config validate [flags]
+
+Flags:
+      --file string   Operator policy file
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-doctor"><h2>wecom-channel-cli doctor</h2><p>Check broker connectivity and read-only policy</p><pre><code>Usage:
+  wecom-channel-cli doctor [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-event"><h2>wecom-channel-cli event</h2><p>Read or watch authenticated channel events</p><pre><code>Usage:
+  wecom-channel-cli event [flags]
+  wecom-channel-cli event [command]
+
+Available Commands:
+  context     Read retained events or the triggering post
+  get         Read retained events or the triggering post
+  list        Read retained events or the triggering post
+  watch       Watch a whole channel or selected post threads as bounded NDJSON
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli event [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-event-context"><h2>wecom-channel-cli event context</h2><p>Read retained events or the triggering post</p><pre><code>Usage:
+  wecom-channel-cli event context [flags]
+
+Flags:
+      --id string   Event ID from event list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-event-get"><h2>wecom-channel-cli event get</h2><p>Read retained events or the triggering post</p><pre><code>Usage:
+  wecom-channel-cli event get [flags]
+
+Flags:
+      --id string   Event ID from event list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-event-list"><h2>wecom-channel-cli event list</h2><p>Read retained events or the triggering post</p><pre><code>Usage:
+  wecom-channel-cli event list [flags]
+
+Flags:
+      --after-sequence int   Read events admitted after this durable sequence; never orders by remote timestamps
+      --cursor string        Cursor from event list
+      --limit int            Maximum retained events in one page (1–100) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-event-watch"><h2>wecom-channel-cli event watch</h2><p>Watch a whole channel or selected post threads as bounded NDJSON</p><pre><code>Usage:
+  wecom-channel-cli event watch [flags]
+
+Examples:
+  wecom-channel-cli --use-context engineering event watch --whole-channel --duration 10m
+  wecom-channel-cli --use-context engineering event watch --post POST_ID --checkpoint .watch/thread.json --duration 10m
+
+Flags:
+      --after-sequence int   Replay after this sequence instead of starting at the current head
+      --allow-partial        Explicitly accept an inbox restricted to allowlisted human authors
+      --checkpoint string    Optional private resume file in an existing agent-owned directory
+      --dry-run              Inspect scope and coverage without streaming or saving a checkpoint
+      --duration duration    Maximum total watch duration, up to 24h (default 5m0s)
+      --interval duration    Delay between bounded inbox requests, 1s–1m (default 2s)
+      --max-events int       Stop after this many matching emitted events (default 1000)
+      --post stringArray     Watch this post and its replies; repeat for up to 32 post IDs
+      --whole-channel        Watch post/reply changes throughout this channel context
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-member"><h2>wecom-channel-cli member</h2><p>Inspect member data through broker policy</p><pre><code>Usage:
+  wecom-channel-cli member [flags]
+  wecom-channel-cli member [command]
+
+Available Commands:
+  list        Read one bounded page of member data
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli member [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-member-list"><h2>wecom-channel-cli member list</h2><p>Read one bounded page of member data</p><pre><code>Usage:
+  wecom-channel-cli member list [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --cursor string    Opaque continuation from the previous response
+      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-post"><h2>wecom-channel-cli post</h2><p>Inspect post data through broker policy</p><pre><code>Usage:
+  wecom-channel-cli post [flags]
+  wecom-channel-cli post [command]
+
+Available Commands:
+  get         Read one bounded page of post data
+  list        Read one bounded page of post data
+  propose     Create an immutable proposal for operator review; does not send to WeCom
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli post [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-post-get"><h2>wecom-channel-cli post get</h2><p>Read one bounded page of post data</p><pre><code>Usage:
+  wecom-channel-cli post get [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --post string      Post ID from post list, search result, or event get
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-post-list"><h2>wecom-channel-cli post list</h2><p>Read one bounded page of post data</p><pre><code>Usage:
+  wecom-channel-cli post list [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --cursor string    Opaque continuation from the previous response
+      --from string      Inclusive RFC 3339 lower bound
+      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --since string     Relative time window, such as 24h (first page only)
+      --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-post-propose"><h2>wecom-channel-cli post propose</h2><p>Create an immutable proposal for operator review; does not send to WeCom</p><pre><code>Usage:
+  wecom-channel-cli post propose [flags]
+
+Flags:
+      --channel string   Exact channel ID
+      --dry-run          Preview the exact proposal without storing or sending it
+      --key string       Stable caller-chosen idempotency key; reuse it after a transport failure
+      --stdin            Read the exact content from stdin; no file is opened by the broker
+      --text string      Exact text to propose; use --stdin to avoid shell quoting and argv exposure
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-proposal"><h2>wecom-channel-cli proposal</h2><p>Inspect immutable proposal status</p><pre><code>Usage:
+  wecom-channel-cli proposal [flags]
+  wecom-channel-cli proposal [command]
+
+Available Commands:
+  get         Read a proposal, including an uncertain send outcome
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli proposal [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-proposal-get"><h2>wecom-channel-cli proposal get</h2><p>Read a proposal, including an uncertain send outcome</p><pre><code>Usage:
+  wecom-channel-cli proposal get [flags]
+
+Flags:
+      --id string   Proposal ID returned by post/reply propose
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reply"><h2>wecom-channel-cli reply</h2><p>Inspect reply data through broker policy</p><pre><code>Usage:
+  wecom-channel-cli reply [flags]
+  wecom-channel-cli reply [command]
+
+Available Commands:
+  get         Read one bounded page of reply data
+  list        Read one bounded page of reply data
+  propose     Create an immutable proposal for operator review; does not send to WeCom
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli reply [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-reply-get"><h2>wecom-channel-cli reply get</h2><p>Read one bounded page of reply data</p><pre><code>Usage:
+  wecom-channel-cli reply get [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --post string      Post ID from post list, search result, or event get
+      --reply string     Reply ID from reply list or event get
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reply-list"><h2>wecom-channel-cli reply list</h2><p>Read one bounded page of reply data</p><pre><code>Usage:
+  wecom-channel-cli reply list [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --cursor string    Opaque continuation from the previous response
+      --from string      Inclusive RFC 3339 lower bound
+      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --post string      Post ID from post list, search result, or event get
+      --since string     Relative time window, such as 24h (first page only)
+      --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reply-propose"><h2>wecom-channel-cli reply propose</h2><p>Create an immutable proposal for operator review; does not send to WeCom</p><pre><code>Usage:
+  wecom-channel-cli reply propose [flags]
+
+Flags:
+      --channel string        Exact channel ID
+      --dry-run               Preview the exact proposal without storing or sending it
+      --event string          Authenticated mention event ID (required unless read_all is permitted)
+      --key string            Stable caller-chosen idempotency key; reuse it after a transport failure
+      --parent-reply string   Optional exact parent reply ID
+      --post string           Exact post ID
+      --stdin                 Read the exact content from stdin; no file is opened by the broker
+      --text string           Exact text to propose; use --stdin to avoid shell quoting and argv exposure
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-search"><h2>wecom-channel-cli search</h2><p>Inspect search data through broker policy</p><pre><code>Usage:
+  wecom-channel-cli search [flags]
+  wecom-channel-cli search [command]
+
+Available Commands:
+  result      Read one bounded page of search data
+  start       Read one bounded page of search data
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli search [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-search-result"><h2>wecom-channel-cli search result</h2><p>Read one bounded page of search data</p><pre><code>Usage:
+  wecom-channel-cli search result [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --cursor string    Opaque continuation from the previous response
+      --job string       Search job ID returned by search start
+      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-search-start"><h2>wecom-channel-cli search start</h2><p>Read one bounded page of search data</p><pre><code>Usage:
+  wecom-channel-cli search start [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --cursor string    Opaque continuation from the previous response
+      --from string      Inclusive RFC 3339 lower bound
+      --keyword string   One content keyword, at most 32 UTF-8 bytes
+      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --since string     Relative time window, such as 24h (first page only)
+      --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-skill"><h2>wecom-channel-cli skill</h2><p>Inspect or install the embedded companion Skill</p><pre><code>Usage:
+  wecom-channel-cli skill [flags]
+  wecom-channel-cli skill [command]
+
+Available Commands:
+  install     install companion Skill for detected or selected agent hosts
+  path        path companion Skill for detected or selected agent hosts
+  show        Print the embedded Skill
+  status      status companion Skill for detected or selected agent hosts
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli skill [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-skill-install"><h2>wecom-channel-cli skill install</h2><p>install companion Skill for detected or selected agent hosts</p><pre><code>Usage:
+  wecom-channel-cli skill install [flags]
+
+Flags:
+      --agent string   Agent ID supported by agent-cli-kit (for example codex or claude)
+      --dir string     Explicit parent skills directory
+      --dry-run        Preview installation without writing
+      --overwrite      Replace differing installed content after reviewing it
+      --project        Use project rather than global agent paths
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-skill-path"><h2>wecom-channel-cli skill path</h2><p>path companion Skill for detected or selected agent hosts</p><pre><code>Usage:
+  wecom-channel-cli skill path [flags]
+
+Flags:
+      --agent string   Agent ID supported by agent-cli-kit (for example codex or claude)
+      --dir string     Explicit parent skills directory
+      --project        Use project rather than global agent paths
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-skill-show"><h2>wecom-channel-cli skill show</h2><p>Print the embedded Skill</p><pre><code>Usage:
+  wecom-channel-cli skill show [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-skill-status"><h2>wecom-channel-cli skill status</h2><p>status companion Skill for detected or selected agent hosts</p><pre><code>Usage:
+  wecom-channel-cli skill status [flags]
+
+Flags:
+      --agent string   Agent ID supported by agent-cli-kit (for example codex or claude)
+      --dir string     Explicit parent skills directory
+      --project        Use project rather than global agent paths
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-version"><h2>wecom-channel-cli version</h2><p>Print build metadata</p><pre><code>Usage:
+  wecom-channel-cli version [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section></article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="../index.html">Back to home ↗</a></footer></body></html>

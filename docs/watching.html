@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Watching channels — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html" aria-current="page">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="watching-channels-and-threads">Watching channels and threads</h1>
+<p><code>event watch</code> streams authenticated <strong>post/reply change events</strong> as NDJSON.
+Choose a whole channel context or one or more post IDs (a post and its replies
+form a thread). Watches never execute message instructions, launch an agent,
+fetch message bodies automatically, or approve a write.</p>
+<h2 id="operator-prerequisites">Operator prerequisites</h2>
+<p>The broker must have working URL callback intake and a channel context with:</p>
+<pre><code class="language-json">{
+  &quot;events&quot;: [&quot;topic_event&quot;, &quot;topic_reply_event&quot;, &quot;topic_at_bot&quot;],
+  &quot;channels&quot;: [{
+    &quot;id&quot;: &quot;CHANNEL_ID&quot;,
+    &quot;read_all&quot;: true,
+    &quot;observe_all&quot;: true,
+    &quot;senders&quot;: [&quot;AUTHORIZED_REQUESTER_ID&quot;],
+    &quot;allow_posts&quot;: false,
+    &quot;allow_replies&quot;: false
+  }]
+}
+</code></pre>
+<p>This is a fragment of operator policy, not a client command. A complete example
+is in <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/watch.example.json">watch.example.json</a>. Restart the broker after
+an authorized policy change. WeCom must also permit the bot to receive these
+channel events; local configuration cannot grant upstream grayscale access.</p>
+<p><code>observe_all</code> admits post/reply changes from <strong>all authenticated human and bot
+actors</strong> in this channel. These records carry <code>observation_only: true</code> and remain
+untrusted. It does not expand mention/request eligibility: <code>topic_at_bot</code> still
+requires an allowlisted human, and every send still requires independent operator
+approval. Bot-authored observations are never automatic action triggers.</p>
+<p>Without <code>observe_all</code>, the watch refuses to imply complete coverage. A caller can
+explicitly pass <code>--allow-partial</code> to watch only admitted allowlisted-human events.
+The startup notice reports that restriction. Thread filters narrow results inside
+an authorized channel; they do not establish a separate security boundary.</p>
+<h2 id="start-a-bounded-watch">Start a bounded watch</h2>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
+  --whole-channel --duration 10m --max-events 500
+
+wecom-channel-cli --use-context engineering event watch \
+  --post POST_ID --duration 10m
+
+wecom-channel-cli --use-context engineering event watch \
+  --post FIRST_POST_ID --post SECOND_POST_ID --duration 10m
+</code></pre>
+<p>Discover IDs with <code>post list</code>, <code>search result</code>, or authenticated events. Up to 32
+post IDs are accepted. New watches start at the current inbox head, so existing
+records are not replayed by default. Use <code>--after-sequence N</code> to replay retained
+records after an explicitly known checkpoint. Sequence zero requests retained
+history starting at the beginning; it fails if that history has already expired.</p>
+<p>Defaults are five minutes, 1000 emitted events, and a two-second poll interval.
+The maximum duration is 24 hours; <code>--interval</code> accepts 1s–1m. <code>--timeout</code> bounds
+an individual request, not the watch's lifetime. The watch ends on duration,
+event limit, Ctrl-C, or SIGTERM. Network, policy, rate-limit and history-gap errors
+stop with the last safe checkpoint; there is no hidden reconnect or replay loop.
+A stalled output consumer may require an external process deadline.</p>
+<h2 id="resume-safely">Resume safely</h2>
+<pre><code class="language-sh">mkdir -p .watch
+wecom-channel-cli --use-context engineering event watch \
+  --post POST_ID --duration 10m --checkpoint .watch/thread.json
+
+# Resume later with the same socket, context, policy and thread selection.
+wecom-channel-cli --use-context engineering event watch \
+  --post POST_ID --duration 10m --checkpoint .watch/thread.json
+</code></pre>
+<p>A checkpoint is private JSON written atomically in an existing agent-owned
+directory. A lock prevents concurrent writers. Unrelated files and symlinks are
+refused. <code>--checkpoint</code> cannot be combined with <code>--after-sequence</code> when the saved
+file exists. Reordering the same post filters does not change their scope.</p>
+<p>The checkpoint binds the broker ledger identity, bot, channel, context, operator
+policy and normalized filter. A reset ledger, changed policy or different filter
+produces <code>WATCH_BINDING_CHANGED</code>; it never silently reuses the old cursor. Review
+that change before deliberately starting a new watch. Policy changes that alter
+only a limit still require that review.</p>
+<p>Progress advances across nonmatching events, so a quiet selected thread does not
+repeatedly scan the same unrelated changes. It does not advance past a missing,
+expired, newly hidden or failed-output event. Metadata notices stay on stderr;
+stdout contains only complete untrusted event records. Preserve both streams.</p>
+<p>Checkpointing records successful output writes, <strong>not downstream processing
+acknowledgments</strong>. A crash between output and persistence can replay records;
+a downstream consumer that fails after accepting output can lose its own work.
+Deduplicate by event ID and manage acknowledgments in the consumer if processing
+requires a stronger guarantee. This is not an exactly-once queue.</p>
+<h2 id="preview-and-permissions">Preview and permissions</h2>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
+  --whole-channel --checkpoint .watch/channel.json --dry-run
+</code></pre>
+<p>Dry-run checks scope and configured callback coverage without creating a lock,
+saving a checkpoint, streaming events or contacting WeCom. The local broker is
+read once. Broker read-only mode permits observation. A CLI session's
+<code>WECOM_CHANNEL_CLI_READ_ONLY</code> blocks checkpoint writes unless an authorized
+<code>--allow-writes</code> is provided; it does not block a watch without a checkpoint.</p>
+<h2 id="coverage-and-content">Coverage and content</h2>
+<p>The startup notice describes configured actor coverage and event kinds. It does
+not certify that WeCom delivered every change: delivery before broker admission,
+upstream permissions, proxy availability and provider outages remain external.
+Default event retention is 48 hours and inbox/rate limits still apply. Watches
+fail on detectable local gaps rather than claiming complete history.</p>
+<p>Event fields describe the change without turning it into a request:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data.kind</code></td>
+<td><code>topic_event</code> for a post; <code>topic_reply_event</code> for a reply</td>
+</tr>
+<tr>
+<td><code>data.change</code></td>
+<td><code>1</code> created, <code>2</code> updated, <code>3</code> deleted</td>
+</tr>
+<tr>
+<td><code>data.post_id</code>, <code>data.reply_id</code></td>
+<td>Stable resource IDs for explicit follow-up reads</td>
+</tr>
+<tr>
+<td><code>data.sequence</code></td>
+<td>Durable local admission order, independent of remote timestamps</td>
+</tr>
+<tr>
+<td><code>data.observation_only</code></td>
+<td>Always <code>true</code> for watch records</td>
+</tr>
+<tr>
+<td><code>source.context</code></td>
+<td>The socket-bound channel security context</td>
+</tr>
+</tbody>
+</table>
+<p>Events carry post/reply IDs. Use
+<code>post get</code> or <code>reply get</code> for the latest content under the same context. Deleted
+content may no longer be available. No attachment URLs or credentials are exposed.
+This version polls the local verified inbox; it does not introduce channel
+WebSockets or configure WeCom subscriptions automatically.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

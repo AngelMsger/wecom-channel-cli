@@ -1,0 +1,261 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Security model — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html" aria-current="page">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="security-boundary-and-deployment">Security boundary and deployment</h1>
+<p>The enforceable boundary is <strong>an isolated broker plus a sandboxed agent</strong>.
+A warning or system prompt alone cannot prevent a model with a shell from
+deleting files or reading credentials. This program does not intercept another
+agent's shell, filesystem, browser, network or MCP tools. Those capabilities
+must be restricted by the agent host, OS or container independently.</p>
+<h2 id="trust-and-authority">Trust and authority</h2>
+<p>Treat every channel participant, including an allowlisted coworker, as a
+potentially malicious content author. Also treat quoted replies, channel names,
+filenames, search snippets, feedback and linked pages as untrusted. A valid
+WeCom signature authenticates transport origin and event metadata; it does not
+turn a message into an operator instruction. A mention is an event, not consent
+to run commands or disclose data.</p>
+<table>
+<thead>
+<tr>
+<th>Authority</th>
+<th>Allowed capabilities</th>
+<th>Must not possess</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WeCom callback caller</td>
+<td>Submit signed, encrypted events to <code>/callback</code></td>
+<td>Local control sockets, arbitrary host operations</td>
+</tr>
+<tr>
+<td>Agent worker</td>
+<td>Read allowed records, submit immutable text proposals</td>
+<td>Bot Secret, token, callback keys, operator socket, policy-write access, broker state, host secrets</td>
+</tr>
+<tr>
+<td>Broker service</td>
+<td>Fixed WeCom HTTP API, verified callback intake, private ledger, two local interfaces</td>
+<td>General shell execution, arbitrary URL fetching, attachment/path interpretation</td>
+</tr>
+<tr>
+<td>Trusted operator</td>
+<td>Provision policy/credentials; review and approve exact proposals; reconcile writes</td>
+<td>No authority may be inferred from content viewed inside an agent session</td>
+</tr>
+</tbody>
+</table>
+<p>The supported isolation unit is one channel context. A bot deployment may share
+a token cache and verified callback ingress across contexts; each context has
+separate sockets, policy and durable state. Use distinct socket groups and worker
+identities for mutually distrusting workers, as described in <a href="contexts.html">contexts</a>.
+The broker process is trusted across its contexts; isolate deployments by bot
+and service identity when that is not acceptable. This is not a multi-replica service.</p>
+<h2 id="enforced-controls">Enforced controls</h2>
+<table>
+<thead>
+<tr>
+<th>Threat</th>
+<th>Implemented control</th>
+<th>Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prompt injection through text</td>
+<td>Fixed trust/provenance envelope; data-only parsing; no command runner or tool dispatcher</td>
+<td>The consuming model can still misunderstand text; its sandbox must contain the damage</td>
+</tr>
+<tr>
+<td>Coworker impersonating an operator</td>
+<td>Exact channel/sender IDs, authenticated callback, separate operator socket</td>
+<td>Membership or display names do not grant host authority; approved senders still supply untrusted content</td>
+</tr>
+<tr>
+<td>Forged/replayed callback</td>
+<td>Constant-time signature comparison before decryption; strict padding/length/receive-ID checks; five-minute clock window; durable bot/msgid deduplication</td>
+<td>Operators must protect callback keys and maintain accurate time</td>
+</tr>
+<tr>
+<td>Bot loops and unsolicited triggers</td>
+<td>Human mentions remain allowlisted; optional observe_all admits post/reply observations from all actors with observation_only=true</td>
+<td>Observations never authorize an action or automatically launch an agent</td>
+</tr>
+<tr>
+<td>Self-approval</td>
+<td>Separate listener-bound authority; private operator socket; no request field or flag grants it</td>
+<td>Same-user development runs do not isolate the sockets from that user</td>
+</tr>
+<tr>
+<td>Changed draft or destination</td>
+<td>Immutable request and SHA-256 digest; exact event-to-channel/post/reply binding; short expiry; policy digest recheck</td>
+<td>A digest is not authentication; only operator socket access grants approval</td>
+</tr>
+<tr>
+<td>Duplicate sends</td>
+<td>Persist <code>sending</code> before I/O; terminal states reject replay; same-key submissions are idempotent</td>
+<td>No documented remote idempotency key; operator-driven duplicates remain possible</td>
+</tr>
+<tr>
+<td>Credential exfiltration</td>
+<td>Secret environment only in broker; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned</td>
+<td>A compromised broker OS account or host root remains trusted</td>
+</tr>
+<tr>
+<td>Filesystem/SSRF abuse</td>
+<td>No remote file-path operations, shell commands, URL following, media fetch/upload, or arbitrary API method</td>
+<td>Markdown links remain untrusted text, not approved network destinations</td>
+</tr>
+<tr>
+<td>Resource exhaustion</td>
+<td>Request/response sizes, JSON depth, page sizes, timeouts, concurrency, rate budgets, retention and ledger capacity</td>
+<td>Volumetric attacks need reverse-proxy/network controls; authenticated users can consume permitted capacity</td>
+</tr>
+<tr>
+<td>Terminal/UI spoofing</td>
+<td>JSON escaping; no table/raw output or removable trust fields; outbound control/bidi overrides rejected</td>
+<td>Review untrusted inbound text without rendering Markdown, links or terminal escapes</td>
+</tr>
+</tbody>
+</table>
+<p>These are structural controls, not a heuristic injection detector. No regex or
+classifier is used to declare a message safe. Do not automatically give a model
+additional tools because content passed a filter.</p>
+<h2 id="linux-deployment-reference">Linux deployment reference</h2>
+<p>Use dedicated service and worker accounts. The broker account must not have
+interactive login privileges or access to unrelated host secrets. The worker
+must not be the operator's login account and must have no sudo, Docker socket,
+container-control, SSH-agent, OS-keychain or unrestricted host filesystem access.</p>
+<p>Recommended ownership:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Owner/group</th>
+<th>Mode</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/etc/wecom-channel/</code></td>
+<td>root/root</td>
+<td>0755</td>
+<td>Directory without secrets visible to workers</td>
+</tr>
+<tr>
+<td><code>/etc/wecom-channel/broker.json</code></td>
+<td>root/root</td>
+<td>0644</td>
+<td>Non-secret policy; workers cannot edit it</td>
+</tr>
+<tr>
+<td><code>/etc/wecom-channel/secrets.env</code></td>
+<td>root/root</td>
+<td>0600</td>
+<td>Broker-only secret environment, loaded by systemd</td>
+</tr>
+<tr>
+<td><code>/var/lib/wecom-channel/</code></td>
+<td>wecom-channel/wecom-channel-agents</td>
+<td>0700</td>
+<td>Private ledger and lock</td>
+</tr>
+<tr>
+<td><code>/run/wecom-channel-agent/</code></td>
+<td>wecom-channel/wecom-channel-agents</td>
+<td>0750</td>
+<td>Agent socket, 0660</td>
+</tr>
+<tr>
+<td><code>/run/wecom-channel-admin/</code></td>
+<td>wecom-channel/wecom-channel-agents</td>
+<td>0700</td>
+<td>Operator socket, 0600</td>
+</tr>
+</tbody>
+</table>
+<p>Add only the dedicated worker account to <code>wecom-channel-agents</code>. The broker's
+primary group is that group so its agent socket is accessible. The operator
+socket is protected by both its private parent and its 0600 mode. The trusted
+human can invoke the CLI as the broker service identity through an explicitly
+controlled administrative mechanism; the worker must not have that mechanism.</p>
+<p>The <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-broker.service">systemd unit</a> is a concrete reference.
+Install the reviewed binary at <code>/usr/local/bin/wecom-channel-cli</code>, provision
+accounts and files as above, validate policy, then start the unit deliberately.
+The unit is not automatically installed by this project and has not been tested
+on a live production host. Canonical, absolute paths are required: symlinked
+state/socket directories and group/world-writable parents are refused.
+Every ancestor must be owned by root or the service identity; checking only the
+leaf file's permissions would allow a different owner to replace its parent.</p>
+<p>The service starts with a read-only filesystem apart from its state and socket
+directories, no Linux capabilities, no privilege escalation, no home access and
+only Unix/IPv4/IPv6 sockets. Its environment comes from the protected file;
+do not expose it through debugging, process-inspection permissions or crash dumps.
+Use encrypted storage if the at-rest channel content requires it.</p>
+<h3 id="contain-the-entire-agent-worker">Contain the entire agent worker</h3>
+<p>Separating only the CLI process does not constrain a host agent. Put the model's
+tool executor and working directory in a separate unprivileged sandbox/VM:</p>
+<ul>
+<li>mount only a disposable working directory and the agent socket directory;</li>
+<li>expose no broker state, operator socket, policy-writable mount, home directory,
+cloud credentials, SSH keys, keychain or privileged daemon socket;</li>
+<li>deny outbound network by default; if remote inference is required, use a
+separately controlled gateway with a narrowly scoped model credential and
+explicit endpoint policy, not general network access or host credentials;</li>
+<li>disable privilege escalation and container escape capabilities; restrict
+available tools to the task; keep approval controls outside model reach;</li>
+<li>apply CPU, memory, process and filesystem quotas; use short job deadlines;</li>
+<li>treat any model-produced result as untrusted when the supervisor receives it.</li>
+</ul>
+<p>This project does not provision or attest that sandbox. Verify it before
+enabling unattended work. On macOS the same code runs, but production separation
+needs a dedicated account or VM; two terminals owned by one user do not create
+a security boundary. Windows named-pipe support is not implemented.</p>
+<h3 id="expose-only-the-callback-endpoint">Expose only the callback endpoint</h3>
+<p>The broker binds callbacks to a literal loopback IP. Put an HTTPS reverse proxy
+in front of <code>/callback</code>, with a small body limit (256 KiB), short request timeout
+and rate limits. Do not proxy <code>/v1/request</code>, and never publish either Unix socket.
+Disable callback query/body logging: signed callback URLs and encrypted payloads
+are sensitive. The GET challenge response must be forwarded byte-for-byte.</p>
+<p>Review WeCom's existing bot connection configuration before making any change.
+URL mode and long-connection mode are mutually exclusive, and group-channel
+compatibility can produce duplicates. The connector neither switches modes nor
+disables that compatibility path.</p>
+<h2 id="observation-and-watches">Observation and watches</h2>
+<p>Channel-wide observation is an explicit operator policy: <code>observe_all</code> requires
+<code>read_all</code> and does not widen the human mention allowlist. The broker can admit
+bot-authored post/reply changes as data without treating them as requests.
+<code>event watch</code> supports a whole-channel scope or selected post IDs, a total
+deadline and count bound, and private resumable checkpoints. It fails on detected
+history gaps and scope/ledger/policy changes. Filters reduce delivery, not authority.
+See <a href="watching.html">watching</a> for configured coverage and output-acknowledgment limits.</p>
+<h2 id="review-and-recovery">Review and recovery</h2>
+<p>Review proposals in a trusted operator interface with no untrusted-content tool
+execution. Confirm the channel, post, parent reply, full text, content length and
+digest. Human-authored replies require per-item approval. Reject draft text that
+discloses private information or exceeds the requested action even if its syntax
+is valid. Approval cannot retroactively protect information already sent by a
+privileged agent through another tool.</p>
+<p><code>--yes</code> is confirmation only after access to the operator socket; it is not an
+authentication token. There is no approve-all or auto-approve mode. Pending
+proposals expire after one hour by default (configurable down to 60 seconds).
+Policy changes invalidate existing proposals. Rejection is terminal.</p>
+<p>For an interrupted or uncertain send, retain the ledger, inspect the remote
+thread through a read or WeCom's UI, and record the verified result with
+<code>approval resolve</code>. Do not approve a new key as a workaround. A success followed
+by a failed local persistence step reports the known remote ID in the structured
+error. The CLI has no deletion/pruning command for the proposal ledger: its
+configured capacity is a fail-closed operational limit, not permission to erase
+idempotency history.</p>
+<p>The ledger is private operational/audit evidence, not a tamper-proof log against
+the operator or host root. Back it up with the same access controls. Default
+event retention is 48 hours; physical expiration is applied on later accepted
+intake, while reads hide expired events immediately. Proposals and their keys
+remain until a future explicit archival design preserves replay protection.</p>
+<h2 id="before-live-activation">Before live activation</h2>
+<p>Verify the eligible bot's API mode and permissions with the operator socket,
+confirm the actual worker cannot open the operator socket or state/secret files,
+exercise the encrypted URL challenge, and test one explicitly authorized reply
+in a designated test channel. Confirm that a replay cannot send it twice and
+that the reverse proxy records neither callback bodies nor query strings.</p>
+<p>Offline tests establish protocol and application invariants; they cannot certify
+WeCom tenant rollout, the external TLS proxy or the sandbox used by your agent.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

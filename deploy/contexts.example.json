@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "bot_id": "BOT_ID",
+  "callback_listen": "127.0.0.1:8787",
+  "contexts": [
+    {
+      "name": "engineering",
+      "state_dir": "/var/lib/wecom-channel/engineering",
+      "agent_socket": "/run/wecom-channel/engineering-agent/agent.sock",
+      "admin_socket": "/run/wecom-channel/engineering-admin/admin.sock",
+      "read_only": true,
+      "channels": [{"id": "ENGINEERING_CHANNEL", "senders": ["AUTHORIZED_USER_ID"], "read_all": true, "allow_replies": true}]
+    },
+    {
+      "name": "security",
+      "state_dir": "/var/lib/wecom-channel/security",
+      "agent_socket": "/run/wecom-channel/security-agent/agent.sock",
+      "admin_socket": "/run/wecom-channel/security-admin/admin.sock",
+      "read_only": true,
+      "channels": [{"id": "SECURITY_CHANNEL", "senders": ["SECURITY_USER_ID"], "read_all": false, "allow_replies": true}]
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>API research — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html" aria-current="page">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-api-research">WeCom channel API research</h1>
+<p>Checked on 2026-10-25. The implementation is based on official developer
+documentation and the official CLI source, not guessed endpoints. Private
+credentials and real channel content were not inspected.</p>
+<h2 id="authentication-and-reuse-decision">Authentication and reuse decision</h2>
+<p>The official CLI source at commit
+<a href="https://github.com/WecomTeam/wecom-cli/tree/55785fa0a5c922279533a5b5a836b44b56f65ce7"><code>55785fa0a5c922279533a5b5a836b44b56f65ce7</code></a>
+has these relevant boundaries:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Evidence</th>
+<th>Implication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication bootstrap</td>
+<td><a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/crates/wecom-cli/src/auth/bootstrap.rs">auth/bootstrap.rs</a></td>
+<td>Uses <code>/cgi-bin/aibot/cli/get_cli_config</code>, returns a gateway Bearer token; signing is SHA-256 of Secret + bot ID + decimal seconds + nonce</td>
+</tr>
+<tr>
+<td>Credential ownership</td>
+<td><a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/crates/wecom-cli/src/auth/types.rs">auth/types.rs</a>, <a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/crates/wecom-cli/src/auth/store.rs">auth/store.rs</a></td>
+<td>Bot credentials and token belong to the official CLI's private encrypted store</td>
+</tr>
+<tr>
+<td>Binary vs libraries</td>
+<td><a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/crates/wecom-cli/Cargo.toml">wecom-cli/Cargo.toml</a></td>
+<td>Auth is in the binary crate; <code>wecom</code> and <code>wecom-transport</code> are separate Rust libraries</td>
+</tr>
+<tr>
+<td>Gateway envelopes</td>
+<td><a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/crates/wecom-cli/src/transport/catalog.rs">transport/catalog.rs</a></td>
+<td>Gateway discovery/envelope behavior is not the channel HTTP schema</td>
+</tr>
+<tr>
+<td>License</td>
+<td><a href="https://github.com/WecomTeam/wecom-cli/blob/55785fa0a5c922279533a5b5a836b44b56f65ce7/LICENSE">MIT license</a></td>
+<td>Reuse is legally possible with attribution, but does not solve the protocol or privilege boundary</td>
+</tr>
+</tbody>
+</table>
+<p>The <a href="https://developer.work.weixin.qq.com/document/path/101910">channel token API</a>
+uses <code>/cgi-bin/aibot/get_token</code>, the same signing formula, and a one-day
+<code>access_token</code> passed in query parameters. There is no documented guarantee
+that the gateway token is interchangeable. The broker obtains and caches the
+channel token in memory, renewing before expiry; a rejected token is discarded
+without replaying the failed operation. The next separately initiated request
+can acquire a fresh one.</p>
+<p>Decision: use the workspace's maintained Go <code>agent-cli-kit</code> for generic
+transport, output, errors and argv handling. Implement the small documented
+channel protocol in Go. Do not vendor private Rust auth modules, parse encrypted
+official credential files, scrape an exported Secret, or shell out to the
+official CLI on behalf of a channel message. Revisit supported credential
+delegation if Tencent publishes a stable API for it.</p>
+<h2 id="connection-mode-and-access">Connection mode and access</h2>
+<p>The <a href="https://developer.work.weixin.qq.com/document/path/101906">overview</a>
+describes channel rollout from version 5.0.12 and still marks channel long
+connections as in development. It distinguishes three bot permission levels:
+read all and proactively send; read all and reply only when mentioned; and
+read/reply only when mentioned. Do not confuse <code>TopicInfo.permission</code>
+(public/private channel) with the bot's capabilities. The CLI enforces its own
+narrower operator policy; WeCom remains the final authority on API access.</p>
+<p><a href="https://developer.work.weixin.qq.com/document/path/101908">URL callbacks</a>
+require a publicly reachable address. Connection modes are mutually exclusive;
+changing them invalidates the existing mode. The connector never changes this
+configuration itself. Existing group-channel compatibility can cause duplicate
+responses; the operator must coordinate it using the documented
+<a href="https://developer.work.weixin.qq.com/document/path/101948">stop-sync operation</a>,
+which this version deliberately does not expose.</p>
+<h2 id="endpoint-coverage">Endpoint coverage</h2>
+<p>All implemented requests are fixed HTTPS POSTs on <code>qyapi.weixin.qq.com</code>, under
+<code>/cgi-bin/aibot/</code>. There is no arbitrary URL, path, method or request-body command.</p>
+<table>
+<thead>
+<tr>
+<th>Official documentation</th>
+<th>Endpoint suffix</th>
+<th>Support</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101910">Token</a></td>
+<td><code>get_token</code></td>
+<td>Broker only; memory cache</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101925">Channel information</a></td>
+<td><code>topic/get_topic_list</code>, <code>topic/get_topic_member_list</code></td>
+<td>Discovery, one bounded page; agent channel list is restricted to configured IDs</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101913">Mention content</a> / <a href="https://developer.work.weixin.qq.com/document/path/101922">all content</a></td>
+<td><code>topic/get_post_list</code>, <code>topic/get_reply_list</code></td>
+<td>Exact reads and bounded listing; attachment credentials removed</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101923">Search</a></td>
+<td><code>topic/search</code>, <code>topic/get_search_result</code></td>
+<td>Two-step search scoped to one allowed channel; job ID is discoverable from matching channels</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101915">Mention replies</a> / <a href="https://developer.work.weixin.qq.com/document/path/101924">proactive content</a></td>
+<td><code>topic/send_post</code>, <code>topic/send_reply</code></td>
+<td>Reviewed text/Markdown only, up to 20480 UTF-8 bytes</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101918">Events</a></td>
+<td>Callback JSON</td>
+<td>Seven documented kinds recognized; mentions remain human-allowlisted, while explicit observe_all permits post/reply observations from all actors</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101909">Crypto</a> / <a href="https://developer.work.weixin.qq.com/document/path/101778">algorithm</a></td>
+<td>GET verification and encrypted POST</td>
+<td>SHA-1 sorted signature, AES-256-CBC, PKCS#7 block size 32, empty receive ID for self-built bots</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101917">Temporary media</a></td>
+<td>Upload lifecycle</td>
+<td>Deferred: filesystem access and content disclosure require a separate capability design</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101959">Forwarded chat records</a></td>
+<td>Chat-record reads</td>
+<td>Deferred; no automatic expansion</td>
+</tr>
+<tr>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101915">Emoji</a></td>
+<td><code>topic/post_emoji</code></td>
+<td>Deferred</td>
+</tr>
+</tbody>
+</table>
+<p>The maximum exposed page size is deliberately smaller than the upstream maximum
+where useful: 50 for remote reads, 20 for search results, and 100 for local inbox
+or proposal pages. Agent channel discovery is bound to exactly one channel per context.</p>
+<h2 id="documentation-ambiguities-handled-conservatively">Documentation ambiguities handled conservatively</h2>
+<ul>
+<li>Mention-only content is available within 24 hours. The broker checks the
+triggering event age before context reads and reply approvals.</li>
+<li>Examples use both <code>creator</code> and <code>creator_info</code>, and both <code>aibotid</code> and <code>botid</code>.
+The curated model retains these variants without treating a display name as
+identity or authority.</li>
+<li>Channel time filtering does not clearly specify inclusive/exclusive edges.
+Post/reply listings apply <code>[from,to)</code> locally as well as sending the bounds;
+this cannot recover records omitted upstream. Search summaries have no times,
+so their time restriction is server-native and cannot be independently checked
+without fetching the complete messages. Do not claim exact history coverage
+from search results.</li>
+<li>The official AES-key example is not canonical Base64. Ordinary key decoding
+is required for compatibility; ciphertext is strictly decoded. An independent
+known-answer test uses the official encrypted sample.</li>
+<li>No remote idempotency key is documented for sending posts/replies. Local
+at-most-once attempt tracking prevents automatic replay in one retained
+broker ledger; it does not establish remote exactly-once delivery.</li>
+</ul>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

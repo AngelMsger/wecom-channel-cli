@@ -1,0 +1,74 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="first-release-handoff">First release handoff</h1>
+<p>The proposed first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.2</strong>
+(the Skill was revised for bounded watches), with GitHub coordinates
+<code>AngelMsger/wecom-channel-cli</code> and npm package <code>@angelmsger/wecom-channel-cli</code>.
+Metadata and workflows are prepared locally. No remote repository, tag, GitHub
+Release, npm version or Pages deployment is created by the preparation commands.
+The website is a design candidate awaiting review.</p>
+<h2 id="local-release-gate">Local release gate</h2>
+<pre><code class="language-sh">make lint test e2e docs-check site-check
+npm test --prefix build/npm
+go test -race ./...
+make vuln
+GOWORK=off make test
+make package
+make release-check
+</code></pre>
+<p><code>make package</code> cross-compiles Linux/macOS on amd64/arm64, injects version/commit/
+build time, writes <code>dist/checksums.txt</code> and <code>release-manifest.json</code>, then packs
+an npm tarball without running installation scripts. <code>release-check</code> verifies
+metadata and artifact hashes. It does not contact a registry or publish.</p>
+<p>The npm installer follows the family's binary-wrapper architecture. It deliberately
+requires one valid matching checksum, bounds HTTPS downloads and writes atomically.
+The runtime launcher does not download code. This strengthens the older sibling
+installer pattern that can skip an unavailable checksum; those repositories are
+outside this change's write scope.</p>
+<h2 id="decisions-and-external-prerequisites-before-the-first-pushtag">Decisions and external prerequisites before the first push/tag</h2>
+<ol>
+<li>Review the <strong>Blue Current</strong> site candidate and source changes. Confirm the
+proposed repository/package names and that the owner will publish under them.</li>
+<li>Verify an eligible WeCom bot in a designated test channel: authenticated URL
+challenge, channel access, one explicitly approved reply, replay rejection,
+and actual worker denial of operator sockets/state/credentials. Offline tests
+do not prove tenant rollout or OS deployment.</li>
+<li>Create or select the approved GitHub repository, set its canonical <code>origin</code>,
+and push reviewed commits. No remote is configured in this local repository yet.</li>
+<li>Enable Pages with source <strong>GitHub Actions</strong>. The workflow uploads only <code>docs/</code>;
+it checks generated material and local links before deploying. All site assets
+are local; no external font/CDN/runtime service is required.</li>
+<li>Configure the npm package's trusted publisher for the repository and
+<code>release.yml</code>, with the <code>release</code> environment and permission for direct <code>npm publish</code>. Verify npm account/
+organization rights and the registry's first-publication bootstrap process.
+Do not assume OIDC creates a new package or account authorization automatically.
+New trusted-publisher configurations must complete their first publication
+within two days; configure this close to the approved release. See the
+<a href="https://docs.npmjs.com/trusted-publishers/">official npm guidance</a>.</li>
+<li>Configure the protected GitHub <strong>release</strong> environment with owner review, and
+review the final changelog and release notes. Create the release tag only after
+that review. The workflow is tag-driven and never tags source itself.</li>
+</ol>
+<pre><code class="language-sh">python3 scripts/release-check.py --publish
+</code></pre>
+<p>This stricter gate requires committed, clean source, the canonical origin, and
+an exact owner-approved <code>v0.1.0</code> tag on HEAD. It is expected to fail during local
+candidate review. It does not substitute for npm/Pages permissions or live checks.</p>
+<p>The vulnerability scanner uses the Go 1.26+ toolchain (automatic toolchain
+selection is supported). CI and release builds use the current stable Go release;
+the source minimum remains Go 1.25.</p>
+<h2 id="publishing-behavior">Publishing behavior</h2>
+<p>The release workflow reruns tests, builds and verifies assets, creates or refreshes
+the GitHub Release, then publishes npm with provenance and trusted publishing.
+An existing npm version is not overwritten. If npm publication fails after GitHub
+succeeds, retain that release and repair the publishing configuration before
+rerunning; do not create a replacement version merely to retry.</p>
+<p>Check GitHub asset checksums, npm metadata/provenance and a clean-machine launch
+on each intended native platform. Cross-builds establish compilation, not native
+permission or signal behavior. Pages deploys on reviewed pushes to <code>main</code> or a
+manual workflow dispatch.</p>
+<h2 id="upgrade-contract">Upgrade contract</h2>
+<p>Upgrade the CLI, run <code>skill install</code> (use <code>--overwrite</code> only after reviewing
+changed installed content), then reload the agent context. <code>skill status</code> compares
+loaded, installed and embedded versions. The agent-side CLI does not run automatic
+release network checks, preserving offline socket-only operation. This is an
+intentional domain difference from the network-facing sibling clients.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

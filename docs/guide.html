@@ -1,0 +1,198 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
+<blockquote>
+<p><strong>Built for agents. Designed for humans.</strong></p>
+</blockquote>
+<p><img src="image.png" alt="WeCom Channel CLI — watch channels and threads with human-controlled actions"></p>
+<p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
+content, accepts encrypted callbacks and lets an agent propose text posts or
+replies for independent operator approval.</p>
+<p><strong>Status: 0.1.0 release candidate, tested offline against synthetic services and
+WeCom's published cryptographic vector. Live grayscale access and production
+deployment have not been verified.</strong> Linux and macOS are supported. No package
+or remote repository has been published by this work.</p>
+<p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
+socket for bounded reads and proposals. A separate private socket approves the
+exact proposal digest. Credentials, callback keys, policy and the write ledger
+stay with the broker. This only forms a host security boundary when the agent
+and operator have separate OS identities and the agent's tools are sandboxed.
+Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
+<h2 id="build-and-inspect">Build and inspect</h2>
+<p>Requires Go 1.25 or newer. From this repository:</p>
+<pre><code class="language-sh">make build
+bin/wecom-channel-cli --help
+bin/wecom-channel-cli auth guide
+bin/wecom-channel-cli config example
+make lint test e2e docs-check site-check
+</code></pre>
+<p>Inside the fx workspace, <code>go.work</code> uses the local kit. Use <code>GOWORK=off make test</code>
+to verify the pinned <code>agent-cli-kit v0.5.0</code>. <code>make cross</code> builds Linux/macOS
+amd64/arm64 executables; cross-compilation is not native runtime verification.</p>
+<h2 id="named-channel-contexts">Named channel contexts</h2>
+<p>Each channel is a security context with separate agent/operator sockets, policy,
+inbox and proposal ledger. Named client contexts use the family config engine.
+One bot deployment can route its single authenticated callback to up to 32
+channel contexts while sharing the token cache. See <a href="contexts.html">contexts</a>.</p>
+<pre><code class="language-sh">wecom-channel-cli config set-context engineering \
+  --socket /run/wecom-channel/engineering-agent/agent.sock \
+  --bot-id BOT_ID --channel CHANNEL_ID
+wecom-channel-cli config get-contexts
+wecom-channel-cli --use-context engineering event list
+</code></pre>
+<p>Context names select connections; OS permissions and broker identity checks
+enforce access. A worker with permission to open every context socket can access
+every such context. Provision separate context groups for mutually untrusted workers.</p>
+<h2 id="operator-setup">Operator setup</h2>
+<ol>
+<li>
+<p>Provision the broker and agent identities using <a href="security.html">the deployment guide</a>.</p>
+</li>
+<li>
+<p>Copy <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/broker.example.json">the single-context policy</a> or
+<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/contexts.example.json">multi-context deployment</a> to an operator-controlled
+file. Replace the bot/channel/user IDs with verified IDs. Empty channel and
+sender lists deny access. Keep <code>read_only: true</code> during setup.</p>
+</li>
+<li>
+<p>Supply the existing bot Secret to the broker's environment as
+<code>WECOM_CHANNEL_BOT_SECRET</code>. For callbacks, also supply
+<code>WECOM_CHANNEL_CALLBACK_TOKEN</code> and <code>WECOM_CHANNEL_ENCODING_AES_KEY</code>.
+Never supply these to the agent or put them in argv, source control or chat.</p>
+</li>
+<li>
+<p>Preview and run the broker:</p>
+<pre><code class="language-sh">wecom-channel-cli config validate --file /etc/wecom-channel/broker.json
+wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json --dry-run
+wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json
+</code></pre>
+</li>
+<li>
+<p>Use the private socket for <code>auth check</code>, <code>channel list</code> and <code>member list</code> to
+discover IDs. The operator can list joined channels with an empty allowlist;
+member/content reads require the channel to be listed in policy. Restart the
+broker after deliberate policy edits. The broker does not configure WeCom.</p>
+</li>
+<li>
+<p>If events are needed, expose only the loopback <code>/callback</code> endpoint through
+your HTTPS reverse proxy and configure WeCom deliberately. Changing the bot's
+connection mode invalidates its previous connection. Do not change an existing
+working bot merely to try this CLI. An empty <code>callback_listen</code> disables intake
+while keeping HTTP reads and reviewed writes available.</p>
+</li>
+</ol>
+<p><code>auth status</code> and <code>doctor</code> check local readiness. Only <code>auth check</code> makes a
+bounded authenticated request, and it requires the private operator socket.
+Authentication success does not establish every channel's grayscale permissions.</p>
+<h2 id="agent-usage">Agent usage</h2>
+<p>The operator supplies <code>WECOM_CHANNEL_SOCKET=/run/wecom-channel-agent/agent.sock</code>.
+No credential belongs in the agent environment. Load the bundled Skill with
+<code>skill show</code>, or install it with <code>skill install --agent codex</code> after previewing
+with <code>--dry-run</code>. A differing existing Skill requires <code>--overwrite</code>.</p>
+<pre><code class="language-sh">wecom-channel-cli channel list
+wecom-channel-cli event list --limit 10
+wecom-channel-cli event get --id EVENT_ID
+wecom-channel-cli event context --id EVENT_ID
+
+# These require read_all for the channel.
+wecom-channel-cli post list --channel CHANNEL_ID --limit 20
+wecom-channel-cli reply list --channel CHANNEL_ID --post POST_ID
+wecom-channel-cli search start --channel CHANNEL_ID --keyword incident
+wecom-channel-cli search result --channel CHANNEL_ID --job JOB_ID
+</code></pre>
+<p>Do not invent IDs. Events provide exact channel/post/reply targets. A mention's
+context reads the post and, when present, the precise triggering reply; it does
+not grant general channel browsing. Mention-only access expires after 24 hours.</p>
+<p>Each admitted event has a durable <code>data.sequence</code>. An explicitly requested
+consumer can keep its last processed sequence and use
+<code>event list --after-sequence N</code>; late callbacks are ordered by admission, not
+their remote creation timestamp. Keep checkpoints with the bot identity and
+preserve the broker ledger. This does not start monitoring automatically.
+An ahead-of-ledger checkpoint or a missing retained sequence returns a conflict,
+so a consumer does not silently treat lost history as an empty inbox.</p>
+<p>Lists use <code>{items,next,has_more}</code>. Pass <code>next</code> as <code>--cursor</code> with the same
+query. NDJSON emits items on stdout and a pagination notice on stderr. Preserve
+both streams. Time windows use <code>--since</code> or <code>[--from,--to)</code> with RFC 3339
+offsets. The resolved bounds are emitted on stderr; use those absolute bounds
+when paging. There is no implicit unbounded traversal or monitoring loop.</p>
+<p>Every external item retains <code>trust</code>, <code>warning</code>, <code>source</code>, and <code>data</code>. Output is
+JSON or NDJSON only. Attachment names/counts are available, but download URLs,
+cookies and arbitrary upstream fields are removed. Treat names, text and file
+names as untrusted even when the sender is allowlisted.</p>
+<h2 id="watch-a-channel-or-selected-threads">Watch a channel or selected threads</h2>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
+  --whole-channel --duration 10m --max-events 500
+
+wecom-channel-cli --use-context engineering event watch \
+  --post POST_ID --duration 10m --checkpoint .watch/thread.json
+</code></pre>
+<p>Create the checkpoint directory first. The operator must enable <code>read_all</code>,
+<code>observe_all</code>, and post/reply events for channel-wide actor coverage. Mentions
+remain restricted to authorized humans. Watches emit observation-only change
+metadata, start at the current head, and stop on explicit limits. Resume files
+bind the context, policy, ledger and thread filters; they never skip a detected
+history gap. See <a href="watching.html">watching</a> for setup, partial coverage and
+checkpoint delivery limits.</p>
+<h2 id="propose-review-send">Propose, review, send</h2>
+<p>A proposal has no remote effect. Use a stable idempotency key and reuse it if a
+local response is lost. The broker binds that key to the immutable proposal;
+changing its text or target under the same key fails.</p>
+<pre><code class="language-sh">wecom-channel-cli reply propose \
+  --channel CHANNEL_ID --post POST_ID --parent-reply REPLY_ID \
+  --event EVENT_ID --key REQUEST_KEY --stdin --dry-run &lt; draft.txt
+
+wecom-channel-cli reply propose \
+  --channel CHANNEL_ID --post POST_ID --parent-reply REPLY_ID \
+  --event EVENT_ID --key REQUEST_KEY --stdin &lt; draft.txt
+
+wecom-channel-cli proposal get --id PROPOSAL_ID
+</code></pre>
+<p>Omit <code>--parent-reply</code> when the mention is in the post itself. The target must
+match the authenticated event exactly. With <code>read_all</code> and <code>allow_replies</code>, the
+operator may permit proposals without a mention. <code>post propose</code> requires
+<code>allow_posts</code>. All of these still require independent approval.</p>
+<p>The trusted operator reviews the entire proposal, including destination, text,
+expiry and digest, outside the agent session, then runs:</p>
+<pre><code class="language-sh">wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval list
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock proposal get --id PROPOSAL_ID
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval approve \
+  --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes --dry-run
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval approve \
+  --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes
+</code></pre>
+<p>Live sending also requires operator policy <code>read_only: false</code>. The agent's
+<code>--allow-writes</code> only overrides its own <code>WECOM_CHANNEL_CLI_READ_ONLY</code>; it cannot
+override broker policy, route to the operator interface, or grant approval.</p>
+<p>The ledger records <code>sending</code> before network I/O. A failed response becomes
+<code>uncertain</code>; a crash can leave <code>sending</code>. Both block re-execution, as does <code>sent</code>.
+The operator reconciles with WeCom before using <code>approval resolve --outcome sent --remote-id ID</code> or <code>--outcome not_sent</code>, with the same ID/digest and <code>--yes</code>.
+Resolution does not resend. See <a href="technical-design.html#write-state">write recovery</a>.</p>
+<h2 id="official-cli-compatibility">Official CLI compatibility</h2>
+<p>Research checked 2026-10-25 against official commit
+<a href="https://github.com/WecomTeam/wecom-cli/tree/55785fa0a5c922279533a5b5a836b44b56f65ce7"><code>55785fa</code></a>.
+The official CLI and channels use the same SHA-256 signing formula, but the
+official CLI's <code>get_cli_config</code> gateway Bearer token and the channel
+<code>get_token</code> access token are different documented contracts. We do not decrypt
+its private credential store, import its token, or copy its Rust authentication
+implementation. An operator may provision the same existing bot ID/Secret when
+that bot is eligible. See <a href="research.html">research and API coverage</a>.</p>
+<h2 id="scope-and-verification">Scope and verification</h2>
+<p>Implemented: bounded channel/thread watches, channel/member discovery, post/reply reads, scoped search,
+encrypted URL verification and event intake, exact sender/channel allowlists,
+bounded inbox reads, text/Markdown proposals, independent approvals and durable
+uncertain-write recovery. Tests exercise the CLI process and both socket roles.</p>
+<p>Not implemented: media upload/download, emoji mutations, content edits/deletes,
+forwarded chat-record expansion, bot reconfiguration, channel long connections,
+automatic model execution, or a sandbox for an arbitrary agent runtime. Limits
+and rationale are in <a href="technical-design.html">the design</a>. The CLI is not a
+prompt-injection detector and cannot make a privileged host agent safe by itself.</p>
+<ul>
+<li><a href="contexts.html">Channel contexts</a></li>
+<li><a href="watching.html">Watching channels and threads</a></li>
+<li><a href="releasing.html">Release preparation</a></li>
+<li><a href="index.html">Website candidate</a></li>
+<li><a href="security.html">Security and deployment</a></li>
+<li><a href="technical-design.html">Technical design and family applicability</a></li>
+<li><a href="research.html">Official research and API coverage</a></li>
+<li><a href="cli/index.html">Generated command reference</a></li>
+<li><a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/CONTRIBUTING.md">Contributing</a></li>
+</ul>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

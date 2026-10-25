@@ -1,0 +1,43 @@
+[Unit]
+Description=WeCom channel credential broker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=wecom-channel
+Group=wecom-channel-agents
+EnvironmentFile=/etc/wecom-channel/secrets.env
+ExecStartPre=/usr/bin/chmod 0750 /run/wecom-channel-agent
+ExecStart=/usr/local/bin/wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json
+StateDirectory=wecom-channel
+StateDirectoryMode=0700
+RuntimeDirectory=wecom-channel-agent wecom-channel-admin
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+SystemCallArchitectures=native
+LimitCORE=0
+MemoryMax=256M
+TasksMax=64
+TimeoutStopSec=70
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+/bin/
+/dist/
+/coverage.out
+*.sock
+*.db*
+/.env
+/state/
+/broker.json
+
+/build/npm/binary/
+*.tgz
+__pycache__/
+
+/.watch/

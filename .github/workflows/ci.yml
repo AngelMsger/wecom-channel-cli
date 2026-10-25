@@ -1,0 +1,26 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: make lint test e2e docs-check site-check
+      - run: npm test --prefix build/npm
+      - run: go test -race ./...
+      - run: make vuln
+      - run: git diff --exit-code

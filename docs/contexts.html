@@ -1,0 +1,113 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Channel contexts — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html" aria-current="page">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="channel-security-contexts">Channel security contexts</h1>
+<p>Each context binds one bot/channel identity to its own agent socket, operator
+socket, policy, event inbox, proposal ledger and checkpoints. The client uses
+named contexts through the same <code>agent-cli-kit/config</code> engine as the other CLIs.
+Context names select connections; Unix permissions and server policy enforce access.</p>
+<h2 id="client-configuration">Client configuration</h2>
+<p>The default file is <code>~/.angelmsger/wecom-channel/config.yaml</code>. Override its
+directory with <code>--config-dir</code> or <code>WECOM_CHANNEL_CONFIG</code>. No credential is stored
+in this file. Setup is offline and does not alter the broker's policy.</p>
+<pre><code class="language-sh">wecom-channel-cli config set-context engineering \
+  --socket /run/wecom-channel/engineering-agent/agent.sock \
+  --bot-id BOT_ID --channel ENGINEERING_CHANNEL --dry-run
+
+wecom-channel-cli config set-context engineering \
+  --socket /run/wecom-channel/engineering-agent/agent.sock \
+  --bot-id BOT_ID --channel ENGINEERING_CHANNEL
+
+wecom-channel-cli config set-context security \
+  --socket /run/wecom-channel/security-agent/agent.sock \
+  --bot-id BOT_ID --channel SECURITY_CHANNEL
+
+wecom-channel-cli config get-contexts
+wecom-channel-cli config use-context engineering
+wecom-channel-cli --use-context engineering post list
+wecom-channel-cli --use-context security event list
+</code></pre>
+<p>The first context becomes current. Adding another leaves the current selection
+unchanged unless <code>--activate</code> is explicit. Identical setup is a no-op; conflicting
+coordinates require <code>--overwrite</code>. <code>config use-context</code> and <code>delete-context</code>
+support dry-run; deletion requires <code>--yes</code> and removes only the saved client
+connection. The final remaining context cannot be deleted through that command.</p>
+<p>Selection: <code>--use-context</code> &gt; <code>WECOM_CHANNEL_CONTEXT</code> &gt; saved current context &gt;
+only context &gt; a context named <code>default</code>. With multiple contexts and no selection,
+the CLI fails. Implicit selection among multiple contexts emits the family
+stderr notice; <code>WECOM_CHANNEL_NO_CONTEXT_HINT=1</code> suppresses only that notice.</p>
+<p>Coordinates resolve flag &gt; environment &gt; context &gt; default. Environment names
+are <code>WECOM_CHANNEL_SOCKET</code>, <code>WECOM_CHANNEL_BOT_ID</code>, and <code>WECOM_CHANNEL_ID</code>.
+Project <code>.env</code> files are deliberately ignored, so repository content cannot
+silently redirect the client. The upstream WeCom host is fixed.</p>
+<p>A selected context supplies the channel when <code>--channel</code> is omitted. An explicit
+conflicting channel fails before I/O. Each request also carries expected context,
+bot and channel identities; the selected socket independently verifies them.
+Using an accessible socket from another context does not make that mismatch valid.</p>
+<h2 id="one-bot-multiple-channel-boundaries">One bot, multiple channel boundaries</h2>
+<p>Use <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/contexts.example.json">the version 2 deployment example</a>.
+One broker process holds the bot credentials and cached access token. A single
+verified callback endpoint routes by the authenticated channel ID. Each context
+has exactly one channel and distinct socket directories and durable state.</p>
+<pre><code class="language-json">{
+  &quot;version&quot;: 2,
+  &quot;bot_id&quot;: &quot;BOT_ID&quot;,
+  &quot;callback_listen&quot;: &quot;127.0.0.1:8787&quot;,
+  &quot;contexts&quot;: [
+    {
+      &quot;name&quot;: &quot;engineering&quot;,
+      &quot;state_dir&quot;: &quot;/var/lib/wecom-channel/engineering&quot;,
+      &quot;agent_socket&quot;: &quot;/run/wecom-channel/engineering-agent/agent.sock&quot;,
+      &quot;admin_socket&quot;: &quot;/run/wecom-channel/engineering-admin/admin.sock&quot;,
+      &quot;read_only&quot;: true,
+      &quot;channels&quot;: [{
+        &quot;id&quot;: &quot;ENGINEERING_CHANNEL&quot;, &quot;senders&quot;: [&quot;AUTHORIZED_USER_ID&quot;],
+        &quot;read_all&quot;: true, &quot;allow_posts&quot;: false, &quot;allow_replies&quot;: true
+      }]
+    }
+  ]
+}
+</code></pre>
+<p>Add another object with another name/channel and distinct paths. Up to 32 contexts
+are accepted. Other policy limits inherit the safe defaults from <code>config example</code>.
+Bot identity and callback address cannot differ between contexts in one deployment;
+use another deployment for another bot. Duplicate channels, names or socket/state
+paths fail validation. State is bound to bot, context and channel; moving a ledger
+to a different context fails rather than reinterpreting its approvals.</p>
+<p>The single-context version 1 format remains supported, with default context name
+<code>default</code>; it now rejects policies granting more than one channel to the same
+socket. Its existing ledger format remains readable. To migrate an old multi-channel
+prototype, preserve its ledger and reconcile pending/uncertain writes before
+provisioning separate contexts. Do not discard idempotency history to enable a send.</p>
+<h2 id="os-permissions-are-part-of-the-boundary">OS permissions are part of the boundary</h2>
+<p>For mutually untrusted workers, use distinct Unix groups and worker identities
+per channel. Agent socket directories should be broker-owned, <strong>setgid 2750</strong>,
+with their respective context group. Newly created sockets inherit that group
+and are chmod 0660. Operator directories remain broker-owned 0700 and sockets
+0600. On systems where group inheritance differs, verify actual ownership before
+admitting a worker; the CLI does not claim to attest the OS deployment.</p>
+<p>A worker must not belong to every context group unless cross-channel access is
+intentional. Read-only context configuration alone is not an access control list.
+The shared broker process remains trusted across all its contexts. If that trust
+is unacceptable, use separate bot deployments, service identities and sandboxes.</p>
+<p>Use the existing single-context systemd service as a reference, provisioning
+multi-context runtime directories with your OS tooling. Do not let a broad
+<code>RuntimeDirectoryMode</code> erase per-context group separation. See <a href="security.html">security</a>
+for the complete worker and filesystem requirements.</p>
+<h2 id="watching-within-a-context">Watching within a context</h2>
+<p><code>event watch --whole-channel</code> or repeated <code>--post</code> IDs stays bound to the selected
+channel. Enable read_all, post/reply event kinds, and observe_all for all-actor
+coverage. Observation does not expand request eligibility. Checkpoints cannot
+be shared across contexts, policies, filters or reset ledgers. See <a href="watching.html">watching</a>.</p>
+<h2 id="agent-and-operator-workflows">Agent and operator workflows</h2>
+<p>The agent proposes a draft within its selected context. The trusted operator
+selects the same context and overrides only the socket to its private counterpart:</p>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering reply propose \
+  --post POST_ID --event EVENT_ID --key REQUEST_KEY --stdin &lt; draft.txt
+
+wecom-channel-cli --use-context engineering \
+  --socket /run/wecom-channel/engineering-admin/admin.sock approval list
+</code></pre>
+<p>Context metadata is always returned in <code>source.context</code> on broker records. A
+proposal from another context is absent from this ledger; an identical idempotency
+key in another channel is independent. Changing context never grants approval or
+bypasses read-only policy. Keep incremental event checkpoints with the bot and
+context identity, not just the numeric sequence.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

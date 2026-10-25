@@ -1,0 +1,16 @@
+{
+  "name": "@angelmsger/wecom-channel-cli",
+  "version": "0.1.0",
+  "description": "WeCom channel connector for agents: isolated contexts, verified callbacks and operator-approved drafts.",
+  "license": "MIT",
+  "repository": {"type": "git", "url": "git+https://github.com/AngelMsger/wecom-channel-cli.git"},
+  "homepage": "https://angelmsger.github.io/wecom-channel-cli/",
+  "bin": {"wecom-channel-cli": "bin/wecom-channel-cli.js"},
+  "scripts": {"postinstall": "node install.js", "test": "node --test install.test.js"},
+  "files": ["bin/", "install.js", "README.md", "LICENSE"],
+  "engines": {"node": ">=20"},
+  "os": ["darwin", "linux"],
+  "cpu": ["x64", "arm64"],
+  "keywords": ["wecom", "channels", "agents", "cli", "security"],
+  "publishConfig": {"access": "public", "provenance": true}
+}
