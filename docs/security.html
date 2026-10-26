@@ -275,4 +275,16 @@ in a designated test channel. Confirm that a replay cannot send it twice and
 that the reverse proxy records neither callback bodies nor query strings.</p>
 <p>Offline tests establish protocol and application invariants; they cannot certify
 WeCom tenant rollout, the external TLS proxy or the sandbox used by your agent.</p>
+<h2 id="repeatable-reference-isolation-check">Repeatable reference isolation check</h2>
+<p>After <code>make cross</code>, run <code>make isolation-check</code> with a local Linux Docker daemon.
+It uses a pinned Python image and the built Linux executable, synthetic credentials,
+distinct broker/worker UIDs and separate channel groups. The container has no
+network, a read-only root, bounded resources and no host home or Docker-socket
+mount. The setup supervisor drops to unprivileged identities for worker checks.</p>
+<p>On 2026-10-26 all 19 checks passed on Linux arm64: each worker could access its
+own agent socket and scratch space, while cross-channel/operator sockets, broker
+state/environment, secrets, policy writes, root escalation and external network
+access were denied. Worker effective capabilities were zero. Run the same fixture
+in Linux CI and repeat equivalent checks on the actual production deployment;
+this result does not attest an unrelated host or container configuration.</p>
 </article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

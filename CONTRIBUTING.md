@@ -20,6 +20,8 @@ The buildless landing page, styles and interactions live in `docs/index.html` an
 `docs/assets/`. `make site-check` validates local links and offline assets.
 `make package release-check` prepares binary checksums and the npm tarball without
 publishing. See docs/releasing.md for the final owner-controlled release gate.
+Run `make release-tests` after release-script changes, and `make cross isolation-check`
+for the synthetic Linux service/worker permission checks (Docker required).
 
 No release is published by the build. Keep changes under `[Unreleased]` until
 the owner chooses a release; do not create tags automatically.

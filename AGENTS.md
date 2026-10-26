@@ -26,6 +26,11 @@ checks, and include alternate authenticated tools in worker isolation checks.
 Keep the npm installer fail-closed on missing/mismatched checksums; no implicit
 network download belongs in an agent command. Update the release manifest and
 version/Skill handshakes together, and preserve the owner-controlled publish gate.
+Release preflight must verify the exact platform set, source commit, clean Go
+build provenance, checksum manifest and npm archive contents. Never overwrite
+published assets on a retry: reconcile their digests, upload only missing assets,
+and publish the already-verified npm tarball. Exercise the release guard tests
+and synthetic Linux UID/group isolation fixture before the first release.
 
 Watching is observation, not authorization: observe_all may admit post/reply
 changes from bots and humans, but cannot widen human mention eligibility. Watches

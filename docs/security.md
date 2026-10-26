@@ -189,3 +189,18 @@ that the reverse proxy records neither callback bodies nor query strings.
 
 Offline tests establish protocol and application invariants; they cannot certify
 WeCom tenant rollout, the external TLS proxy or the sandbox used by your agent.
+
+## Repeatable reference isolation check
+
+After `make cross`, run `make isolation-check` with a local Linux Docker daemon.
+It uses a pinned Python image and the built Linux executable, synthetic credentials,
+distinct broker/worker UIDs and separate channel groups. The container has no
+network, a read-only root, bounded resources and no host home or Docker-socket
+mount. The setup supervisor drops to unprivileged identities for worker checks.
+
+On 2026-10-26 all 19 checks passed on Linux arm64: each worker could access its
+own agent socket and scratch space, while cross-channel/operator sockets, broker
+state/environment, secrets, policy writes, root escalation and external network
+access were denied. Worker effective capabilities were zero. Run the same fixture
+in Linux CI and repeat equivalent checks on the actual production deployment;
+this result does not attest an unrelated host or container configuration.

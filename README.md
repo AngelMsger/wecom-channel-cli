@@ -9,9 +9,10 @@ content, watches changes by polling or encrypted callbacks, and lets an agent pr
 replies for independent operator approval.
 
 **Status: 0.1.0 release candidate, tested offline against synthetic services and
-WeCom's published cryptographic vector. Live authentication and channel discovery
-passed in one test tenant; live change detection and production isolation remain
-unverified.** Linux and macOS are supported. No package
+WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
+and thread polling, filtering and checkpoint resume passed in one test tenant.
+Distinct-user isolation passed in a synthetic Linux container; actual production
+deployment and live sending remain unverified.** Linux and macOS are supported. No package
 or remote repository has been published by this work.
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix

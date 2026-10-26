@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Release verification
+
+- Record successful live polling, filtering and checkpoint-resume verification
+  with a dedicated test bot, without public ingress or outgoing messages.
+- Add a reproducible Linux container check for distinct worker/service identities,
+  cross-context denial, private state/credentials, privilege and network limits.
+- Reject incomplete/stale release manifests, dirty-source or wrong-platform
+  binaries, mismatched checksums and npm archives that differ from reviewed files.
+- Keep release retries immutable: verify remote tag/asset hashes, upload missing
+  files into a draft and publish the exact verified npm archive without clobbering.
+
 ### Polling without public ingress
 
 - Use HTTP polling for event watch when no callback listener is configured;

@@ -1,7 +1,8 @@
 # WeCom Channel CLI
 
 An independent channel connector for agents. Named channel contexts, a protected
-credential broker, authenticated callbacks, and exact-draft operator approvals.
+credential broker, polling without public ingress, optional authenticated
+callbacks, and exact-draft operator approvals.
 
 After the first release:
 

@@ -19,8 +19,9 @@ Initial release candidate for the grayscale WeCom channel APIs.
 
 This connector does not sandbox arbitrary agent tools. Separate OS identities
 and a restricted worker environment are required. Authentication and channel
-discovery passed in one test tenant. Live polling, optional callback delivery
-and the actual deployed isolation boundary still require operator
-verification. Polling may coalesce intermediate changes and never infers deletion
+discovery, whole-channel/thread polling, filtering and resume passed in one test
+tenant. A synthetic Linux container verified distinct-user socket/file access
+controls. Live sending, optional callback delivery and the actual production
+deployment still require operator verification. Polling may coalesce intermediate changes and never infers deletion
 from absence. Media transfer, content mutation beyond text posts/replies,
 Windows and channel long connections are outside this release.

@@ -21,6 +21,15 @@ jobs:
           node-version: 24
       - run: make lint test e2e docs-check site-check
       - run: npm test --prefix build/npm
+      - run: make release-tests
       - run: go test -race ./...
       - run: make vuln
       - run: git diff --exit-code
+  isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: make cross isolation-check

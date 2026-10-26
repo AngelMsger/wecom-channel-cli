@@ -1,7 +1,7 @@
 {
   "name": "@angelmsger/wecom-channel-cli",
   "version": "0.1.0",
-  "description": "WeCom channel connector for agents: isolated contexts, verified callbacks and operator-approved drafts.",
+  "description": "WeCom channel connector for agents: isolated contexts, callback-free polling and operator-approved drafts.",
   "license": "MIT",
   "repository": {"type": "git", "url": "git+https://github.com/AngelMsger/wecom-channel-cli.git"},
   "homepage": "https://angelmsger.github.io/wecom-channel-cli/",

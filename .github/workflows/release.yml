@@ -31,26 +31,14 @@ jobs:
           go test -race ./...
           make vuln
           npm test --prefix build/npm
+          make release-tests
       - name: Build and verify the release candidate
         run: |
           test "$TAG" = "v$(node -p "require('./build/npm/package.json').version")"
           make package
+          make isolation-check
           python3 scripts/release-check.py --publish
-      - name: Create or refresh the GitHub release
+      - name: Reconcile and publish the verified artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/wecom-channel-cli-* dist/checksums.txt dist/release-manifest.json dist/*.tgz --clobber
-          else
-            gh release create "$TAG" dist/wecom-channel-cli-* dist/checksums.txt dist/release-manifest.json dist/*.tgz --title "$TAG" --notes-file docs/release-notes.md --verify-tag
-          fi
-      - name: Publish npm package through its configured trusted publisher
-        working-directory: build/npm
-        run: |
-          VERSION="${TAG#v}"
-          if npm view "@angelmsger/wecom-channel-cli@$VERSION" version >/dev/null 2>&1; then
-            echo 'This version is already published.'
-          else
-            npm publish --access public --provenance
-          fi
+        run: python3 scripts/publish-release.py --apply

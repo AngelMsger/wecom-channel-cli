@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Validate local release material. --publish also checks Git/tag cleanliness."""
-import hashlib
 import json
 import pathlib
+import platform
 import re
 import subprocess
 import sys
+from release_material import verify_assets
 root = pathlib.Path(__file__).resolve().parents[1]
 pkg = json.loads((root / 'build/npm/package.json').read_text())
 version = pkg['version']
 errors = []
 checks = {}
+checks['package_metadata'] = pkg.get('name') == '@angelmsger/wecom-channel-cli' and pkg.get('repository', {}).get('url') == 'git+https://github.com/AngelMsger/wecom-channel-cli.git'
+if not checks['package_metadata']: errors.append('Package identity differs from the approved candidate coordinates')
 for label, path, pattern in [
     ('CLI', 'pkg/constants/constants.go', r'var Version = "([^"]+)"'),
     ('Makefile', 'Makefile', r'VERSION \?= ([^\n]+)')]:
@@ -26,16 +29,22 @@ if not checks['Skill'] or not checks['handshake']: errors.append('Skill version 
 if f'## [{version}]' not in (root / 'CHANGELOG.md').read_text(): errors.append('Changelog has no candidate version entry')
 for path in ('docs/index.html', 'docs/cli/index.html', 'docs/contexts.html', '.github/workflows/pages.yml', '.github/workflows/release.yml'):
     if not (root / path).is_file(): errors.append(f'Missing {path}')
-manifest_path = root / 'dist/release-manifest.json'
-if not manifest_path.exists(): errors.append('Run make package first')
-else:
-    manifest = json.loads(manifest_path.read_text())
-    if manifest['version'] != version: errors.append('Artifact version is stale')
-    for asset in manifest['assets']:
-        path = root / 'dist' / asset['name']
-        if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != asset['sha256']: errors.append(f'Bad artifact: {asset["name"]}')
+def git(*args): return subprocess.run(['git', *args], cwd=root, capture_output=True, text=True)
+head = git('rev-parse', 'HEAD').stdout.strip()
+asset_errors = verify_assets(root, version, head)
+errors.extend(asset_errors)
+checks['artifacts'] = not asset_errors
+if not asset_errors:
+    system = platform.system().lower()
+    arch = {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'amd64'}.get(platform.machine())
+    try:
+        path = root / 'dist' / f'wecom-channel-cli-{system}-{arch}'
+        result = subprocess.run([str(path), 'version'], env={}, capture_output=True, text=True, timeout=10, check=True)
+        native = json.loads(result.stdout)
+        checks['native_version'] = native.get('version') == version and native.get('commit') == git('rev-parse', '--short', 'HEAD').stdout.strip()
+        if not checks['native_version']: errors.append('Native executable version/commit differs from the candidate')
+    except (OSError, ValueError, subprocess.SubprocessError): errors.append('Cannot verify the native executable version')
 if '--publish' in sys.argv:
-    def git(*args): return subprocess.run(['git', *args], cwd=root, capture_output=True, text=True)
     status = git('status','--porcelain')
     if status.stdout.strip(): errors.append('Commit the reviewed candidate before publishing')
     remote = git('remote','get-url','origin')

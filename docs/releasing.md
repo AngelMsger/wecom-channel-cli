@@ -5,24 +5,40 @@ The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.3**
 `AngelMsger/wecom-channel-cli` and npm package `@angelmsger/wecom-channel-cli`.
 Metadata and workflows are prepared locally. No remote repository, tag, GitHub
 Release, npm version or Pages deployment is created by the preparation commands.
-The website is a design candidate awaiting review.
+The Blue Current visual design has been accepted; publication remains owner-controlled.
 
 ## Local release gate
 
 ```sh
 make lint test e2e docs-check site-check
 npm test --prefix build/npm
+make release-tests
 go test -race ./...
 make vuln
 GOWORK=off make test
 make package
+make isolation-check
 make release-check
 ```
 
 `make package` cross-compiles Linux/macOS on amd64/arm64, injects version/commit/
-build time, writes `dist/checksums.txt` and `release-manifest.json`, then packs
-an npm tarball without running installation scripts. `release-check` verifies
-metadata and artifact hashes. It does not contact a registry or publish.
+build metadata, packs npm without installation scripts, then hashes all five
+assets into `dist/checksums.txt` and `release-manifest.json`. The build timestamp
+defaults to the source commit timestamp so rebuilding with the same toolchains
+does not introduce a new clock value. Toolchain changes can still change bytes.
+`release-check` verifies the exact platform/asset set, HEAD commit, clean Go build
+provenance, native version/commit, checksums, sizes and npm contents against the
+reviewed source. It does not contact a registry or publish. Rebuild after a source
+commit; stale or dirty-source binaries are rejected.
+
+`make release-tests` exercises malformed, missing, stale, tampered and unsafe
+release material plus retry decisions. `make isolation-check` runs the Linux
+binary in a disposable Docker container with synthetic credentials, distinct
+service/worker UIDs, separate channel groups, a read-only root and no network.
+Only the executable and fixture are mounted, read-only; no host credentials or
+Docker socket are exposed. The fixture supervisor has only the capabilities
+needed to set up identities and terminate children; worker capabilities are zero.
+This verifies the reference permission boundary, not every production host.
 
 The npm installer follows the family's binary-wrapper architecture. It deliberately
 requires one valid matching checksum, bounds HTTPS downloads and writes atomically.
@@ -30,9 +46,27 @@ The runtime launcher does not download code. This strengthens the older sibling
 installer pattern that can skip an unavailable checksum; those repositories are
 outside this change's write scope.
 
+The older sibling release workflows also use wall-clock build timestamps and
+asset replacement on retries. This project now rejects replacement and uses a
+stable source timestamp; that release-hardening difference is intentional here.
+No sibling repositories were modified.
+
+## Verification recorded on 2026-10-26
+
+| Check | Evidence and status |
+| --- | --- |
+| Live authentication and channel discovery | Passed with a dedicated test bot; one channel |
+| Live polling baseline, whole channel and selected thread | Passed; four whole-channel and three selected-thread observations |
+| Live checkpoint resume, unrelated-post filtering and trust envelope | Passed; no public listener and no messages sent by the test |
+| Linux reference isolation | Passed 19 synthetic checks, including own/cross-context sockets, operator access, files, environment, escalation and network denial |
+| Actual production deployment | Operator-specific; not attested by the local/container checks |
+| Live operator-approved reply | Not run; requires a reviewed destination and exact content |
+| Live URL callback delivery | Not run; optional transport, not required for polling deployment |
+| Publication infrastructure | No local origin or release tag; npm package lookup returned 404; the GitHub connection could not resolve the proposed repository (404) |
+
 ## Decisions and external prerequisites before the first push/tag
 
-1. Review the **Blue Current** site candidate and source changes. Confirm the
+1. Review the source changes. Confirm the
    proposed repository/package names and that the owner will publish under them.
 2. Verify an eligible WeCom bot in a designated test channel: channel access,
    polling baseline/change detection, selected-thread filtering and resume;
@@ -73,11 +107,19 @@ the source minimum remains Go 1.25.
 
 ## Publishing behavior
 
-The release workflow reruns tests, builds and verifies assets, creates or refreshes
-the GitHub Release, then publishes npm with provenance and trusted publishing.
-An existing npm version is not overwritten. If npm publication fails after GitHub
-succeeds, retain that release and repair the publishing configuration before
-rerunning; do not create a replacement version merely to retry.
+The release workflow reruns tests, builds/verifies assets and runs the container
+isolation fixture. `scripts/publish-release.py --apply` then verifies that the
+remote tag resolves to the reviewed commit. It creates a draft release, uploads
+only missing assets, verifies all remote SHA-256 digests, and publishes the draft.
+Existing mismatched, duplicate or unverified assets stop the workflow; it never
+uses `--clobber`. A network/auth error is not treated as an absent release.
+
+The same verified npm tarball is published with provenance and trusted publishing.
+An existing npm version is accepted only when its registry SHA-512 integrity
+matches that archive. Failed lookups stop rather than trigger a blind publish.
+If npm publication fails after GitHub succeeds, retain the release and reconcile
+that exact npm version before retrying. Do not overwrite assets or bump the version
+merely to recover. Reuse the original toolchains when rebuilding for a retry.
 
 Check GitHub asset checksums, npm metadata/provenance and a clean-machine launch
 on each intended native platform. Cross-builds establish compilation, not native
