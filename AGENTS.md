@@ -19,6 +19,9 @@ for the family's configuration or credential libraries. Credentials are supplied
 only to the broker by the operator; the agent has no login or secret export path.
 Do not read the official CLI's private credential files or reuse its gateway
 Bearer token as a channel access token.
+Preserve existing bot integrations during setup; separate token endpoints do not
+prove concurrent compatibility. Follow docs/research.md for live coexistence
+checks, and include alternate authenticated tools in worker isolation checks.
 
 Keep the npm installer fail-closed on missing/mismatched checksums; no implicit
 network download belongs in an agent command. Update the release manifest and

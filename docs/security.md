@@ -96,6 +96,9 @@ tool executor and working directory in a separate unprivileged sandbox/VM:
 - mount only a disposable working directory and the agent socket directory;
 - expose no broker state, operator socket, policy-writable mount, home directory,
   cloud credentials, SSH keys, keychain or privileged daemon socket;
+- expose no authenticated official `wecom-cli` session or equivalent WeCom
+  connector to the channel worker: alternate credentials, browser sessions and
+  tools could bypass this broker's channel policy and proposal review;
 - deny outbound network by default; if remote inference is required, use a
   separately controlled gateway with a narrowly scoped model credential and
   explicit endpoint policy, not general network access or host credentials;
@@ -162,9 +165,11 @@ remain until a future explicit archival design preserves replay protection.
 
 ## Before live activation
 
-Verify the eligible bot's API mode and permissions with the operator socket,
-confirm the actual worker cannot open the operator socket or state/secret files,
-exercise the encrypted URL challenge, and test one explicitly authorized reply
+Verify the eligible bot's API mode and permissions with the operator socket.
+Confirm the actual worker cannot open the operator socket or state/secret files,
+or reach another authenticated WeCom tool or session. Preserve existing
+integrations using the [coexistence guidance](research.md#coexistence-with-an-existing-official-cli).
+Exercise the encrypted URL challenge, and test one explicitly authorized reply
 in a designated test channel. Confirm that a replay cannot send it twice and
 that the reverse proxy records neither callback bodies nor query strings.
 

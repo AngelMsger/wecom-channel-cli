@@ -197,6 +197,9 @@ tool executor and working directory in a separate unprivileged sandbox/VM:</p>
 <li>mount only a disposable working directory and the agent socket directory;</li>
 <li>expose no broker state, operator socket, policy-writable mount, home directory,
 cloud credentials, SSH keys, keychain or privileged daemon socket;</li>
+<li>expose no authenticated official <code>wecom-cli</code> session or equivalent WeCom
+connector to the channel worker: alternate credentials, browser sessions and
+tools could bypass this broker's channel policy and proposal review;</li>
 <li>deny outbound network by default; if remote inference is required, use a
 separately controlled gateway with a narrowly scoped model credential and
 explicit endpoint policy, not general network access or host credentials;</li>
@@ -251,9 +254,11 @@ event retention is 48 hours; physical expiration is applied on later accepted
 intake, while reads hide expired events immediately. Proposals and their keys
 remain until a future explicit archival design preserves replay protection.</p>
 <h2 id="before-live-activation">Before live activation</h2>
-<p>Verify the eligible bot's API mode and permissions with the operator socket,
-confirm the actual worker cannot open the operator socket or state/secret files,
-exercise the encrypted URL challenge, and test one explicitly authorized reply
+<p>Verify the eligible bot's API mode and permissions with the operator socket.
+Confirm the actual worker cannot open the operator socket or state/secret files,
+or reach another authenticated WeCom tool or session. Preserve existing
+integrations using the <a href="research.html#coexistence-with-an-existing-official-cli">coexistence guidance</a>.
+Exercise the encrypted URL challenge, and test one explicitly authorized reply
 in a designated test channel. Confirm that a replay cannot send it twice and
 that the reverse proxy records neither callback bodies nor query strings.</p>
 <p>Offline tests establish protocol and application invariants; they cannot certify

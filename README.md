@@ -203,7 +203,15 @@ official CLI's `get_cli_config` gateway Bearer token and the channel
 `get_token` access token are different documented contracts. We do not decrypt
 its private credential store, import its token, or copy its Rust authentication
 implementation. An operator may provision the same existing bot ID/Secret when
-that bot is eligible. See [research and API coverage](docs/research.md).
+that bot is eligible, but separate token endpoints do not establish that token
+issuance and refresh cannot affect another integration.
+
+If `wecom-cli` is already in use, keep its login and bot configuration intact.
+For first live verification, use a dedicated eligible test bot in a test channel.
+Supply its credentials locally to the broker; do not reset a working bot's Secret
+or rerun the official CLI's login to obtain credentials for this connector.
+An existing CLI login does not establish callback readiness, and `event watch`
+requires verified callback delivery. See the [coexistence guidance](docs/research.md#coexistence-with-an-existing-official-cli).
 
 ## Scope and verification
 

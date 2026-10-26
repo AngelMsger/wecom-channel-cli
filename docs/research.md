@@ -33,6 +33,40 @@ official credential files, scrape an exported Secret, or shell out to the
 official CLI on behalf of a channel message. Revisit supported credential
 delegation if Tencent publishes a stable API for it.
 
+### Coexistence with an existing official CLI
+
+Rechecked the official CLI's authentication source and
+[command reference](https://github.com/WecomTeam/wecom-cli/blob/main/docs/cli-reference.md)
+on 2026-10-26. Its supported login methods are QR binding and manual bot ID/Secret
+entry. `auth show` displays authorization status and bot ID; it is not a supported
+Secret export or channel-API credential delegation interface. A remembered login
+method is not required to preserve the existing installation.
+
+Keep the following checks separate:
+
+| Check | What it establishes | What it does not establish |
+| --- | --- | --- |
+| Existing official CLI login | The CLI has its own authorization configuration | Channel API access, callback configuration, or shared-token compatibility |
+| Broker `auth check` and bounded channel discovery | Channel API access for the supplied bot at that time | Callback delivery, complete watch coverage, or production isolation |
+| Authenticated callback challenge and observed test event | The configured callback route works for that bot/event | Isolation of the worker or delivery of every event |
+
+The separate `get_cli_config` and `get_token` endpoints do not document a guarantee
+that credential issuance or refresh for the same bot cannot affect another
+consumer. Do not claim coexistence is verified from endpoint names alone.
+For first live verification, use a dedicated API-enabled test bot in a designated
+test channel with the required grayscale access. This avoids changing the bot
+already used by the official CLI. Keep the test broker read-only initially.
+
+For an intentional shared-bot deployment, inventory its existing integrations
+and connection configuration first, obtain the existing Secret through the
+operator's supported management path, and verify both consumers before and after
+channel access. If the Secret is unavailable, do not decrypt the CLI store, reset
+the bot, or rerun `auth init` as a recovery shortcut. Use a separate test bot or
+wait for a supported delegation mechanism. Coordinate any callback setup with
+the existing receiver; this connector does not automatically install callback
+fan-out or take over an active connection. A read-only HTTP check does not test
+`event watch`, which consumes verified callbacks rather than polling remote posts.
+
 ## Connection mode and access
 
 The [overview](https://developer.work.weixin.qq.com/document/path/101906)

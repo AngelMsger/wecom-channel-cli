@@ -37,7 +37,10 @@ outside this change's write scope.
 2. Verify an eligible WeCom bot in a designated test channel: authenticated URL
    challenge, channel access, one explicitly approved reply, replay rejection,
    and actual worker denial of operator sockets/state/credentials. Offline tests
-   do not prove tenant rollout or OS deployment.
+   do not prove tenant rollout or OS deployment. Prefer a dedicated test bot when
+   the existing bot serves another integration; follow the
+   [coexistence checks](research.md#coexistence-with-an-existing-official-cli).
+   The worker must also lack access to other authenticated WeCom tools or sessions.
 3. Create or select the approved GitHub repository, set its canonical `origin`,
    and push reviewed commits. No remote is configured in this local repository yet.
 4. Enable Pages with source **GitHub Actions**. The workflow uploads only `docs/`;
