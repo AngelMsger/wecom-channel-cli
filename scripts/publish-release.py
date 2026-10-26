@@ -34,6 +34,24 @@ def github(path, optional=False):
     return json.loads(result.stdout)
 
 
+def release_by_tag(tag):
+    # REST's releases/tags route resolves published releases, not drafts.
+    result = run(["gh", "release", "view", tag, "--repo", REPOSITORY,
+                  "--json", "databaseId,tagName"])
+    if result.returncode:
+        if result.stderr.strip() == "release not found":
+            return None
+        raise RuntimeError("GitHub release identity could not be read; publication stopped")
+    identity = json.loads(result.stdout)
+    release_id = identity.get("databaseId")
+    if type(release_id) is not int or release_id <= 0 or identity.get("tagName") != tag:
+        raise RuntimeError("GitHub returned a mismatched release identity")
+    release = github(f"repos/{REPOSITORY}/releases/{release_id}")
+    if release.get("id") != release_id or release.get("tag_name") != tag:
+        raise RuntimeError("GitHub returned a mismatched release record")
+    return release
+
+
 def upload_plan(local, remote):
     seen = set()
     for asset in remote:
@@ -80,8 +98,7 @@ def main():
         raise RuntimeError("Remote release tag does not resolve to the reviewed source commit")
     names = (*asset_names(version), "checksums.txt", "release-manifest.json")
     local = {name: digest(ROOT / "dist" / name) for name in names}
-    release_path = f"repos/{REPOSITORY}/releases/tags/{tag}"
-    release = github(release_path, optional=True)
+    release = release_by_tag(tag)
     missing = upload_plan(local, release["assets"] if release else [])
     archive = ROOT / "dist" / npm_name(version)
     integrity = "sha512-" + base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode()
@@ -94,9 +111,12 @@ def main():
     if release is None:
         require(["gh", "release", "create", tag, "--repo", REPOSITORY, "--draft", "--verify-tag",
                  "--title", tag, "--notes-file", "docs/release-notes.md"])
+        release = release_by_tag(tag)
+        if release is None:
+            raise RuntimeError("The new draft could not be reconciled; inspect the release before retrying")
     for name in missing:
         require(["gh", "release", "upload", tag, str(ROOT / "dist" / name), "--repo", REPOSITORY])
-    release = github(release_path)
+    release = github(f"repos/{REPOSITORY}/releases/{release['id']}")
     if upload_plan(local, release["assets"]):
         raise RuntimeError("Release upload remains incomplete; draft retained for reconciliation")
     if release.get("draft"):
