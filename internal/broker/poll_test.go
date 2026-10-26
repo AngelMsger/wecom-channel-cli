@@ -277,6 +277,25 @@ func TestConcurrentPollingSharesOneSnapshot(t *testing.T) {
 	}
 }
 
+func TestPollingDoesNotSynthesizeReactionMembershipEvents(t *testing.T) {
+	b, f := pollFixture(t)
+	r := ScanRequest{WholeChannel: true, Limit: 100}
+	before := polled("a", "", "unchanged content", false)
+	setPosts(f, before)
+	if _, err := b.scan(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	m := before.Data.(apiclient.Message)
+	m.Reactions = []apiclient.Reaction{{EmojiType: 1, Users: []apiclient.User{{Type: 1, BotID: "bot"}}}}
+	before.Data = m
+	setPosts(f, before)
+	tick(b)
+	p, err := b.scan(context.Background(), r)
+	if err != nil || len(p.Items) != 0 || p.HighWatermark != 0 {
+		t.Fatal("invented post event from reaction list", p, err)
+	}
+}
+
 func TestPollingCompletePaginationAndAtomicInboxCapacity(t *testing.T) {
 	b, f := pollFixture(t)
 	f.pages["post.list//"] = apiclient.Page{Items: []apiclient.Record{polled("a", "", "old-a", false)}, HasMore: true, Next: "next"}

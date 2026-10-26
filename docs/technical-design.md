@@ -166,6 +166,21 @@ policy mismatch prevent pending approval without rewriting historical evidence.
 The shared `BuildWrite` validates the exact JSON body for both previews and
 execution. A proposal binds bot, operator-policy digest, operation, channel,
 post/parent reply, triggering event, exact content and caller idempotency key.
+
+Native reactions share this state machine. `reaction propose` binds an exact
+post or reply, numeric native type and explicit add/remove action; `BuildWrite`
+maps it to `topic/post_emoji` with no text body. `allow_reactions` is independent
+of text permissions. Mention scope requires a matching callback within 24 hours
+at proposal and approval time; explicit channel scope requires read_all and the
+operator's verified proactive bot access. Poll events cannot supply that authority.
+
+The provider's successful reaction response has no resource ID. `sent` means the
+mutation was acknowledged, and remote_id remains absent. For an uncertain
+reaction, the operator inspects `reaction list` and resolves the immutable
+proposal without --remote-id; the CLI rejects fabricated reaction IDs. Neither
+an automatic retry nor an opposite action is a recovery mechanism. Curated
+emoji_list metadata is available on content reads; membership is excluded from
+poll fingerprints so it does not masquerade as a post/reply change feed.
 The SHA-256 digest is also its ID. The digest detects changes; Unix permissions
 and listener authority authenticate approval. A reused key with differing
 content, target or policy is a conflict.
@@ -272,6 +287,14 @@ servers; they do not read the OS keychain or contact WeCom. The crypto test uses
 the published known-answer vector. Socket tests cover role separation, file
 modes and clean shutdown. Process tests exercise JSON/NDJSON pagination,
 proposal creation, denied agent approval and one-time operator execution.
+
+Reaction coverage additionally includes native post/reply add/remove wire bodies,
+offline type discovery, acknowledgment without IDs, mention-target/expiry checks,
+explicit proactive scope, read-only and digest gates, terminal replay refusal,
+unknown-write reconciliation and redacted membership reads. The existing shared
+write/output patterns apply across the family; no maintained sibling currently
+exposes this native WeCom operation, so no sibling API or implementation changes
+are needed.
 
 Before release, repeat with `GOWORK=off`, run the race detector and cross-build,
 then complete an explicitly authorized live tenant and isolated-worker check.

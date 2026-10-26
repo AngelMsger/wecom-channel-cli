@@ -64,8 +64,11 @@ type WriteRequest struct {
 	Post        string `json:"post_id,omitempty"`
 	ParentReply string `json:"parent_reply_id,omitempty"`
 	Event       string `json:"event_id,omitempty"`
-	Content     string `json:"content"`
+	Content     string `json:"content,omitempty"`
 	Key         string `json:"key"`
+	Reply       string `json:"reply_id,omitempty"`
+	EmojiType   int    `json:"emoji_type,omitempty"`
+	Action      string `json:"action,omitempty"`
 }
 
 type Plan struct {
@@ -90,10 +93,16 @@ func Identifier(v string, max int) bool {
 
 // BuildWrite is shared by previews and execution. No arbitrary API is exposed.
 func BuildWrite(r WriteRequest) (Plan, error) {
+	if r.Kind == "reaction" {
+		return buildReaction(r)
+	}
+	if r.Reply != "" || r.EmojiType != 0 || r.Action != "" {
+		return Plan{}, e.New(e.CategoryUsage, "BAD_WRITE", "Native reaction fields cannot be combined with a text post or reply.")
+	}
 	if !Identifier(r.Channel, 128) || !Identifier(r.Key, 128) || !utf8.ValidString(r.Content) || len(r.Content) == 0 || len(r.Content) > 20480 {
 		return Plan{}, e.New(e.CategoryUsage, "BAD_WRITE", "A channel, idempotency key, and 1–20480 UTF-8 bytes of content are required.")
 	}
-	// This version sends plain text/Markdown only; it has no media or mention resolver.
+	// Text writes have no media or mention resolver.
 	if strings.Contains(r.Content, "${inline_") || strings.IndexFunc(r.Content, func(c rune) bool {
 		return (unicode.IsControl(c) && c != '\n' && c != '\t') || c == '\u061c' || c == '\u200e' || c == '\u200f' || c >= '\u202a' && c <= '\u202e' || c >= '\u2066' && c <= '\u2069'
 	}) >= 0 {
@@ -114,7 +123,7 @@ func BuildWrite(r WriteRequest) (Plan, error) {
 			body["parent_reply_id"] = r.ParentReply
 		}
 	default:
-		return Plan{}, e.New(e.CategoryUsage, "BAD_WRITE", "Only post and reply proposals are supported.")
+		return Plan{}, e.New(e.CategoryUsage, "BAD_WRITE", "Only post, reply and native reaction proposals are supported.")
 	}
 	return Plan{"POST", "/cgi-bin/aibot/topic/send_" + r.Kind, body}, nil
 }

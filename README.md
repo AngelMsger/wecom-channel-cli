@@ -5,8 +5,8 @@
 ![WeCom Channel CLI — watch channels and threads with human-controlled actions](docs/image.png)
 
 An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
-content, watches changes by polling or encrypted callbacks, and lets an agent propose text posts or
-replies for independent operator approval.
+content, watches changes by polling or encrypted callbacks, and lets an agent
+propose text posts, replies or native emoji reactions for independent operator approval.
 
 **Status: 0.1.0 release candidate, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
@@ -201,6 +201,24 @@ The operator reconciles with WeCom before using `approval resolve --outcome
 sent --remote-id ID` or `--outcome not_sent`, with the same ID/digest and `--yes`.
 Resolution does not resend. See [write recovery](docs/technical-design.md#write-state).
 
+## Native emoji reactions
+
+```sh
+wecom-channel-cli reaction types
+wecom-channel-cli --use-context engineering reaction list --post POST_ID
+wecom-channel-cli --use-context engineering reaction propose \
+  --post POST_ID --emoji-type 1 --action add --key acknowledge-1 --dry-run
+```
+
+Reactions call WeCom's native `post_emoji`; they do not create emoji-text posts
+or comments. Add `--reply REPLY_ID` for a reply target, or use `--action remove`
+to cancel the bot's reaction. Proposals require operator approval like other writes.
+The operator must enable `allow_reactions`; the default `mentioned` scope requires
+an exact authenticated mention within 24 hours. Explicit `reaction_scope: channel`
+also requires `read_all` and proactive bot permission, allowing polling deployments
+without callbacks. See [native reactions](docs/reactions.md) for setup, type discovery
+and uncertain-result reconciliation. No separate reaction ID is invented.
+
 ## Official CLI compatibility
 
 Research checked 2026-10-25 against official commit
@@ -225,9 +243,10 @@ no callback reconfiguration. See the [coexistence guidance](docs/research.md#coe
 Implemented: bounded channel/thread watches, channel/member discovery, post/reply reads, scoped search,
 encrypted URL verification and event intake, exact sender/channel allowlists,
 bounded inbox reads, text/Markdown proposals, independent approvals and durable
-uncertain-write recovery. Tests exercise the CLI process and both socket roles.
+uncertain-write recovery, and native reaction add/remove/read operations. Tests
+exercise the CLI process and both socket roles. Live native reactions remain unverified.
 
-Not implemented: media upload/download, emoji mutations, content edits/deletes,
+Not implemented: media upload/download, content edits/deletes,
 forwarded chat-record expansion, bot reconfiguration, channel long connections,
 automatic model execution, or a sandbox for an arbitrary agent runtime. Limits
 and rationale are in [the design](docs/technical-design.md). The CLI is not a
@@ -235,6 +254,7 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 
 - [Channel contexts](docs/contexts.md)
 - [Watching channels and threads](docs/watching.md)
+- [Native emoji reactions](docs/reactions.md)
 - [Release preparation](docs/releasing.md)
 - [Website candidate](docs/index.html)
 - [Security and deployment](docs/security.md)

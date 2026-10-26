@@ -44,3 +44,28 @@ func TestPolicyDefaultsAndStrictness(t *testing.T) {
 		t.Fatal("wildcard sender accepted")
 	}
 }
+
+func TestReactionPolicyIsOptInAndScopeIsExplicit(t *testing.T) {
+	c := Default()
+	c.Bot = "bot"
+	c.StateDir = "/var/lib/test"
+	c.AgentSocket = "/run/agent/a.sock"
+	c.AdminSocket = "/run/operator/a.sock"
+	c.Channels = []Channel{{ID: "channel"}}
+	if c.Validate() != nil || c.Channels[0].AllowReactions || c.Channels[0].ReactionScope != "" {
+		t.Fatal(c)
+	}
+	c.Channels[0].AllowReactions = true
+	c.Channels[0].ReactionScope = "channel"
+	if c.Validate() == nil {
+		t.Fatal("proactive scope without full-content access")
+	}
+	c.Channels[0].ReadAll = true
+	if c.Validate() != nil {
+		t.Fatal("valid channel scope rejected")
+	}
+	c.Channels[0].ReactionScope = "automatic"
+	if c.Validate() == nil {
+		t.Fatal("unknown reaction scope")
+	}
+}

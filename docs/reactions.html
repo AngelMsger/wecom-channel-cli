@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Native reactions — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html" aria-current="page">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="native-emoji-reactions">Native emoji reactions</h1>
+<p>Reactions use WeCom's <code>topic/post_emoji</code> endpoint. They add or remove the bot's
+native emoji membership on an existing post or reply; they do not publish emoji
+text or create a new post/comment. They use the same proposal, operator approval,
+read-only and uncertain-write protections as text writes.</p>
+<h2 id="discover-types-and-inspect-a-target">Discover types and inspect a target</h2>
+<pre><code class="language-sh"># Offline catalog: the 115 documented numeric types and official display labels.
+wecom-channel-cli reaction types
+
+# Current native reactions on a post, or on one reply beneath it.
+wecom-channel-cli --use-context engineering reaction list --post POST_ID
+wecom-channel-cli --use-context engineering reaction list --post POST_ID --reply REPLY_ID
+</code></pre>
+<p>The catalog is bounded local schema data in the standard list envelope. Labels
+retain WeCom's official spelling, including localized labels. For example, type
+1 is <code>[+1]</code>, 3 is <code>[DONE]</code>, 6 is <code>[OK]</code>, 69 is <code>[收到]</code>, and 115 is <code>[鼓掌]</code>.
+Use the numeric type; arbitrary Unicode emoji and guessed identifiers are not
+accepted as native reaction types.</p>
+<p><code>reaction list</code> reads the target through the post/reply content API and returns
+only curated reaction groups. Each untrusted item contains <code>emoji_type</code>,
+<code>user_list</code>, and <code>bot_reacted</code> for the bot bound to this context. An absent target
+is an error, not an empty reaction list. Ambiguous or missing member identities
+fail instead of claiming the bot did not react. The command does not return message
+bodies, download URLs, cookies or raw upstream fields.</p>
+<p>Discover targets with <code>post list</code>, <code>reply list</code>, <code>search result</code> or a verified
+event. In mention-only mode, pass the matching <code>--event EVENT_ID</code> when reading
+reactions; otherwise agent reads require <code>read_all</code>. No actor-selection flag can
+impersonate another member or remove their reactions.</p>
+<h2 id="operator-policy-and-permission-paths">Operator policy and permission paths</h2>
+<p>Reactions are disabled by default. The operator must explicitly set
+<code>allow_reactions: true</code> for the channel. Permission is independent of
+<code>allow_posts</code> and <code>allow_replies</code>; permitting one does not enable the others.</p>
+<table>
+<thead>
+<tr>
+<th><code>reaction_scope</code></th>
+<th>Required local authority</th>
+<th>Required WeCom access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mentioned</code> (also the default when omitted)</td>
+<td>Matching authenticated <code>topic_at_bot</code> event for the exact post/reply, no older than 24 hours</td>
+<td>Access to react to the mentioned content</td>
+</tr>
+<tr>
+<td><code>channel</code></td>
+<td>Explicit operator policy plus <code>read_all: true</code></td>
+<td>Bot permission to read all channel content and proactively send</td>
+</tr>
+</tbody>
+</table>
+<p>For a polling deployment with proactive bot access, the channel policy can be:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;CHANNEL_ID&quot;,
+  &quot;senders&quot;: [],
+  &quot;read_all&quot;: true,
+  &quot;observe_all&quot;: true,
+  &quot;allow_posts&quot;: false,
+  &quot;allow_replies&quot;: false,
+  &quot;allow_reactions&quot;: true,
+  &quot;reaction_scope&quot;: &quot;channel&quot;
+}
+</code></pre>
+<p>A full read-only starter is in <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/reactions.example.json">reactions.example.json</a>.
+It needs no callback listener. Proposing remains available with broker read-only
+policy, but actual approval execution requires the operator to deliberately set
+<code>read_only: false</code> after reviewing the deployment. WeCom enforces its own bot
+permissions; local policy is a restriction, not a remote permission grant.</p>
+<p>If <code>--event</code> is supplied, it must match even under channel scope. A mention on a
+reply authorizes that exact reply, not another reply or its parent post. Eligibility
+is checked both when creating the proposal and immediately before execution.
+Polling never manufactures mention events, and <code>read_all</code> alone never enables
+proactive reactions. Removing a reaction follows the same permission rules;
+an expired mention does not grant indefinite removal access.</p>
+<h2 id="propose-review-apply">Propose, review, apply</h2>
+<pre><code class="language-sh"># Add a native +1 on the post under an operator-configured channel scope.
+wecom-channel-cli --use-context engineering reaction propose \
+  --post POST_ID --emoji-type 1 --action add --key acknowledge-post-1 --dry-run
+
+wecom-channel-cli --use-context engineering reaction propose \
+  --post POST_ID --emoji-type 1 --action add --key acknowledge-post-1
+
+# Remove a native DONE reaction from the exact mentioned reply.
+wecom-channel-cli --use-context engineering reaction propose \
+  --post POST_ID --reply REPLY_ID --emoji-type 3 --action remove \
+  --event EVENT_ID --key remove-done-1 --dry-run
+</code></pre>
+<p>Every proposal binds the channel, post, optional reply, native type, add/remove
+action, event when supplied, policy and idempotency key. There is no default action
+or toggle operation. Reusing a key with a different target, type or action fails.
+Dry-run uses the real builder with no state changes or upstream request.</p>
+<p>The trusted operator inspects the proposal and approves its exact digest through
+the private socket, outside the agent's tool authority:</p>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering \
+  --socket /run/wecom-channel/engineering-admin/admin.sock proposal get --id PROPOSAL_ID
+wecom-channel-cli --use-context engineering \
+  --socket /run/wecom-channel/engineering-admin/admin.sock approval approve \
+  --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes --dry-run
+wecom-channel-cli --use-context engineering \
+  --socket /run/wecom-channel/engineering-admin/admin.sock approval approve \
+  --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes
+</code></pre>
+<p>Review the exact reaction with the human just as for a textual reply: a small
+gesture still expresses an action under the bot's identity. Agent sockets cannot
+approve it, and <code>--allow-writes</code> cannot bypass server policy or operator approval.</p>
+<h2 id="success-and-uncertain-outcomes">Success and uncertain outcomes</h2>
+<p>The provider acknowledges <code>post_emoji</code> with <code>errcode: 0</code> and no new resource ID.
+The proposal becomes <code>sent</code>, meaning the action was acknowledged; <code>remote_id</code>
+remains absent. Its immutable request contains the target/type/action receipt.
+Do not invent a reaction ID or interpret this as a newly created message.</p>
+<p>The broker persists <code>sending</code> before the request. A timeout or ambiguous response
+becomes <code>uncertain</code>, and a crash may retain <code>sending</code>. Neither can be replayed.
+Use <code>reaction list</code> on the exact post/reply (or the WeCom UI) to inspect
+<code>bot_reacted</code> for that emoji type; an absent group means no membership was returned
+for that type on the existing target. After independently reconciling the desired
+state, the operator can resolve the proposal with its ID/digest and <code>--outcome sent</code> or <code>not_sent</code>. <strong>Omit <code>--remote-id</code> for reactions</strong>; it is rejected because
+the API creates no independent resource. Resolution changes the local ledger only.</p>
+<p>Adding and removing are distinct reviewed intentions with separate keys. An
+opposite action is not an automatic rollback for an uncertain operation.
+Watching posts/replies does not emit a dedicated reaction-change stream; reaction
+membership alone is excluded from polling fingerprints. Refresh <code>reaction list</code>
+explicitly when current membership matters.</p>
+<h2 id="verification-and-sources">Verification and sources</h2>
+<p>Tests cover native wire bodies, add/remove targets, acknowledgment without IDs,
+permission and expiry checks, read-only/digest/replay gates, uncertain resolution,
+reaction projection and real CLI-process flows against synthetic APIs. Live native
+reactions have not been exercised against the test tenant yet.</p>
+<p>The official <a href="https://developer.work.weixin.qq.com/document/path/101915">mention response API</a>
+documents the 24-hour mention path. The <a href="https://developer.work.weixin.qq.com/document/path/101924">proactive API</a>
+also documents <code>post_emoji</code>, allowing a separate operator-approved channel scope.
+The <a href="https://developer.work.weixin.qq.com/document/path/101922">content API</a> supplies
+<code>emoji_list</code> and the type catalog. These are native channel operations, separate
+from posting emoji text.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

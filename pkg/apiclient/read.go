@@ -15,25 +15,31 @@ type User struct {
 	LegacyBotID string `json:"botid,omitempty"`
 }
 
+type Reaction struct {
+	EmojiType int    `json:"emoji_type"`
+	Users     []User `json:"user_list"`
+}
+
 type File struct {
 	Placeholder string `json:"placeholder"`
 	Name        string `json:"file_name"`
 }
 
 type Message struct {
-	PostID             string `json:"post_id,omitempty"`
-	ReplyID            string `json:"reply_id,omitempty"`
-	ParentReplyID      string `json:"parent_reply_id,omitempty"`
-	Creator            *User  `json:"creator,omitempty"`
-	CreatorInfo        *User  `json:"creator_info,omitempty"`
-	Created            int64  `json:"create_time"`
-	Modified           int64  `json:"modify_time,omitempty"`
-	Recalled           bool   `json:"is_recalled"`
-	IsModified         bool   `json:"is_modified"`
-	Content            string `json:"content"`
-	Files              []File `json:"inline_file_list,omitempty"`
-	ImageCount         int    `json:"image_count"`
-	AttachmentsOmitted bool   `json:"attachment_access_omitted"`
+	PostID             string     `json:"post_id,omitempty"`
+	ReplyID            string     `json:"reply_id,omitempty"`
+	ParentReplyID      string     `json:"parent_reply_id,omitempty"`
+	Creator            *User      `json:"creator,omitempty"`
+	CreatorInfo        *User      `json:"creator_info,omitempty"`
+	Created            int64      `json:"create_time"`
+	Modified           int64      `json:"modify_time,omitempty"`
+	Recalled           bool       `json:"is_recalled"`
+	IsModified         bool       `json:"is_modified"`
+	Content            string     `json:"content"`
+	Files              []File     `json:"inline_file_list,omitempty"`
+	ImageCount         int        `json:"image_count"`
+	AttachmentsOmitted bool       `json:"attachment_access_omitted"`
+	Reactions          []Reaction `json:"emoji_list,omitempty"`
 }
 
 type Topic struct {

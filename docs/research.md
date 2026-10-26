@@ -118,13 +118,22 @@ All implemented requests are fixed HTTPS POSTs on `qyapi.weixin.qq.com`, under
 | [Crypto](https://developer.work.weixin.qq.com/document/path/101909) / [algorithm](https://developer.work.weixin.qq.com/document/path/101778) | GET verification and encrypted POST | SHA-1 sorted signature, AES-256-CBC, PKCS#7 block size 32, empty receive ID for self-built bots |
 | [Temporary media](https://developer.work.weixin.qq.com/document/path/101917) | Upload lifecycle | Deferred: filesystem access and content disclosure require a separate capability design |
 | [Forwarded chat records](https://developer.work.weixin.qq.com/document/path/101959) | Chat-record reads | Deferred; no automatic expansion |
-| [Emoji](https://developer.work.weixin.qq.com/document/path/101915) | `topic/post_emoji` | Deferred |
+| [Mention reactions](https://developer.work.weixin.qq.com/document/path/101915) / [proactive reactions](https://developer.work.weixin.qq.com/document/path/101924) | `topic/post_emoji` | Operator-approved native add/remove on posts or replies; bounded reaction reads through content APIs |
 
 The maximum exposed page size is deliberately smaller than the upstream maximum
 where useful: 50 for remote reads, 20 for search results, and 100 for local inbox
 or proposal pages. Agent channel discovery is bound to exactly one channel per context.
 
 ## Documentation ambiguities handled conservatively
+
+- `post_emoji` appears in both the mention-response and proactive-content
+  documentation, rechecked on 2026-10-26. The 24-hour mention rule is not a global
+  prohibition on proactive reactions. The connector defaults to exact mention
+  scope and exposes a separate explicit channel scope for operator-verified
+  proactive permissions; `read_all` alone is not that permission.
+- Native reaction success has `errcode: 0` without a new resource ID. The proposal
+  records the target/type/action and an acknowledged status; reconciliation reads
+  the bot's membership from the target's `emoji_list`, never a fabricated ID.
 
 - Mention-only content is available within 24 hours. The broker checks the
   triggering event age before context reads and reply approvals.

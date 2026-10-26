@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Native emoji reactions
+
+- Add reaction types, list and propose commands for native post/reply reactions,
+  including explicit add/remove actions through the existing approval ledger.
+- Separate opt-in reaction permission and exact-mention/proactive channel scope;
+  recheck mention identity and its 24-hour window immediately before execution.
+- Accept provider acknowledgments without inventing reaction IDs; reconcile
+  uncertain outcomes with target membership reads and no automatic retry.
+- Expose curated emoji_list and bot_reacted metadata, retain the official 115-type
+  catalog, and exclude membership-only changes from polling fingerprints.
+- Add reaction policy examples, generated docs, process/wire/security tests and
+  companion Skill 0.1.4. Live native reaction delivery remains unverified.
+
 ### Release verification
 
 - Record successful live polling, filtering and checkpoint-resume verification

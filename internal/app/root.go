@@ -28,7 +28,7 @@ type appState struct {
 
 func NewRootCmd() *cobra.Command {
 	s := &appState{}
-	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose reviewed replies through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
+	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
 	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")
 	root.PersistentFlags().StringVar(&s.configDir, "config-dir", "", "Client context directory (or WECOM_CHANNEL_CONFIG)")
@@ -49,6 +49,7 @@ func NewRootCmd() *cobra.Command {
 		return e.New(e.CategoryUsage, "BAD_FLAG", "Invalid or unsupported flag; inspect command help.")
 	})
 	root.AddCommand(s.readCommands()...)
+	root.AddCommand(s.reactionCommands())
 	root.AddCommand(s.eventCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.configCommands(), s.authCommands(), s.skillCommands())
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Print build metadata", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.emit(cmd, map[string]any{"name": constants.AppName, "version": constants.Version, "commit": constants.Commit, "built_at": constants.BuildTime})

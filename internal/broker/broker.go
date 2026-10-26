@@ -199,6 +199,8 @@ func (b *Broker) Handle(ctx context.Context, r Request, admin bool) (Response, e
 		}
 		p, err := b.API.Read(ctx, q)
 		return page(p), err
+	case "reaction.list":
+		return b.listReactions(ctx, r, admin)
 	case "proposal.create":
 		return b.propose(r)
 	case "proposal.get":
@@ -290,6 +292,18 @@ func (b *Broker) validateWrite(r apiclient.WriteRequest) error {
 	if !ok {
 		return denied()
 	}
+	if r.Kind == "reaction" {
+		if !ch.AllowReactions {
+			return denied()
+		}
+		if r.Event != "" {
+			return b.validateMention(r.Event, r.Channel, r.Post, r.Reply)
+		}
+		if ch.ReactionScope != "channel" || !ch.ReadAll {
+			return e.New(e.CategoryPermission, "REACTION_MENTION_REQUIRED", "This reaction policy requires a matching authenticated mention within 24 hours. Poll observations cannot authorize reactions.").WithHint("Use an eligible event from event list, or ask the operator to verify proactive bot permissions and configure reaction_scope=channel.")
+		}
+		return nil
+	}
 	if r.Kind == "post" {
 		if !ch.AllowPosts {
 			return denied()
@@ -300,13 +314,7 @@ func (b *Broker) validateWrite(r apiclient.WriteRequest) error {
 		return denied()
 	}
 	if r.Event != "" {
-		v, err := b.event(r.Event)
-		if err != nil {
-			return err
-		}
-		if v.Kind != "topic_at_bot" || v.Channel != r.Channel || v.Post != r.Post || v.Reply != r.ParentReply || v.Created < b.Now().Add(-24*time.Hour).Unix() {
-			return denied()
-		}
+		return b.validateMention(r.Event, r.Channel, r.Post, r.ParentReply)
 	} else if !ch.ReadAll {
 		return denied()
 	}
@@ -368,7 +376,10 @@ func (b *Broker) approve(ctx context.Context, r Request) (Response, error) {
 		if r.Outcome != "sent" && r.Outcome != "not_sent" {
 			return Response{}, e.New(e.CategoryUsage, "BAD_OUTCOME", "Resolve requires outcome sent or not_sent after an independent read.")
 		}
-		if r.Outcome == "sent" && !apiclient.Identifier(r.RemoteID, 128) {
+		if p.Request.Kind == "reaction" && r.RemoteID != "" {
+			return Response{}, e.New(e.CategoryUsage, "REACTION_NO_REMOTE_ID", "Native reactions have no separate resource ID. Reconcile the target's reaction state with reaction list and omit --remote-id.")
+		}
+		if r.Outcome == "sent" && p.Request.Kind != "reaction" && !apiclient.Identifier(r.RemoteID, 128) {
 			return Response{}, e.New(e.CategoryUsage, "REMOTE_ID_REQUIRED", "A verified remote resource ID is required.")
 		}
 		if r.DryRun {

@@ -187,7 +187,7 @@ func (s *appState) approvalCommands() *cobra.Command {
 		}
 		if verb == "resolve" {
 			c.Flags().StringVar(&r.Outcome, "outcome", "", "Independently verified outcome: sent or not_sent (never retries)")
-			c.Flags().StringVar(&r.RemoteID, "remote-id", "", "Verified resource ID when outcome is sent")
+			c.Flags().StringVar(&r.RemoteID, "remote-id", "", "Verified post/reply ID for sent outcomes; omit for native reactions")
 		}
 		g.AddCommand(c)
 	}

@@ -97,7 +97,9 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time)
 		if m.Recalled {
 			v.Change, v.ChangeBasis = 3, "recall_flag"
 		}
-		observation := state.PollObservation{Key: key, Digest: apiclient.Digest(m), Event: v}
+		fingerprint := m
+		fingerprint.Reactions = nil // Reaction membership is not a post/reply change feed.
+		observation := state.PollObservation{Key: key, Digest: apiclient.Digest(fingerprint), Event: v}
 		if old, exists := observations[key]; exists && old.Digest != observation.Digest {
 			return m, e.New(e.CategoryConflict, "POLL_UNSTABLE", "A resource changed while pagination repeated it. Retry a complete snapshot; no partial snapshot was committed.")
 		}

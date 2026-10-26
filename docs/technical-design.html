@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
 <p>Scope: one new connector repository. No existing CLI or kit behavior is changed.
 The initial deliverable is a bounded broker-backed CLI, not an agent runtime.</p>
 <h2 id="components">Components</h2>
@@ -135,7 +135,20 @@ uncertain state can be approved again. There is no automatic retry. Expiry and
 policy mismatch prevent pending approval without rewriting historical evidence.</p>
 <p>The shared <code>BuildWrite</code> validates the exact JSON body for both previews and
 execution. A proposal binds bot, operator-policy digest, operation, channel,
-post/parent reply, triggering event, exact content and caller idempotency key.
+post/parent reply, triggering event, exact content and caller idempotency key.</p>
+<p>Native reactions share this state machine. <code>reaction propose</code> binds an exact
+post or reply, numeric native type and explicit add/remove action; <code>BuildWrite</code>
+maps it to <code>topic/post_emoji</code> with no text body. <code>allow_reactions</code> is independent
+of text permissions. Mention scope requires a matching callback within 24 hours
+at proposal and approval time; explicit channel scope requires read_all and the
+operator's verified proactive bot access. Poll events cannot supply that authority.</p>
+<p>The provider's successful reaction response has no resource ID. <code>sent</code> means the
+mutation was acknowledged, and remote_id remains absent. For an uncertain
+reaction, the operator inspects <code>reaction list</code> and resolves the immutable
+proposal without --remote-id; the CLI rejects fabricated reaction IDs. Neither
+an automatic retry nor an opposite action is a recovery mechanism. Curated
+emoji_list metadata is available on content reads; membership is excluded from
+poll fingerprints so it does not masquerade as a post/reply change feed.
 The SHA-256 digest is also its ID. The digest detects changes; Unix permissions
 and listener authority authenticate approval. A reused key with differing
 content, target or policy is a conflict.</p>
@@ -273,6 +286,13 @@ servers; they do not read the OS keychain or contact WeCom. The crypto test uses
 the published known-answer vector. Socket tests cover role separation, file
 modes and clean shutdown. Process tests exercise JSON/NDJSON pagination,
 proposal creation, denied agent approval and one-time operator execution.</p>
+<p>Reaction coverage additionally includes native post/reply add/remove wire bodies,
+offline type discovery, acknowledgment without IDs, mention-target/expiry checks,
+explicit proactive scope, read-only and digest gates, terminal replay refusal,
+unknown-write reconciliation and redacted membership reads. The existing shared
+write/output patterns apply across the family; no maintained sibling currently
+exposes this native WeCom operation, so no sibling API or implementation changes
+are needed.</p>
 <p>Before release, repeat with <code>GOWORK=off</code>, run the race detector and cross-build,
 then complete an explicitly authorized live tenant and isolated-worker check.
 Generated docs come from the same Cobra tree and can be checked without Git.</p>

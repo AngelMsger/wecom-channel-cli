@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>API research — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html" aria-current="page">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-api-research">WeCom channel API research</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>API research — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html" aria-current="page">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-api-research">WeCom channel API research</h1>
 <p>Checked on 2026-10-25. The implementation is based on official developer
 documentation and the official CLI source, not guessed endpoints. Private
 credentials and real channel content were not inspected.</p>
@@ -191,9 +191,9 @@ which this version deliberately does not expose.</p>
 <td>Deferred; no automatic expansion</td>
 </tr>
 <tr>
-<td><a href="https://developer.work.weixin.qq.com/document/path/101915">Emoji</a></td>
+<td><a href="https://developer.work.weixin.qq.com/document/path/101915">Mention reactions</a> / <a href="https://developer.work.weixin.qq.com/document/path/101924">proactive reactions</a></td>
 <td><code>topic/post_emoji</code></td>
-<td>Deferred</td>
+<td>Operator-approved native add/remove on posts or replies; bounded reaction reads through content APIs</td>
 </tr>
 </tbody>
 </table>
@@ -202,22 +202,44 @@ where useful: 50 for remote reads, 20 for search results, and 100 for local inbo
 or proposal pages. Agent channel discovery is bound to exactly one channel per context.</p>
 <h2 id="documentation-ambiguities-handled-conservatively">Documentation ambiguities handled conservatively</h2>
 <ul>
-<li>Mention-only content is available within 24 hours. The broker checks the
-triggering event age before context reads and reply approvals.</li>
-<li>Examples use both <code>creator</code> and <code>creator_info</code>, and both <code>aibotid</code> and <code>botid</code>.
+<li>
+<p><code>post_emoji</code> appears in both the mention-response and proactive-content
+documentation, rechecked on 2026-10-26. The 24-hour mention rule is not a global
+prohibition on proactive reactions. The connector defaults to exact mention
+scope and exposes a separate explicit channel scope for operator-verified
+proactive permissions; <code>read_all</code> alone is not that permission.</p>
+</li>
+<li>
+<p>Native reaction success has <code>errcode: 0</code> without a new resource ID. The proposal
+records the target/type/action and an acknowledged status; reconciliation reads
+the bot's membership from the target's <code>emoji_list</code>, never a fabricated ID.</p>
+</li>
+<li>
+<p>Mention-only content is available within 24 hours. The broker checks the
+triggering event age before context reads and reply approvals.</p>
+</li>
+<li>
+<p>Examples use both <code>creator</code> and <code>creator_info</code>, and both <code>aibotid</code> and <code>botid</code>.
 The curated model retains these variants without treating a display name as
-identity or authority.</li>
-<li>Channel time filtering does not clearly specify inclusive/exclusive edges.
+identity or authority.</p>
+</li>
+<li>
+<p>Channel time filtering does not clearly specify inclusive/exclusive edges.
 Post/reply listings apply <code>[from,to)</code> locally as well as sending the bounds;
 this cannot recover records omitted upstream. Search summaries have no times,
 so their time restriction is server-native and cannot be independently checked
 without fetching the complete messages. Do not claim exact history coverage
-from search results.</li>
-<li>The official AES-key example is not canonical Base64. Ordinary key decoding
+from search results.</p>
+</li>
+<li>
+<p>The official AES-key example is not canonical Base64. Ordinary key decoding
 is required for compatibility; ciphertext is strictly decoded. An independent
-known-answer test uses the official encrypted sample.</li>
-<li>No remote idempotency key is documented for sending posts/replies. Local
+known-answer test uses the official encrypted sample.</p>
+</li>
+<li>
+<p>No remote idempotency key is documented for sending posts/replies. Local
 at-most-once attempt tracking prevents automatic replay in one retained
-broker ledger; it does not establish remote exactly-once delivery.</li>
+broker ledger; it does not establish remote exactly-once delivery.</p>
+</li>
 </ul>
 </article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

@@ -1,7 +1,7 @@
 # First release handoff
 
-The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.3**
-(the Skill was revised for polling watches), with GitHub coordinates
+The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.4**
+(the Skill was revised for native reactions), with GitHub coordinates
 `AngelMsger/wecom-channel-cli` and npm package `@angelmsger/wecom-channel-cli`.
 Metadata and workflows are prepared locally. No remote repository, tag, GitHub
 Release, npm version or Pages deployment is created by the preparation commands.
@@ -61,6 +61,7 @@ No sibling repositories were modified.
 | Linux reference isolation | Passed 19 synthetic checks, including own/cross-context sockets, operator access, files, environment, escalation and network denial |
 | Actual production deployment | Operator-specific; not attested by the local/container checks |
 | Live operator-approved reply | Not run; requires a reviewed destination and exact content |
+| Live native emoji add/remove | Not run; wire, permission, membership, restart and CLI-process checks passed against synthetic APIs |
 | Live URL callback delivery | Not run; optional transport, not required for polling deployment |
 | Publication infrastructure | No local origin or release tag; npm package lookup returned 404; the GitHub connection could not resolve the proposed repository (404) |
 

@@ -147,6 +147,10 @@ func (c *HTTPClient) Send(ctx context.Context, r WriteRequest) (SendResult, erro
 	if err != nil {
 		return SendResult{}, err
 	}
+	if r.Kind == "reaction" {
+		// post_emoji acknowledges the operation with errcode=0, without a new ID.
+		return SendResult{Kind: "reaction"}, nil
+	}
 	var v struct {
 		Post  string `json:"post_id"`
 		Reply string `json:"reply_id"`

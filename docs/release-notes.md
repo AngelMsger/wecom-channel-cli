@@ -12,6 +12,8 @@ Initial release candidate for the grayscale WeCom channel APIs.
   comparison, deduplicated changes and bounded request/record budgets. Callbacks
   retain the same watch command and output envelope.
 - Immutable text proposals and independent exact-digest operator approval.
+- Native emoji add/remove proposals for posts and replies, with type discovery,
+  membership reads, independent reaction permission and the same approval boundary.
 - Strict HTTP destinations, authenticated callbacks, replay protection, bounded
   output and secret-free untrusted-data envelopes.
 - Linux/macOS amd64/arm64 binaries, mandatory SHA-256 verification in the npm
@@ -21,7 +23,7 @@ This connector does not sandbox arbitrary agent tools. Separate OS identities
 and a restricted worker environment are required. Authentication and channel
 discovery, whole-channel/thread polling, filtering and resume passed in one test
 tenant. A synthetic Linux container verified distinct-user socket/file access
-controls. Live sending, optional callback delivery and the actual production
+controls. Live text/reaction writes, optional callback delivery and the actual production
 deployment still require operator verification. Polling may coalesce intermediate changes and never infers deletion
-from absence. Media transfer, content mutation beyond text posts/replies,
+from absence. Media transfer, content edits/deletes,
 Windows and channel long connections are outside this release.

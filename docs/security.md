@@ -149,6 +149,13 @@ observations, and no observation grants host or send authority.
 
 ## Review and recovery
 
+Native emoji reactions express a bot action and use the same independent review
+boundary. They are disabled by default. The operator separately enables
+allow_reactions and selects exact-mention or proactive channel scope. Channel
+scope requires read_all plus verified upstream proactive permission; observation
+policy alone grants neither. Removing a reaction also requires a new reviewed
+intent. See [native reactions](reactions.md) for target binding and recovery.
+
 Review proposals in a trusted operator interface with no untrusted-content tool
 execution. Confirm the channel, post, parent reply, full text, content length and
 digest. Human-authored replies require per-item approval. Reject draft text that

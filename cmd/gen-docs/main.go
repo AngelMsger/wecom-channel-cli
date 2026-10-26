@@ -62,6 +62,7 @@ func run() error {
 		{"README.md", "guide.html", "Operator guide"}, {"docs/contexts.md", "contexts.html", "Channel contexts"},
 		{"docs/security.md", "security.html", "Security model"}, {"docs/technical-design.md", "technical-design.html", "Technical design"},
 		{"docs/watching.md", "watching.html", "Watching channels"},
+		{"docs/reactions.md", "reactions.html", "Native reactions"},
 		{"docs/research.md", "research.html", "API research"}, {"docs/releasing.md", "releasing.html", "Release guide"},
 	}
 	renderer := goldmark.New(goldmark.WithExtensions(extension.GFM), goldmark.WithParserOptions(parser.WithAutoHeadingID()))
@@ -103,7 +104,7 @@ func run() error {
 }
 func shell(title, base, current, body string) []byte {
 	var nav strings.Builder
-	for _, p := range [][2]string{{"guide.html", "Operator guide"}, {"contexts.html", "Channel contexts"}, {"watching.html", "Watching channels"}, {"cli/index.html", "Command reference"}, {"security.html", "Security model"}, {"technical-design.html", "Technical design"}, {"research.html", "API research"}, {"releasing.html", "Release guide"}} {
+	for _, p := range [][2]string{{"guide.html", "Operator guide"}, {"contexts.html", "Channel contexts"}, {"watching.html", "Watching channels"}, {"reactions.html", "Native reactions"}, {"cli/index.html", "Command reference"}, {"security.html", "Security model"}, {"technical-design.html", "Technical design"}, {"research.html", "API research"}, {"releasing.html", "Release guide"}} {
 		selected := ""
 		if current == p[0] {
 			selected = ` aria-current="page"`

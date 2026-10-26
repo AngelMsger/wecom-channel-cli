@@ -52,6 +52,12 @@ Writes require a persisted immutable proposal and approval through the operator
 socket bound to its digest. Persist `sending` before the network request; after
 an ambiguous outcome or crash, never replay automatically. Dry-run must use the
 same request builder without token acquisition, state writes or remote requests.
+Native reactions use post_emoji, not a text-send endpoint. Keep allow_reactions
+independent of text permissions and default to exact 24-hour mention scope;
+channel scope requires an explicit operator setting and read_all. Both actions
+need independent approval. Reaction acknowledgments create no resource ID, and
+uncertain resolution must never invent one. Keep emoji membership out of polling
+fingerprints and preserve native localized labels as protocol catalog data.
 
 Read docs/technical-design.md and docs/security.md for the threat model and
 intentional family differences. Update those, the companion Skill, generated CLI

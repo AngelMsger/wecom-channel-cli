@@ -16,12 +16,14 @@ import (
 )
 
 type Channel struct {
-	ObserveAll   bool     `json:"observe_all"`
-	ID           string   `json:"id"`
-	Senders      []string `json:"senders"`
-	ReadAll      bool     `json:"read_all"`
-	AllowPosts   bool     `json:"allow_posts"`
-	AllowReplies bool     `json:"allow_replies"`
+	ObserveAll     bool     `json:"observe_all"`
+	ID             string   `json:"id"`
+	Senders        []string `json:"senders"`
+	ReadAll        bool     `json:"read_all"`
+	AllowPosts     bool     `json:"allow_posts"`
+	AllowReplies   bool     `json:"allow_replies"`
+	AllowReactions bool     `json:"allow_reactions,omitempty"`
+	ReactionScope  string   `json:"reaction_scope,omitempty"`
 }
 
 type Config struct {
@@ -117,6 +119,9 @@ func (c Config) Validate() error {
 		seen[ch.ID] = true
 		if ch.ObserveAll && !ch.ReadAll {
 			return e.New(e.CategoryConfig, "OBSERVATION_SCOPE", "observe_all requires read_all in the same channel context.")
+		}
+		if (ch.ReactionScope != "" && ch.ReactionScope != "mentioned" && ch.ReactionScope != "channel") || (ch.ReactionScope == "channel" && !ch.ReadAll) {
+			return e.New(e.CategoryConfig, "REACTION_SCOPE", "reaction_scope must be mentioned (default) or channel; channel scope also requires read_all.")
 		}
 		for _, s := range ch.Senders {
 			if !apiclient.Identifier(s, 256) || s == "*" {

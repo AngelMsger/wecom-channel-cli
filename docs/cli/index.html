@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="../guide.html">Operator guide</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, approval, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose reviewed replies through an isolated broker</p><pre><code>Usage:
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="../guide.html">Operator guide</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../reactions.html">Native reactions</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, approval, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose messages and native reactions through an isolated broker</p><pre><code>Usage:
   wecom-channel-cli [flags]
   wecom-channel-cli [command]
 
@@ -13,6 +13,7 @@ Available Commands:
   member      Inspect member data through broker policy
   post        Inspect post data through broker policy
   proposal    Inspect immutable proposal status
+  reaction    Inspect or propose native emoji reactions on posts and replies
   reply       Inspect reply data through broker policy
   search      Inspect search data through broker policy
   skill       Inspect or install the embedded companion Skill
@@ -95,7 +96,7 @@ Flags:
       --dry-run            Preview without a state change or remote write
       --id string          Exact proposal ID
       --outcome string     Independently verified outcome: sent or not_sent (never retries)
-      --remote-id string   Verified resource ID when outcome is sent
+      --remote-id string   Verified post/reply ID for sent outcomes; omit for native reactions
       --yes                Confirm this exact operator action; never inferred from channel content
 
 Global Flags:
@@ -509,6 +510,70 @@ Use &#34;wecom-channel-cli proposal [command] --help&#34; for more information a
 
 Flags:
       --id string   Proposal ID returned by post/reply propose
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reaction"><h2>wecom-channel-cli reaction</h2><p>Inspect or propose native emoji reactions on posts and replies</p><pre><code>Usage:
+  wecom-channel-cli reaction [flags]
+  wecom-channel-cli reaction [command]
+
+Available Commands:
+  list        Read native reactions and the bot&#39;s membership on one target
+  propose     Propose adding or removing a native emoji; never sends immediately
+  types       List the 115 documented native emoji types offline
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use &#34;wecom-channel-cli reaction [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-reaction-list"><h2>wecom-channel-cli reaction list</h2><p>Read native reactions and the bot&#39;s membership on one target</p><pre><code>Usage:
+  wecom-channel-cli reaction list [flags]
+
+Flags:
+      --channel string   Channel ID from channel list or an authenticated event
+      --event string     Matching authenticated mention event for a mention-only read
+      --post string      Exact post ID from post list, search result or event get
+      --reply string     Optional reply ID; omit to inspect the post itself
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reaction-propose"><h2>wecom-channel-cli reaction propose</h2><p>Propose adding or removing a native emoji; never sends immediately</p><pre><code>Usage:
+  wecom-channel-cli reaction propose [flags]
+
+Examples:
+  wecom-channel-cli --use-context engineering reaction propose --post POST_ID --emoji-type 1 --action add --key reaction-1 --dry-run
+  wecom-channel-cli --use-context engineering reaction propose --post POST_ID --reply REPLY_ID --emoji-type 3 --action remove --event EVENT_ID --key reaction-2 --dry-run
+
+Flags:
+      --action string    Required: add or remove this bot&#39;s native reaction
+      --channel string   Exact channel ID
+      --dry-run          Preview the exact native action without state changes or remote requests
+      --emoji-type int   Native enum value from reaction types (not a Unicode emoji)
+      --event string     Matching authenticated mention event; required by mentioned scope
+      --key string       Stable idempotency key; use a new key for a separately reviewed action
+      --post string      Exact post ID to react to or containing the target reply
+      --reply string     Optional exact reply ID; omit to react to the post
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-reaction-types"><h2>wecom-channel-cli reaction types</h2><p>List the 115 documented native emoji types offline</p><pre><code>Usage:
+  wecom-channel-cli reaction types [flags]
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval

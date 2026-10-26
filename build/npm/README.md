@@ -2,7 +2,7 @@
 
 An independent channel connector for agents. Named channel contexts, a protected
 credential broker, polling without public ingress, optional authenticated
-callbacks, and exact-draft operator approvals.
+callbacks, native emoji reactions, and exact-intent operator approvals.
 
 After the first release:
 

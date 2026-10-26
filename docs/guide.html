@@ -1,11 +1,11 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
 <blockquote>
 <p><strong>Built for agents. Designed for humans.</strong></p>
 </blockquote>
 <p><img src="image.png" alt="WeCom Channel CLI — watch channels and threads with human-controlled actions"></p>
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
-content, watches changes by polling or encrypted callbacks, and lets an agent propose text posts or
-replies for independent operator approval.</p>
+content, watches changes by polling or encrypted callbacks, and lets an agent
+propose text posts, replies or native emoji reactions for independent operator approval.</p>
 <p><strong>Status: 0.1.0 release candidate, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
@@ -172,6 +172,20 @@ override broker policy, route to the operator interface, or grant approval.</p>
 <code>uncertain</code>; a crash can leave <code>sending</code>. Both block re-execution, as does <code>sent</code>.
 The operator reconciles with WeCom before using <code>approval resolve --outcome sent --remote-id ID</code> or <code>--outcome not_sent</code>, with the same ID/digest and <code>--yes</code>.
 Resolution does not resend. See <a href="technical-design.html#write-state">write recovery</a>.</p>
+<h2 id="native-emoji-reactions">Native emoji reactions</h2>
+<pre><code class="language-sh">wecom-channel-cli reaction types
+wecom-channel-cli --use-context engineering reaction list --post POST_ID
+wecom-channel-cli --use-context engineering reaction propose \
+  --post POST_ID --emoji-type 1 --action add --key acknowledge-1 --dry-run
+</code></pre>
+<p>Reactions call WeCom's native <code>post_emoji</code>; they do not create emoji-text posts
+or comments. Add <code>--reply REPLY_ID</code> for a reply target, or use <code>--action remove</code>
+to cancel the bot's reaction. Proposals require operator approval like other writes.
+The operator must enable <code>allow_reactions</code>; the default <code>mentioned</code> scope requires
+an exact authenticated mention within 24 hours. Explicit <code>reaction_scope: channel</code>
+also requires <code>read_all</code> and proactive bot permission, allowing polling deployments
+without callbacks. See <a href="reactions.html">native reactions</a> for setup, type discovery
+and uncertain-result reconciliation. No separate reaction ID is invented.</p>
 <h2 id="official-cli-compatibility">Official CLI compatibility</h2>
 <p>Research checked 2026-10-25 against official commit
 <a href="https://github.com/WecomTeam/wecom-cli/tree/55785fa0a5c922279533a5b5a836b44b56f65ce7"><code>55785fa</code></a>.
@@ -192,8 +206,9 @@ no callback reconfiguration. See the <a href="research.html#coexistence-with-an-
 <p>Implemented: bounded channel/thread watches, channel/member discovery, post/reply reads, scoped search,
 encrypted URL verification and event intake, exact sender/channel allowlists,
 bounded inbox reads, text/Markdown proposals, independent approvals and durable
-uncertain-write recovery. Tests exercise the CLI process and both socket roles.</p>
-<p>Not implemented: media upload/download, emoji mutations, content edits/deletes,
+uncertain-write recovery, and native reaction add/remove/read operations. Tests
+exercise the CLI process and both socket roles. Live native reactions remain unverified.</p>
+<p>Not implemented: media upload/download, content edits/deletes,
 forwarded chat-record expansion, bot reconfiguration, channel long connections,
 automatic model execution, or a sandbox for an arbitrary agent runtime. Limits
 and rationale are in <a href="technical-design.html">the design</a>. The CLI is not a
@@ -201,6 +216,7 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 <ul>
 <li><a href="contexts.html">Channel contexts</a></li>
 <li><a href="watching.html">Watching channels and threads</a></li>
+<li><a href="reactions.html">Native emoji reactions</a></li>
 <li><a href="releasing.html">Release preparation</a></li>
 <li><a href="index.html">Website candidate</a></li>
 <li><a href="security.html">Security and deployment</a></li>
