@@ -25,3 +25,10 @@ for the synthetic Linux service/worker permission checks (Docker required).
 
 No release is published by the build. Keep changes under `[Unreleased]` until
 the owner chooses a release; do not create tags automatically.
+
+After the initial repository bootstrap, main is protected for administrators too.
+Push subsequent changes to a branch and use a pull request with passing Ubuntu,
+macOS and Linux isolation checks from GitHub Actions. Resolve review conversations
+before merging; force pushes and branch deletion are disabled. Do not disable
+these checks to work around a failing build. Version publication separately needs
+the owner's approval in the release environment.

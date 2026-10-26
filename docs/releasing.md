@@ -65,6 +65,11 @@ No sibling repositories were modified.
 | Live URL callback delivery | Not run; optional transport, not required for polling deployment |
 | Publication infrastructure | Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. No release tag or npm package is published |
 
+Main requires the GitHub Actions checks `test (ubuntu-latest)`,
+`test (macos-latest)` and `isolation`, with an up-to-date branch and resolved review
+conversations. These requirements also apply to administrators; force pushes and
+deletion are disabled. Use a feature branch and pull request for subsequent work.
+
 ## First-release publication prerequisites
 
 1. Review the source changes. Confirm the

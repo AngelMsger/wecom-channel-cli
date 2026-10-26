@@ -83,6 +83,10 @@ Designed for humans." Keep it prominent in the hero and README overview.
 The website is a static GitHub Pages candidate in `docs/`; regenerate narrative
 HTML and command reference with `make docs`. Keep source Markdown canonical.
 Do not deploy, push a tag or publish npm until the owner reviews the candidate.
+The initial GitHub push is complete. Main now requires the Ubuntu/macOS test and
+Linux isolation checks, including for administrators; use a branch and pull request
+for subsequent changes. Do not bypass protection or force-update main to recover
+from failed checks. Release environment approval remains a separate human action.
 
 Run `make lint test e2e build docs-check site-check` and `npm test --prefix build/npm`. Run `make vuln` before release; update a
 vulnerable dependency and regenerate affected docs/artifacts before claiming readiness. Also test with `GOWORK=off` before
