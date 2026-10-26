@@ -95,6 +95,7 @@ func (b *Broker) listReactions(ctx context.Context, r Request, admin bool) (Resp
 		}
 		record := apiclient.Untrusted(map[string]any{"emoji_type": reaction.EmojiType, "user_list": reaction.Users, "bot_reacted": own}, q.Channel, q.Post, r.ID)
 		record.Source.Context = b.Config.Name
+		record.Source.Reply = q.Reply
 		items = append(items, record)
 	}
 	return page(apiclient.Page{Items: items}), nil

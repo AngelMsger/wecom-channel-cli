@@ -29,6 +29,9 @@ is an error, not an empty reaction list. Ambiguous or missing member identities
 fail instead of claiming the bot did not react. The command does not return message
 bodies, download URLs, cookies or raw upstream fields.
 
+The source envelope retains the channel/post IDs and, for a reply target,
+`source.reply_id`, so merged output streams cannot confuse the two target kinds.
+
 Discover targets with `post list`, `reply list`, `search result` or a verified
 event. In mention-only mode, pass the matching `--event EVENT_ID` when reading
 reactions; otherwise agent reads require `read_all`. No actor-selection flag can

@@ -150,8 +150,8 @@ func TestReactionReadAndUncertainReconciliation(t *testing.T) {
 	addMention(t, b)
 	api.message.PostID = ""
 	api.message.ReplyID = "reply-a"
-	_, err = b.Handle(context.Background(), Request{Operation: "reaction.list", ID: "event-a", Query: apiclient.Query{Channel: "channel-a", Post: "post-a", Reply: "reply-a"}}, false)
-	if err != nil || api.reads[len(api.reads)-1].Operation != "reply.get" {
+	out, err = b.Handle(context.Background(), Request{Operation: "reaction.list", ID: "event-a", Query: apiclient.Query{Channel: "channel-a", Post: "post-a", Reply: "reply-a"}}, false)
+	if err != nil || api.reads[len(api.reads)-1].Operation != "reply.get" || out.Page.Items[0].Source.Reply != "reply-a" {
 		t.Fatal(err)
 	}
 	b.Config.Channels[0].ReadAll = true

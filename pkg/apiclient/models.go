@@ -21,6 +21,7 @@ type Source struct {
 	Service string `json:"service"`
 	Channel string `json:"channel_id,omitempty"`
 	Post    string `json:"post_id,omitempty"`
+	Reply   string `json:"reply_id,omitempty"`
 	Event   string `json:"event_id,omitempty"`
 }
 

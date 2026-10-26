@@ -22,6 +22,8 @@ only curated reaction groups. Each untrusted item contains <code>emoji_type</cod
 is an error, not an empty reaction list. Ambiguous or missing member identities
 fail instead of claiming the bot did not react. The command does not return message
 bodies, download URLs, cookies or raw upstream fields.</p>
+<p>The source envelope retains the channel/post IDs and, for a reply target,
+<code>source.reply_id</code>, so merged output streams cannot confuse the two target kinds.</p>
 <p>Discover targets with <code>post list</code>, <code>reply list</code>, <code>search result</code> or a verified
 event. In mention-only mode, pass the matching <code>--event EVENT_ID</code> when reading
 reactions; otherwise agent reads require <code>read_all</code>. No actor-selection flag can
