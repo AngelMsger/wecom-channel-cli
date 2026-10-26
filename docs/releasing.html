@@ -85,7 +85,7 @@ No sibling repositories were modified.</p>
 </tr>
 <tr>
 <td>Publication infrastructure</td>
-<td>The owner created the canonical GitHub repository and origin is configured; Actions/Pages setup is in progress. No release tag or npm package is published</td>
+<td>Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. No release tag or npm package is published</td>
 </tr>
 </tbody>
 </table>
@@ -105,7 +105,8 @@ The worker must also lack access to other authenticated WeCom tools or sessions.
 <li>Push reviewed commits to the approved canonical repository,
 <code>AngelMsger/wecom-channel-cli</code>. The local origin uses HTTPS authentication
 delegated to the existing GitHub CLI login; no credential is stored in the repository.</li>
-<li>Enable Pages with source <strong>GitHub Actions</strong>. The workflow uploads only <code>docs/</code>;
+<li>Pages is configured with source <strong>GitHub Actions</strong>, HTTPS enforcement and the
+<code>github-pages</code> environment restricted to <code>main</code>. The workflow uploads only <code>docs/</code>;
 it checks generated material and local links before deploying. All site assets
 are local; no external font/CDN/runtime service is required.</li>
 <li>Configure the npm package's trusted publisher for the repository and
@@ -115,8 +116,10 @@ Do not assume OIDC creates a new package or account authorization automatically.
 New trusted-publisher configurations must complete their first publication
 within two days; configure this close to the approved release. See the
 <a href="https://docs.npmjs.com/trusted-publishers/">official npm guidance</a>.</li>
-<li>Configure the protected GitHub <strong>release</strong> environment with owner review, and
-review the final changelog and release notes. Create the release tag only after
+<li>The protected GitHub <strong>release</strong> environment requires <code>AngelMsger</code> review and
+permits only <code>v*</code> tags. Self-review remains available for the sole maintainer;
+the workflow never approves its own deployment. Review the final changelog and
+release notes. Create the release tag only after
 that review. The workflow is tag-driven and never tags source itself.</li>
 </ol>
 <pre><code class="language-sh">python3 scripts/release-check.py --publish

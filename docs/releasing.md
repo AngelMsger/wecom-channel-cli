@@ -63,7 +63,7 @@ No sibling repositories were modified.
 | Live operator-approved reply | Not run; requires a reviewed destination and exact content |
 | Live native emoji add/remove | Not run; wire, permission, membership, restart and CLI-process checks passed against synthetic APIs |
 | Live URL callback delivery | Not run; optional transport, not required for polling deployment |
-| Publication infrastructure | The owner created the canonical GitHub repository and origin is configured; Actions/Pages setup is in progress. No release tag or npm package is published |
+| Publication infrastructure | Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. No release tag or npm package is published |
 
 ## First-release publication prerequisites
 
@@ -81,7 +81,8 @@ No sibling repositories were modified.
 3. Push reviewed commits to the approved canonical repository,
    `AngelMsger/wecom-channel-cli`. The local origin uses HTTPS authentication
    delegated to the existing GitHub CLI login; no credential is stored in the repository.
-4. Enable Pages with source **GitHub Actions**. The workflow uploads only `docs/`;
+4. Pages is configured with source **GitHub Actions**, HTTPS enforcement and the
+   `github-pages` environment restricted to `main`. The workflow uploads only `docs/`;
    it checks generated material and local links before deploying. All site assets
    are local; no external font/CDN/runtime service is required.
 5. Configure the npm package's trusted publisher for the repository and
@@ -91,8 +92,10 @@ No sibling repositories were modified.
    New trusted-publisher configurations must complete their first publication
    within two days; configure this close to the approved release. See the
    [official npm guidance](https://docs.npmjs.com/trusted-publishers/).
-6. Configure the protected GitHub **release** environment with owner review, and
-   review the final changelog and release notes. Create the release tag only after
+6. The protected GitHub **release** environment requires `AngelMsger` review and
+   permits only `v*` tags. Self-review remains available for the sole maintainer;
+   the workflow never approves its own deployment. Review the final changelog and
+   release notes. Create the release tag only after
    that review. The workflow is tag-driven and never tags source itself.
 
 ```sh
