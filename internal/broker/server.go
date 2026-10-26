@@ -173,6 +173,10 @@ func (b *Broker) callbackRouter(routes map[string]*Broker) http.Handler {
 			w.WriteHeader(200)
 			return
 		}
+		if target.Config.EffectiveWatchBackend() == "poll" && v.ObservationOnly {
+			w.WriteHeader(200)
+			return // One observation backend prevents duplicate callback/poll changes.
+		}
 		if err = target.Store.AddEvent(v, target.Now(), time.Duration(target.Config.RetentionHours)*time.Hour, target.Config.MaxEvents); err != nil {
 			w.WriteHeader(503)
 			return

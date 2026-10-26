@@ -41,6 +41,7 @@ type Snapshot struct {
 	Bot               string                    `json:"bot_id"`
 	Events            map[string]callback.Event `json:"events"`
 	Proposals         map[string]Proposal       `json:"proposals"`
+	Polling           *PollState                `json:"polling,omitempty"`
 }
 
 type Store struct {
@@ -110,6 +111,24 @@ func Open(dir, bot string, scope ...string) (*Store, error) {
 	if s.snapshot.Scope != bound {
 		s.Close()
 		return nil, e.New(e.CategoryConflict, "STATE_SCOPE", "This ledger belongs to a different security context. Preserve it and select the correct directory.")
+	}
+	if p := s.snapshot.Polling; p != nil {
+		if len(p.Policy) != 64 || p.Scopes == nil || p.Resources == nil || len(p.Scopes) > 32 || len(p.Resources) > 100000 {
+			s.Close()
+			return nil, failure()
+		}
+		for key, scope := range p.Scopes {
+			if len(key) != 64 || scope.LastSuccess <= 0 || scope.Whole == (len(scope.Posts) > 0) || len(scope.Posts) > 32 {
+				s.Close()
+				return nil, failure()
+			}
+		}
+		for key, resource := range p.Resources {
+			if len(key) != 64 || len(resource.Digest) != 64 {
+				s.Close()
+				return nil, failure()
+			}
+		}
 	}
 	if err := s.ensureID(); err != nil {
 		s.Close()

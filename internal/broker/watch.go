@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"slices"
 	"sort"
 
@@ -9,6 +10,7 @@ import (
 )
 
 type ScanRequest struct {
+	Preview      bool     `json:"-"`
 	WholeChannel bool     `json:"whole_channel"`
 	Posts        []string `json:"posts,omitempty"`
 	AllowPartial bool     `json:"allow_partial,omitempty"`
@@ -24,11 +26,15 @@ type WatchIdentity struct {
 	Ledger  string `json:"ledger_id"`
 }
 type WatchCoverage struct {
-	Actors           string   `json:"actors"`
-	Kinds            []string `json:"event_kinds"`
-	RetentionHours   int      `json:"retention_hours"`
-	UpstreamVerified bool     `json:"upstream_delivery_verified"`
-	Note             string   `json:"note"`
+	Backend             string   `json:"backend"`
+	PollIntervalSeconds int      `json:"poll_interval_seconds,omitempty"`
+	PollMaxRequests     int      `json:"poll_max_requests,omitempty"`
+	PollMaxRecords      int      `json:"poll_max_records,omitempty"`
+	Actors              string   `json:"actors"`
+	Kinds               []string `json:"event_kinds"`
+	RetentionHours      int      `json:"retention_hours"`
+	UpstreamVerified    bool     `json:"upstream_delivery_verified"`
+	Note                string   `json:"note"`
 }
 type ScanPage struct {
 	Items         []apiclient.Record `json:"items"`
@@ -55,7 +61,7 @@ func NormalizeScan(r ScanRequest) (ScanRequest, error) {
 	return r, nil
 }
 
-func (b *Broker) scan(raw ScanRequest) (ScanPage, error) {
+func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 	r, err := NormalizeScan(raw)
 	if err != nil {
 		return ScanPage{}, err
@@ -64,11 +70,15 @@ func (b *Broker) scan(raw ScanRequest) (ScanPage, error) {
 		return ScanPage{}, denied()
 	}
 	ch := b.Config.Channels[0]
-	if b.Config.CallbackListen == "" || b.Verifier == nil {
+	backend := b.Config.EffectiveWatchBackend()
+	if backend == "callback" && (b.Config.CallbackListen == "" || b.Verifier == nil) {
 		return ScanPage{}, e.New(e.CategoryConfig, "WATCH_INGRESS_DISABLED", "Configure authenticated callback intake before watching live channel changes.")
 	}
 	if !ch.ReadAll {
 		return ScanPage{}, e.New(e.CategoryPermission, "WATCH_READ_SCOPE", "Watching changes requires read_all in the operator's channel policy.")
+	}
+	if backend == "poll" && !ch.ObserveAll {
+		return ScanPage{}, e.New(e.CategoryPermission, "POLL_OBSERVATION_SCOPE", "Polling requires read_all and observe_all; snapshots do not identify the actor who edited or recalled content. --allow-partial cannot bypass this requirement.")
 	}
 	for _, kind := range []string{"topic_event", "topic_reply_event"} {
 		if !slices.Contains(b.Config.Events, kind) {
@@ -90,11 +100,25 @@ func (b *Broker) scan(raw ScanRequest) (ScanPage, error) {
 	if r.Binding != "" && r.Binding != binding {
 		return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
 	}
+	if r.After > high {
+		return ScanPage{}, e.New(e.CategoryConflict, "SEQUENCE_AHEAD", "The checkpoint is ahead of this inbox.")
+	}
+	if backend == "poll" && !r.Preview && (r.FromNow || r.After == high) {
+		if err := b.poll(ctx, r); err != nil {
+			return ScanPage{}, err
+		}
+		_, high, events = b.Store.Inbox()
+	}
 	actors := "all_users_and_bots"
 	if !ch.ObserveAll {
 		actors = "allowlisted_humans"
 	}
-	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: WatchCoverage{actors, []string{"topic_event", "topic_reply_event"}, b.Config.RetentionHours, false, "Configured callback coverage, not proof of complete WeCom delivery. Events are observation-only; content requires an explicit read."}}
+	coverage := WatchCoverage{Backend: backend, Actors: actors, Kinds: []string{"topic_event", "topic_reply_event"}, RetentionHours: b.Config.RetentionHours, Note: "Configured callback coverage, not proof of complete WeCom delivery. Events are observation-only; content requires an explicit read."}
+	if backend == "poll" {
+		coverage.PollIntervalSeconds, coverage.PollMaxRequests, coverage.PollMaxRecords = b.Config.PollIntervalSeconds, b.Config.PollMaxRequests, b.Config.PollMaxRecords
+		coverage.Note = "Snapshot observations, not a complete event history: first snapshot is a baseline; edits may coalesce; absence is not deletion; recall requires a returned flag; change actors are unknown. Content is read for comparison but only fingerprints and event metadata persist. Polling runs only while a watch requests scans."
+	}
+	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: coverage}
 	if r.FromNow {
 		p.After = high
 		return p, nil
@@ -116,6 +140,9 @@ func (b *Broker) scan(raw ScanRequest) (ScanPage, error) {
 		p.After = v.Sequence
 		if (v.Kind == "topic_event" || v.Kind == "topic_reply_event") && (r.WholeChannel || slices.Contains(r.Posts, v.Post)) {
 			v.ObservationOnly = true
+			if v.Transport == "" {
+				v.Transport = "callback"
+			}
 			record := apiclient.Untrusted(v, v.Channel, v.Post, v.ID)
 			record.Source.Context = b.Config.Name
 			p.Items = append(p.Items, record)

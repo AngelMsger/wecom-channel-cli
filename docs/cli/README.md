@@ -18,7 +18,7 @@ Available Commands:
   channel     Inspect channel data through broker policy
   config      Inspect operator policy offline
   doctor      Check broker connectivity and read-only policy
-  event       Read or watch authenticated channel events
+  event       Read or watch channel observations and authenticated callback events
   member      Inspect member data through broker policy
   post        Inspect post data through broker policy
   proposal    Inspect immutable proposal status
@@ -507,7 +507,7 @@ Global Flags:
 
 ## wecom-channel-cli event
 
-Read or watch authenticated channel events
+Read or watch channel observations and authenticated callback events
 
 ```text
 Usage:
@@ -611,7 +611,7 @@ Flags:
       --checkpoint string    Optional private resume file in an existing agent-owned directory
       --dry-run              Inspect scope and coverage without streaming or saving a checkpoint
       --duration duration    Maximum total watch duration, up to 24h (default 5m0s)
-      --interval duration    Delay between bounded inbox requests, 1s–1m (default 2s)
+      --interval duration    Minimum delay between scans, 1s–1m; broker polling policy may increase it (default 2s)
       --max-events int       Stop after this many matching emitted events (default 1000)
       --post stringArray     Watch this post and its replies; repeat for up to 32 post IDs
       --whole-channel        Watch post/reply changes throughout this channel context

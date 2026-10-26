@@ -8,6 +8,7 @@ The initial deliverable is a bounded broker-backed CLI, not an agent runtime.
 ```mermaid
 flowchart LR
   W[WeCom] -->|Signed encrypted callback| B[Credential-holding broker]
+  B -->|Bounded HTTPS polling reads| W
   B -->|Fixed HTTPS APIs| W
   A[Sandboxed agent] -->|Agent Unix socket| B
   O[Trusted operator] -->|Private operator socket| B
@@ -115,8 +116,38 @@ processing failures require consumer-owned acknowledgments. See [watching](watch
 
 The checkpoint is local consumer state; broker read-only mode still permits
 observation. The CLI's local read-only posture gates checkpoint writes, and
-dry-run reads coverage without creating a checkpoint or lock. No watch sends
-messages, retrieves content or launches tools automatically.
+dry-run reads coverage without remote reads, state changes, a checkpoint or lock.
+No watch sends messages or launches tools. Polling reads message content inside
+the broker for comparison; it persists fingerprints and emits metadata only.
+
+### Polling and callback adapters
+
+The operator selects `auto`, `poll` or `callback`. Auto preserves callback intake
+when configured and otherwise selects polling. `event.scan` accepts the same
+scope and returns the same inbox contract for either backend. The client honors
+the polling interval reported by the broker; its own interval cannot shorten it.
+Backend/policy changes invalidate the existing scope-bound checkpoint.
+
+`internal/broker/poll.go` serializes refreshes per context, rate-limits remote
+reads and caches scope attempts for the minimum interval. It reads complete,
+bounded post/reply snapshots using the existing `apiclient.Client.Read` path.
+Whole-channel scopes discover all posts; selected scopes read only their exact
+posts. Creation-time pagination cannot serve as a change cursor, so old posts
+and replies are revisited. The request and record budgets fail explicitly when
+the snapshot is too large. Retained inbox pages can drain without remote I/O.
+
+`internal/state/poll.go` atomically commits scope baselines, resource fingerprints
+and derived events in the existing ledger transaction. Overlapping scopes share
+fingerprints, including when a new scope observes a resource for an already
+initialized scope. Initial snapshots suppress historical records; failed pages,
+cursor cycles, capacity errors and cancellation commit nothing. A failed disk
+fsync after rename retains the committed in-memory state, as for existing events.
+
+Polling records are observation-only and never become mention authorization.
+They identify their transport and inference basis; their change actor is unknown.
+A returned recall flag is evidence, but absence is not. Intermediate changes,
+reactions and membership events are not reconstructed. No background job runs
+without an active watch. See [watching](watching.md) for coverage and limits.
 
 ## Write state
 
@@ -189,6 +220,15 @@ WeCom Calendar's local `meta` write gate was checked separately.
 | Prometheus CLI | Kit pagination and guarded admin writes | Metric/admin domain. No changes |
 | WeCom Calendar CLI | Kit baseline plus domain-specific private local store | CalDAV identity and calendar-only reads remain separate. No changes |
 | Agent CLI Kit | Reuse published v0.5.0 config, errors, output, transport, flags and Skill metadata | No business-product code or new shared abstraction added |
+
+For polling, Jenkins `internal/app/build_log.go` and OpenObserve
+`internal/app/search.go` provide the cancellable streaming reference. WeCom
+Calendar `internal/sync/sync.go` provides the comparison-before-watermark lesson,
+but its server ETags do not exist in the channel API. Confluence page watching
+changes a remote subscription and is intentionally different. Bitbucket activity,
+Jira worklog history and Prometheus queries remain bounded reads, not a channel
+snapshot ledger. Their shared output/transport/time-bound contracts apply; this
+product-specific polling implementation requires no sibling changes.
 
 The new broker deliberately strengthens authorization beyond a CLI-local
 `--allow-writes`: a separate operator must approve every send. These safeguards

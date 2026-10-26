@@ -103,7 +103,21 @@ the bot, or rerun <code>auth init</code> as a recovery shortcut. Use a separate 
 wait for a supported delegation mechanism. Coordinate any callback setup with
 the existing receiver; this connector does not automatically install callback
 fan-out or take over an active connection. A read-only HTTP check does not test
-<code>event watch</code>, which consumes verified callbacks rather than polling remote posts.</p>
+<code>event watch</code>; the latter needs a complete polling baseline and later changes,
+or verified callback delivery, depending on operator policy.</p>
+<h3 id="polling-feasibility">Polling feasibility</h3>
+<p>The <a href="https://developer.work.weixin.qq.com/document/path/101922">all-content API</a>
+was rechecked on 2026-10-26 (displayed update: 2026-10-19). It exposes paginated
+posts per channel and replies per post, plus exact-ID reads. Page size is at most
+50. Ordering is by creation time; there is no documented channel-wide change
+cursor or modification-time feed. Replies therefore require visiting the posts,
+including old posts, to find recent replies.</p>
+<p><code>is_modified</code>, <code>modify_time</code> and <code>is_recalled</code>, together with curated content,
+permit snapshot comparison. Creator identity does not establish the actor who
+performed a later edit. Missing records and intermediate changes cannot be
+reconstructed as authoritative deletion/change events. The connector exposes
+these observations through the same watch interface, with explicit provenance,
+bounded full snapshots, persistent deduplication and no callback requirement.</p>
 <h2 id="connection-mode-and-access">Connection mode and access</h2>
 <p>The <a href="https://developer.work.weixin.qq.com/document/path/101906">overview</a>
 describes channel rollout from version 5.0.12 and still marks channel long

@@ -99,7 +99,7 @@ func TestCLIProcessWatch(t *testing.T) {
 		bounded, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		cmd := exec.CommandContext(bounded, binary, args...)
-		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_SKILL_LOADED=0.1.2"}
+		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_SKILL_LOADED=0.1.3"}
 		var out, stderr bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Stderr = &stderr
@@ -151,7 +151,7 @@ func TestCLIProcessWatch(t *testing.T) {
 	bounded, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	process := exec.CommandContext(bounded, binary, "event", "watch", "--whole-channel", "--duration", "1m")
-	process.Env = []string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_SKILL_LOADED=0.1.2"}
+	process.Env = []string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_SKILL_LOADED=0.1.3"}
 	pipe, err := process.StderrPipe()
 	if err != nil {
 		t.Fatal(err)

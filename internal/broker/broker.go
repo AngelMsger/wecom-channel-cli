@@ -38,14 +38,16 @@ type Response struct {
 }
 
 type Broker struct {
-	Config     config.Config
-	Store      *state.Store
-	API        apiclient.Client
-	Verifier   *callback.Verifier
-	Now        func() time.Time
-	approvalMu sync.Mutex
-	rateMu     sync.Mutex
-	rate       map[string]rateWindow
+	Config       config.Config
+	Store        *state.Store
+	API          apiclient.Client
+	Verifier     *callback.Verifier
+	Now          func() time.Time
+	approvalMu   sync.Mutex
+	rateMu       sync.Mutex
+	rate         map[string]rateWindow
+	pollGate     chan struct{}
+	pollAttempts map[string]pollAttempt
 }
 type rateWindow struct {
 	Start time.Time
@@ -56,7 +58,7 @@ func New(cfg config.Config, st *state.Store, api apiclient.Client, v *callback.V
 	if cfg.ReadOnly {
 		api = apiclient.NewReadOnly(api)
 	}
-	return &Broker{Config: cfg, Store: st, API: api, Verifier: v, Now: time.Now, rate: map[string]rateWindow{}}
+	return &Broker{Config: cfg, Store: st, API: api, Verifier: v, Now: time.Now, rate: map[string]rateWindow{}, pollGate: make(chan struct{}, 1), pollAttempts: map[string]pollAttempt{}}
 }
 
 func denied() error {
@@ -96,6 +98,10 @@ func (b *Broker) event(id string) (callback.Event, error) {
 }
 
 func (b *Broker) visibleEvent(v callback.Event) bool {
+	if v.Transport == "poll" {
+		ch, ok := b.Config.Channel(v.Channel)
+		return ok && ch.ReadAll && ch.ObserveAll && v.ObservationOnly && (v.Kind == "topic_event" || v.Kind == "topic_reply_event") && v.Received >= b.Now().Add(-time.Duration(b.Config.RetentionHours)*time.Hour).Unix() && b.Config.AllowsEvent(v.Channel, "", v.Kind, "user")
+	}
 	return v.Received >= b.Now().Add(-time.Duration(b.Config.RetentionHours)*time.Hour).Unix() && b.Config.AllowsEvent(v.Channel, v.Sender, v.Kind, v.SenderKind)
 }
 
@@ -121,7 +127,9 @@ func (b *Broker) Handle(ctx context.Context, r Request, admin bool) (Response, e
 		if r.Scan == nil {
 			return Response{}, e.New(e.CategoryUsage, "WATCH_SCOPE", "A watch scope is required.")
 		}
-		p, err := b.scan(*r.Scan)
+		scan := *r.Scan
+		scan.Preview = r.DryRun
+		p, err := b.scan(ctx, scan)
 		return Response{Scan: &p}, err
 	case "event.list":
 		if q.AfterSequence < 0 {

@@ -111,7 +111,7 @@ func window(since, from, to, cursor string, now time.Time) (int64, int64, error)
 }
 
 func (s *appState) eventCommands() *cobra.Command {
-	group := &cobra.Command{Use: "event", Short: "Read or watch authenticated channel events"}
+	group := &cobra.Command{Use: "event", Short: "Read or watch channel observations and authenticated callback events"}
 	group.AddCommand(s.watchCommand())
 	for _, verb := range []string{"list", "get", "context"} {
 		r := broker.Request{Operation: "event." + verb}

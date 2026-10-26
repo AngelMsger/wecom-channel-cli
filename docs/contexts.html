@@ -44,7 +44,9 @@ Using an accessible socket from another context does not make that mismatch vali
 <h2 id="one-bot-multiple-channel-boundaries">One bot, multiple channel boundaries</h2>
 <p>Use <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/contexts.example.json">the version 2 deployment example</a>.
 One broker process holds the bot credentials and cached access token. A single
-verified callback endpoint routes by the authenticated channel ID. Each context
+optional verified callback endpoint routes by the authenticated channel ID.
+Leave <code>callback_listen</code> empty for polling-only deployments; each context refreshes
+only its own channel through the shared token cache. Each context
 has exactly one channel and distinct socket directories and durable state.</p>
 <pre><code class="language-json">{
   &quot;version&quot;: 2,
@@ -94,7 +96,9 @@ for the complete worker and filesystem requirements.</p>
 <h2 id="watching-within-a-context">Watching within a context</h2>
 <p><code>event watch --whole-channel</code> or repeated <code>--post</code> IDs stays bound to the selected
 channel. Enable read_all, post/reply event kinds, and observe_all for all-actor
-coverage. Observation does not expand request eligibility. Checkpoints cannot
+observation. With no callback listener, auto uses bounded HTTP polling; no public
+address is needed. Polling has no verified change actor and cannot synthesize
+mentions. Observation does not expand request eligibility. Checkpoints cannot
 be shared across contexts, policies, filters or reset ledgers. See <a href="watching.html">watching</a>.</p>
 <h2 id="agent-and-operator-workflows">Agent and operator workflows</h2>
 <p>The agent proposes a draft within its selected context. The trusted operator

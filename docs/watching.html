@@ -1,32 +1,50 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Watching channels — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html" aria-current="page">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="watching-channels-and-threads">Watching channels and threads</h1>
-<p><code>event watch</code> streams authenticated <strong>post/reply change events</strong> as NDJSON.
+<p><code>event watch</code> streams <strong>post/reply observations</strong> as NDJSON through one interface.
 Choose a whole channel context or one or more post IDs (a post and its replies
-form a thread). Watches never execute message instructions, launch an agent,
-fetch message bodies automatically, or approve a write.</p>
+form a thread). Without a callback listener, the default <code>auto</code> backend polls the
+channel HTTP APIs: no public address, tunnel or callback keys are needed. Existing
+callback deployments retain their event intake. Watches never execute message
+instructions, launch an agent or approve a write.</p>
 <h2 id="operator-prerequisites">Operator prerequisites</h2>
-<p>The broker must have working URL callback intake and a channel context with:</p>
+<p>For polling, supply the bot Secret to the broker and use a channel context with:</p>
 <pre><code class="language-json">{
+  &quot;watch_backend&quot;: &quot;auto&quot;,
+  &quot;poll_interval_seconds&quot;: 30,
+  &quot;poll_max_requests&quot;: 100,
+  &quot;poll_max_records&quot;: 5000,
   &quot;events&quot;: [&quot;topic_event&quot;, &quot;topic_reply_event&quot;, &quot;topic_at_bot&quot;],
   &quot;channels&quot;: [{
     &quot;id&quot;: &quot;CHANNEL_ID&quot;,
     &quot;read_all&quot;: true,
     &quot;observe_all&quot;: true,
-    &quot;senders&quot;: [&quot;AUTHORIZED_REQUESTER_ID&quot;],
+    &quot;senders&quot;: [],
     &quot;allow_posts&quot;: false,
     &quot;allow_replies&quot;: false
   }]
 }
 </code></pre>
 <p>This is a fragment of operator policy, not a client command. A complete example
-is in <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/watch.example.json">watch.example.json</a>. Restart the broker after
-an authorized policy change. WeCom must also permit the bot to receive these
-channel events; local configuration cannot grant upstream grayscale access.</p>
-<p><code>observe_all</code> admits post/reply changes from <strong>all authenticated human and bot
-actors</strong> in this channel. These records carry <code>observation_only: true</code> and remain
+is in <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/watch.example.json">watch.example.json</a>; its <code>callback_listen</code>
+is empty. Restart after an authorized policy change. WeCom must permit the bot to
+read all content in this channel; local policy cannot grant upstream access.</p>
+<p><code>watch_backend</code> is operator-controlled: <code>auto</code> chooses polling without a callback
+listener and callbacks when one is configured. <code>poll</code> forces polling; <code>callback</code>
+requires working authenticated callback intake. There is no silent fallback after
+an error, and a backend/policy change invalidates existing checkpoints. When
+polling is selected, incoming post/reply callbacks are acknowledged without adding
+duplicate observations; configured mention callbacks remain independent.</p>
+<p>Polling requires both <code>read_all</code> and <code>observe_all</code>. Snapshot APIs identify a
+resource's creator, not necessarily the person who edited or recalled it. Poll
+observations therefore use <code>sender_kind: unknown</code>; they cannot be filtered or
+authorized as if the creator performed the change. <code>--allow-partial</code> does not
+bypass this requirement.</p>
+<p>In callback mode, <code>observe_all</code> admits post/reply changes from <strong>all authenticated
+human and bot actors</strong> in this channel. All observation records carry
+<code>observation_only: true</code> and remain
 untrusted. It does not expand mention/request eligibility: <code>topic_at_bot</code> still
 requires an allowlisted human, and every send still requires independent operator
 approval. Bot-authored observations are never automatic action triggers.</p>
-<p>Without <code>observe_all</code>, the watch refuses to imply complete coverage. A caller can
+<p>In callback mode, without <code>observe_all</code>, the watch refuses to imply complete coverage. A caller can
 explicitly pass <code>--allow-partial</code> to watch only admitted allowlisted-human events.
 The startup notice reports that restriction. Thread filters narrow results inside
 an authorized channel; they do not establish a separate security boundary.</p>
@@ -45,7 +63,9 @@ post IDs are accepted. New watches start at the current inbox head, so existing
 records are not replayed by default. Use <code>--after-sequence N</code> to replay retained
 records after an explicitly known checkpoint. Sequence zero requests retained
 history starting at the beginning; it fails if that history has already expired.</p>
-<p>Defaults are five minutes, 1000 emitted events, and a two-second poll interval.
+<p>Defaults are five minutes, 1000 emitted events, and a two-second local scan interval.
+For remote polling, the broker's minimum refresh interval (30 seconds by default)
+takes precedence when longer.
 The maximum duration is 24 hours; <code>--interval</code> accepts 1s–1m. <code>--timeout</code> bounds
 an individual request, not the watch's lifetime. The watch ends on duration,
 event limit, Ctrl-C, or SIGTERM. Network, policy, rate-limit and history-gap errors
@@ -108,7 +128,7 @@ fail on detectable local gaps rather than claiming complete history.</p>
 </tr>
 <tr>
 <td><code>data.change</code></td>
-<td><code>1</code> created, <code>2</code> updated, <code>3</code> deleted</td>
+<td>Normalized change code; see the transport-specific meanings below</td>
 </tr>
 <tr>
 <td><code>data.post_id</code>, <code>data.reply_id</code></td>
@@ -131,6 +151,88 @@ fail on detectable local gaps rather than claiming complete history.</p>
 <p>Events carry post/reply IDs. Use
 <code>post get</code> or <code>reply get</code> for the latest content under the same context. Deleted
 content may no longer be available. No attachment URLs or credentials are exposed.
-This version polls the local verified inbox; it does not introduce channel
-WebSockets or configure WeCom subscriptions automatically.</p>
+This version consumes the local durable inbox; it does not introduce channel
+WebSockets or configure WeCom subscriptions automatically. With the polling
+backend, scans first refresh a bounded remote snapshot when due, then consume
+the same durable inbox.</p>
+<h2 id="polling-behavior-and-limits">Polling behavior and limits</h2>
+<p>The first successful snapshot of a new scope establishes a quiet baseline.
+Later snapshots compare curated content, modification times and recall flags.
+Only fingerprints, resource IDs and derived event metadata persist; polled message
+bodies are neither stored in the polling index nor emitted by the watch. The
+broker still reads those bodies to detect changes. Media URLs and credentials
+remain excluded by the HTTP client's existing projection.</p>
+<p>Whole-channel polling enumerates posts and then each non-recalled post's replies.
+Selected-thread polling reads only the selected posts and their replies. Creation
+time is not a modification cursor: each cycle revisits the visible snapshot,
+using a fixed creation-time window from Unix second 1 to that cycle's start plus
+one second. This includes replies and edits on old posts. All pages must complete
+within the scan timeout and configured request/record budgets; exhaustion or a
+failed page stops the watch without committing a partial baseline. Large channels
+may require selected threads, a longer <code>--timeout</code>, or an operator-reviewed budget.</p>
+<p>The broker defaults to a 30-second minimum interval per scope, configurable from
+5 to 3600 seconds. <code>--interval</code> cannot shorten it. Concurrent watches of the same
+scope share one refresh; overlapping scopes share resource fingerprints and
+deduplicate changes. The per-context <code>requests_per_minute</code> also bounds remote
+reads across scopes. Failures stop the consumer; retrying the same scope before
+the minimum interval returns its cached failure rather than another remote attempt.</p>
+<p>At most 32 distinct polling scopes and <code>poll_max_records</code> indexed resources are
+retained per context/policy. The defaults permit 100 data requests per snapshot
+and 5000 indexed records, with operator limits up to 1000 and 100000 respectively.
+Capacity exhaustion fails explicitly; the index never silently evicts fingerprints.
+An operator policy change establishes a new polling baseline without erasing the
+event or write ledger. Saved consumer checkpoints must be reviewed separately.</p>
+<p>Polling runs only when an active watch asks for a scan. No background poller keeps
+running after the watch ends. Restarting resumes fingerprints and retained events,
+but changes between snapshots or while nobody watches can coalesce or disappear.
+Draining an existing inbox does not depend on remote availability.</p>
+<p>The event envelope and IDs stay consistent across backends. Inspect these fields
+when a consumer needs to distinguish the evidence:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Callback</th>
+<th>Polling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data.transport</code></td>
+<td><code>callback</code></td>
+<td><code>poll</code></td>
+</tr>
+<tr>
+<td><code>data.change</code></td>
+<td>Provider event: 1 created, 2 updated, 3 deleted</td>
+<td>1 first observed after baseline, 2 changed snapshot, 3 returned recall flag</td>
+</tr>
+<tr>
+<td><code>data.change_basis</code></td>
+<td>Omitted</td>
+<td><code>first_seen</code>, <code>snapshot_changed</code>, or <code>recall_flag</code></td>
+</tr>
+<tr>
+<td><code>data.created_at</code></td>
+<td>Provider event time</td>
+<td>Local observation time</td>
+</tr>
+<tr>
+<td><code>data.resource_created_at</code>, <code>data.resource_modified_at</code></td>
+<td>Omitted</td>
+<td>Resource timestamps from the HTTP response</td>
+</tr>
+<tr>
+<td><code>data.sender_kind</code></td>
+<td>Authenticated event actor</td>
+<td><code>unknown</code>; never substitute the resource creator</td>
+</tr>
+</tbody>
+</table>
+<p>Absence from a response is not proof of deletion. Only an explicit returned
+<code>is_recalled</code> flag yields change 3. Multiple intermediate edits, briefly visible
+posts/replies, reactions and membership changes cannot be reconstructed by this
+poller. Polling never synthesizes <code>topic_at_bot</code> or grants mention-only reply
+authority. <code>coverage.backend</code> and its note explain these limits at startup;
+<code>upstream_delivery_verified</code> remains false for both transports.</p>
 </article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

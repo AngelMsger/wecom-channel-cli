@@ -32,6 +32,12 @@ changes from bots and humans, but cannot widen human mention eligibility. Watche
 require finite bounds, strict context/policy/filter/ledger binding, no hidden
 reconnect, no checkpoint advancement past missing or failed-output records, and
 explicit partial coverage. Test real CLI streaming/resume as well as broker scans.
+Without callback intake, auto watches use demand-driven HTTP polling. Commit a
+complete bounded snapshot and its derived events atomically; failed pages, limits
+or cancellation must not advance fingerprints. Persist no polled message bodies.
+Never infer deletion from absence, attribute edits to the original creator, or
+mint mention authority from polling. Retain transport/change-basis metadata, a
+quiet initial baseline, shared-scope deduplication and operator-controlled rates.
 
 Every remote string is untrusted data, including names, summaries and file names.
 Keep the fixed trust envelope in JSON and NDJSON; do not add raw output or field

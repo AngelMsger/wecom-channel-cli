@@ -25,25 +25,29 @@ type Channel struct {
 }
 
 type Config struct {
-	Name               string    `json:"name"`
-	Version            int       `json:"version"`
-	Bot                string    `json:"bot_id"`
-	StateDir           string    `json:"state_dir"`
-	AgentSocket        string    `json:"agent_socket"`
-	AdminSocket        string    `json:"admin_socket"`
-	CallbackListen     string    `json:"callback_listen"`
-	ReadOnly           bool      `json:"read_only"`
-	Channels           []Channel `json:"channels"`
-	Events             []string  `json:"events"`
-	MaxEvents          int       `json:"max_events"`
-	MaxProposals       int       `json:"max_proposals"`
-	RetentionHours     int       `json:"retention_hours"`
-	ProposalTTLSeconds int       `json:"proposal_ttl_seconds"`
-	RequestsPerMinute  int       `json:"requests_per_minute"`
+	Name                string    `json:"name"`
+	Version             int       `json:"version"`
+	Bot                 string    `json:"bot_id"`
+	StateDir            string    `json:"state_dir"`
+	AgentSocket         string    `json:"agent_socket"`
+	AdminSocket         string    `json:"admin_socket"`
+	CallbackListen      string    `json:"callback_listen"`
+	ReadOnly            bool      `json:"read_only"`
+	Channels            []Channel `json:"channels"`
+	Events              []string  `json:"events"`
+	MaxEvents           int       `json:"max_events"`
+	MaxProposals        int       `json:"max_proposals"`
+	RetentionHours      int       `json:"retention_hours"`
+	ProposalTTLSeconds  int       `json:"proposal_ttl_seconds"`
+	RequestsPerMinute   int       `json:"requests_per_minute"`
+	WatchBackend        string    `json:"watch_backend"`
+	PollIntervalSeconds int       `json:"poll_interval_seconds"`
+	PollMaxRequests     int       `json:"poll_max_requests"`
+	PollMaxRecords      int       `json:"poll_max_records"`
 }
 
 func Default() Config {
-	return Config{Name: "default", Version: 1, ReadOnly: true, Events: []string{"topic_at_bot"}, MaxEvents: 5000, MaxProposals: 1000, RetentionHours: 48, ProposalTTLSeconds: 3600, RequestsPerMinute: 60}
+	return Config{Name: "default", Version: 1, ReadOnly: true, Events: []string{"topic_at_bot"}, MaxEvents: 5000, MaxProposals: 1000, RetentionHours: 48, ProposalTTLSeconds: 3600, RequestsPerMinute: 60, WatchBackend: "auto", PollIntervalSeconds: 30, PollMaxRequests: 100, PollMaxRecords: 5000}
 }
 
 func Load(path string) (Config, error) {
@@ -80,6 +84,9 @@ func (c Config) Validate() error {
 	}
 	if c.Version != 1 || !apiclient.Identifier(c.Bot, 256) || c.MaxEvents < 1 || c.MaxEvents > 100000 || c.MaxProposals < 1 || c.MaxProposals > 10000 || c.RetentionHours < 24 || c.RetentionHours > 168 || c.ProposalTTLSeconds < 60 || c.ProposalTTLSeconds > 3600 || c.RequestsPerMinute < 1 || c.RequestsPerMinute > 600 {
 		return bad()
+	}
+	if (c.WatchBackend != "auto" && c.WatchBackend != "poll" && c.WatchBackend != "callback") || c.PollIntervalSeconds < 5 || c.PollIntervalSeconds > 3600 || c.PollMaxRequests < 1 || c.PollMaxRequests > 1000 || c.PollMaxRecords < 1 || c.PollMaxRecords > 100000 {
+		return e.New(e.CategoryConfig, "POLL_CONFIG", "Use watch_backend auto/poll/callback, poll_interval_seconds 5–3600, poll_max_requests 1–1000, and poll_max_records 1–100000.")
 	}
 	for _, p := range []string{c.StateDir, c.AgentSocket, c.AdminSocket} {
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p || strings.ContainsAny(p, "\r\n") {
@@ -125,6 +132,13 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (c Config) EffectiveWatchBackend() string {
+	if c.WatchBackend == "poll" || (c.WatchBackend == "auto" && c.CallbackListen == "") {
+		return "poll"
+	}
+	return "callback"
 }
 
 func (c Config) Channel(id string) (Channel, bool) {

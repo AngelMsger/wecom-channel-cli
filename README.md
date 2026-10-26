@@ -5,12 +5,13 @@
 ![WeCom Channel CLI — watch channels and threads with human-controlled actions](docs/image.png)
 
 An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
-content, accepts encrypted callbacks and lets an agent propose text posts or
+content, watches changes by polling or encrypted callbacks, and lets an agent propose text posts or
 replies for independent operator approval.
 
 **Status: 0.1.0 release candidate, tested offline against synthetic services and
-WeCom's published cryptographic vector. Live grayscale access and production
-deployment have not been verified.** Linux and macOS are supported. No package
+WeCom's published cryptographic vector. Live authentication and channel discovery
+passed in one test tenant; live change detection and production isolation remain
+unverified.** Linux and macOS are supported. No package
 or remote repository has been published by this work.
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
@@ -61,7 +62,9 @@ every such context. Provision separate context groups for mutually untrusted wor
 2. Copy [the single-context policy](deploy/broker.example.json) or
    [multi-context deployment](deploy/contexts.example.json) to an operator-controlled
    file. Replace the bot/channel/user IDs with verified IDs. Empty channel and
-   sender lists deny access. Keep `read_only: true` during setup.
+   sender lists deny mention-triggered requests. For callback-free watching, start
+   with [the polling policy](deploy/watch.example.json), which explicitly enables
+   read_all and observe_all. Keep `read_only: true` during setup.
 3. Supply the existing bot Secret to the broker's environment as
    `WECOM_CHANNEL_BOT_SECRET`. For callbacks, also supply
    `WECOM_CHANNEL_CALLBACK_TOKEN` and `WECOM_CHANNEL_ENCODING_AES_KEY`.
@@ -78,11 +81,11 @@ every such context. Provision separate context groups for mutually untrusted wor
    discover IDs. The operator can list joined channels with an empty allowlist;
    member/content reads require the channel to be listed in policy. Restart the
    broker after deliberate policy edits. The broker does not configure WeCom.
-6. If events are needed, expose only the loopback `/callback` endpoint through
+6. Polling watches work with an empty `callback_listen`; no public address or
+   callback keys are required. For optional callback events, expose only the loopback `/callback` endpoint through
    your HTTPS reverse proxy and configure WeCom deliberately. Changing the bot's
    connection mode invalidates its previous connection. Do not change an existing
-   working bot merely to try this CLI. An empty `callback_listen` disables intake
-   while keeping HTTP reads and reviewed writes available.
+   working bot merely to try this CLI.
 
 `auth status` and `doctor` check local readiness. Only `auth check` makes a
 bounded authenticated request, and it requires the private operator socket.
@@ -142,9 +145,12 @@ wecom-channel-cli --use-context engineering event watch \
 ```
 
 Create the checkpoint directory first. The operator must enable `read_all`,
-`observe_all`, and post/reply events for channel-wide actor coverage. Mentions
-remain restricted to authorized humans. Watches emit observation-only change
-metadata, start at the current head, and stop on explicit limits. Resume files
+`observe_all`, and post/reply observations for polling. The default backend polls
+when no callback listener is configured, with a 30-second minimum refresh interval.
+The first snapshot establishes a quiet baseline; later changes become untrusted,
+observation-only metadata. Polling cannot reconstruct every intermediate edit or
+infer deletion from absence. Mentions remain restricted to authenticated callbacks
+from authorized humans. Watches stop on explicit limits. Resume files
 bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See [watching](docs/watching.md) for setup, partial coverage and
 checkpoint delivery limits.
@@ -210,8 +216,8 @@ If `wecom-cli` is already in use, keep its login and bot configuration intact.
 For first live verification, use a dedicated eligible test bot in a test channel.
 Supply its credentials locally to the broker; do not reset a working bot's Secret
 or rerun the official CLI's login to obtain credentials for this connector.
-An existing CLI login does not establish callback readiness, and `event watch`
-requires verified callback delivery. See the [coexistence guidance](docs/research.md#coexistence-with-an-existing-official-cli).
+An existing CLI login does not establish channel API access. Polling watches need
+no callback reconfiguration. See the [coexistence guidance](docs/research.md#coexistence-with-an-existing-official-cli).
 
 ## Scope and verification
 

@@ -1,17 +1,21 @@
 {
   "version": 2,
   "bot_id": "BOT_ID",
-  "callback_listen": "127.0.0.1:8787",
+  "callback_listen": "",
   "contexts": [{
     "name": "engineering",
     "state_dir": "/var/lib/wecom-channel/engineering",
     "agent_socket": "/run/wecom-channel/engineering-agent/agent.sock",
     "admin_socket": "/run/wecom-channel/engineering-admin/admin.sock",
     "read_only": true,
+    "watch_backend": "auto",
+    "poll_interval_seconds": 30,
+    "poll_max_requests": 100,
+    "poll_max_records": 5000,
     "events": ["topic_event", "topic_reply_event", "topic_at_bot"],
     "channels": [{
       "id": "CHANNEL_ID",
-      "senders": ["AUTHORIZED_REQUESTER_ID"],
+      "senders": [],
       "read_all": true,
       "observe_all": true,
       "allow_posts": false,

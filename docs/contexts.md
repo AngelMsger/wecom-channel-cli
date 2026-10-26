@@ -55,7 +55,9 @@ Using an accessible socket from another context does not make that mismatch vali
 
 Use [the version 2 deployment example](../deploy/contexts.example.json).
 One broker process holds the bot credentials and cached access token. A single
-verified callback endpoint routes by the authenticated channel ID. Each context
+optional verified callback endpoint routes by the authenticated channel ID.
+Leave `callback_listen` empty for polling-only deployments; each context refreshes
+only its own channel through the shared token cache. Each context
 has exactly one channel and distinct socket directories and durable state.
 
 ```json
@@ -115,7 +117,9 @@ for the complete worker and filesystem requirements.
 
 `event watch --whole-channel` or repeated `--post` IDs stays bound to the selected
 channel. Enable read_all, post/reply event kinds, and observe_all for all-actor
-coverage. Observation does not expand request eligibility. Checkpoints cannot
+observation. With no callback listener, auto uses bounded HTTP polling; no public
+address is needed. Polling has no verified change actor and cannot synthesize
+mentions. Observation does not expand request eligibility. Checkpoints cannot
 be shared across contexts, policies, filters or reset ledgers. See [watching](watching.md).
 
 ## Agent and operator workflows

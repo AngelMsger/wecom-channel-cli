@@ -9,21 +9,25 @@ import (
 )
 
 type Event struct {
-	ObservationOnly bool   `json:"observation_only"`
-	ID              string `json:"id"`
-	Sequence        int64  `json:"sequence"`
-	MessageID       string `json:"-"`
-	Bot             string `json:"bot_id"`
-	Channel         string `json:"channel_id"`
-	Sender          string `json:"sender_id"`
-	SenderKind      string `json:"sender_kind"`
-	Kind            string `json:"kind"`
-	Post            string `json:"post_id,omitempty"`
-	Reply           string `json:"reply_id,omitempty"`
-	Created         int64  `json:"created_at"`
-	Received        int64  `json:"received_at"`
-	Change          int    `json:"change,omitempty"`
-	Feedback        string `json:"feedback,omitempty"`
+	Transport        string `json:"transport,omitempty"`
+	ChangeBasis      string `json:"change_basis,omitempty"`
+	ResourceCreated  int64  `json:"resource_created_at,omitempty"`
+	ResourceModified int64  `json:"resource_modified_at,omitempty"`
+	ObservationOnly  bool   `json:"observation_only"`
+	ID               string `json:"id"`
+	Sequence         int64  `json:"sequence"`
+	MessageID        string `json:"-"`
+	Bot              string `json:"bot_id"`
+	Channel          string `json:"channel_id"`
+	Sender           string `json:"sender_id"`
+	SenderKind       string `json:"sender_kind"`
+	Kind             string `json:"kind"`
+	Post             string `json:"post_id,omitempty"`
+	Reply            string `json:"reply_id,omitempty"`
+	Created          int64  `json:"created_at"`
+	Received         int64  `json:"received_at"`
+	Change           int    `json:"change,omitempty"`
+	Feedback         string `json:"feedback,omitempty"`
 }
 
 func Parse(data []byte, bot string, now time.Time) (Event, error) {
@@ -46,7 +50,7 @@ func Parse(data []byte, bot string, now time.Time) (Event, error) {
 	if json.Unmarshal(raw.Event["eventtype"], &kind) != nil {
 		return Event{}, ErrInvalid
 	}
-	v := Event{ID: apiclient.Digest(bot + "\x00" + raw.ID), MessageID: raw.ID, Bot: bot, Channel: raw.Channel, Created: raw.Created, Received: now.Unix(), Kind: kind}
+	v := Event{Transport: "callback", ID: apiclient.Digest(bot + "\x00" + raw.ID), MessageID: raw.ID, Bot: bot, Channel: raw.Channel, Created: raw.Created, Received: now.Unix(), Kind: kind}
 	if raw.From.User != "" && raw.From.Bot == "" {
 		v.Sender = raw.From.User
 		v.SenderKind = "user"

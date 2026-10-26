@@ -69,8 +69,8 @@ func ExampleConfig() config.Config {
 	c.StateDir = "/var/lib/wecom-channel"
 	c.AgentSocket = "/run/wecom-channel-agent/agent.sock"
 	c.AdminSocket = "/run/wecom-channel-admin/admin.sock"
-	c.CallbackListen = "127.0.0.1:8787"
-	c.Channels = []config.Channel{{ID: "CHANNEL_ID", Senders: []string{"AUTHORIZED_USER_ID"}, AllowReplies: true}}
+	c.Events = []string{"topic_event", "topic_reply_event"}
+	c.Channels = []config.Channel{{ID: "CHANNEL_ID", ReadAll: true, ObserveAll: true}}
 	return c
 }
 
@@ -98,6 +98,7 @@ func (s *appState) authCommands() *cobra.Command {
 			"scheme": "wecom-aibot-sha256", "endpoint": apiclient.Origin + "/cgi-bin/aibot/get_token",
 			"credential_owner": "isolated broker operator", "required_broker_environment": []string{"WECOM_CHANNEL_BOT_SECRET"},
 			"callback_environment": []string{"WECOM_CHANNEL_CALLBACK_TOKEN", "WECOM_CHANNEL_ENCODING_AES_KEY"},
+			"watch_setup":          "Polling needs read_all and observe_all with post/reply events enabled; leave callback_listen empty. Callback environment variables are optional and required only when a callback listener is configured.",
 			"credential_guide":     "Enable API mode in the WeCom bot administration page. Supply the existing bot ID and Secret to the broker's secret manager; do not send them through chat or agent arguments.",
 			"official_cli_reuse":   map[string]any{"supported": false, "reason": "The official CLI uses get_cli_config and a gateway Bearer token. Channel get_token credentials are a separate contract; encrypted private stores are not an integration API."},
 			"documentation":        "https://developer.work.weixin.qq.com/document/path/101910",

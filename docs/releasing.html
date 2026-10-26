@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="first-release-handoff">First release handoff</h1>
-<p>The proposed first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.2</strong>
-(the Skill was revised for bounded watches), with GitHub coordinates
+<p>The proposed first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.3</strong>
+(the Skill was revised for polling watches), with GitHub coordinates
 <code>AngelMsger/wecom-channel-cli</code> and npm package <code>@angelmsger/wecom-channel-cli</code>.
 Metadata and workflows are prepared locally. No remote repository, tag, GitHub
 Release, npm version or Pages deployment is created by the preparation commands.
@@ -27,8 +27,10 @@ outside this change's write scope.</p>
 <ol>
 <li>Review the <strong>Blue Current</strong> site candidate and source changes. Confirm the
 proposed repository/package names and that the owner will publish under them.</li>
-<li>Verify an eligible WeCom bot in a designated test channel: authenticated URL
-challenge, channel access, one explicitly approved reply, replay rejection,
+<li>Verify an eligible WeCom bot in a designated test channel: channel access,
+polling baseline/change detection, selected-thread filtering and resume;
+also verify the authenticated URL challenge for optional callbacks. Test
+one explicitly approved reply, replay rejection,
 and actual worker denial of operator sockets/state/credentials. Offline tests
 do not prove tenant rollout or OS deployment. Prefer a dedicated test bot when
 the existing bot serves another integration; follow the

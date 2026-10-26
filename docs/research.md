@@ -65,7 +65,24 @@ the bot, or rerun `auth init` as a recovery shortcut. Use a separate test bot or
 wait for a supported delegation mechanism. Coordinate any callback setup with
 the existing receiver; this connector does not automatically install callback
 fan-out or take over an active connection. A read-only HTTP check does not test
-`event watch`, which consumes verified callbacks rather than polling remote posts.
+`event watch`; the latter needs a complete polling baseline and later changes,
+or verified callback delivery, depending on operator policy.
+
+### Polling feasibility
+
+The [all-content API](https://developer.work.weixin.qq.com/document/path/101922)
+was rechecked on 2026-10-26 (displayed update: 2026-10-19). It exposes paginated
+posts per channel and replies per post, plus exact-ID reads. Page size is at most
+50. Ordering is by creation time; there is no documented channel-wide change
+cursor or modification-time feed. Replies therefore require visiting the posts,
+including old posts, to find recent replies.
+
+`is_modified`, `modify_time` and `is_recalled`, together with curated content,
+permit snapshot comparison. Creator identity does not establish the actor who
+performed a later edit. Missing records and intermediate changes cannot be
+reconstructed as authoritative deletion/change events. The connector exposes
+these observations through the same watch interface, with explicit provenance,
+bounded full snapshots, persistent deduplication and no callback requirement.
 
 ## Connection mode and access
 

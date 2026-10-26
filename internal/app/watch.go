@@ -38,7 +38,7 @@ func (s *appState) watchCommand() *cobra.Command {
 	var checkpoint string
 	var dry bool
 	cmd := &cobra.Command{Use: "watch", Short: "Watch a whole channel or selected post threads as bounded NDJSON", Args: cobra.NoArgs,
-		Long:    "Stream authenticated post/reply change events from the selected context's inbox.\nChoose --whole-channel or repeated --post IDs. New watches start at the current\nhead; --after-sequence or an existing --checkpoint replays retained events.\nDuration bounds the session; --timeout bounds each request. This command never\nfetches message bodies, runs an agent, or sends a reply.",
+		Long:    "Observe post/reply changes through polling or authenticated callbacks, selected\nby operator policy. No callback is required for polling. Choose --whole-channel\nor repeated --post IDs. Polling starts with a quiet snapshot baseline and may\ncoalesce changes; it cannot infer deletion from absence. --after-sequence or a\nsaved --checkpoint replays retained observations. Duration bounds the session;\n--timeout bounds each scan, including its remote pages. Polling reads content\nfor comparison but emits only untrusted metadata. It never runs an agent or sends.",
 		Example: "  wecom-channel-cli --use-context engineering event watch --whole-channel --duration 10m\n  wecom-channel-cli --use-context engineering event watch --post POST_ID --checkpoint .watch/thread.json --duration 10m",
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -54,7 +54,7 @@ func (s *appState) watchCommand() *cobra.Command {
 			return err
 		}
 		skillDriftNotice(cmd)
-		r := broker.Request{Operation: "event.scan"}
+		r := broker.Request{Operation: "event.scan", DryRun: dry}
 		socket, err := s.resolve(cmd, &r)
 		if err != nil {
 			return err
@@ -117,6 +117,9 @@ func (s *appState) watchCommand() *cobra.Command {
 		if err = validateBatch(first, cp, scan.Limit); err != nil {
 			return err
 		}
+		if first.Coverage.Backend == "poll" {
+			interval = max(interval, time.Duration(first.Coverage.PollIntervalSeconds)*time.Second)
+		}
 		if dry {
 			return s.emit(cmd, map[string]any{"dry_run": true, "identity": first.Identity, "coverage": first.Coverage, "whole_channel": scan.WholeChannel, "posts": scan.Posts, "start_after_sequence": cp.After, "duration": duration.String(), "interval": interval.String(), "max_events": maxEvents, "checkpoint": checkpoint})
 		}
@@ -138,7 +141,7 @@ func (s *appState) watchCommand() *cobra.Command {
 	f.Int64Var(&scan.After, "after-sequence", 0, "Replay after this sequence instead of starting at the current head")
 	f.BoolVar(&scan.AllowPartial, "allow-partial", false, "Explicitly accept an inbox restricted to allowlisted human authors")
 	f.DurationVar(&duration, "duration", 5*time.Minute, "Maximum total watch duration, up to 24h")
-	f.DurationVar(&interval, "interval", 2*time.Second, "Delay between bounded inbox requests, 1s–1m")
+	f.DurationVar(&interval, "interval", 2*time.Second, "Minimum delay between scans, 1s–1m; broker polling policy may increase it")
 	f.IntVar(&maxEvents, "max-events", 1000, "Stop after this many matching emitted events")
 	f.StringVar(&checkpoint, "checkpoint", "", "Optional private resume file in an existing agent-owned directory")
 	f.BoolVar(&dry, "dry-run", false, "Inspect scope and coverage without streaming or saving a checkpoint")

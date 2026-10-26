@@ -112,7 +112,11 @@ enabling unattended work. On macOS the same code runs, but production separation
 needs a dedicated account or VM; two terminals owned by one user do not create
 a security boundary. Windows named-pipe support is not implemented.
 
-### Expose only the callback endpoint
+### Optional callback endpoint
+
+Polling needs outbound HTTPS from the broker only. Leave `callback_listen` empty;
+do not provision a public ingress or callback keys just to watch channel content.
+The following applies when the operator deliberately enables callbacks.
 
 The broker binds callbacks to a literal loopback IP. Put an HTTPS reverse proxy
 in front of `/callback`, with a small body limit (256 KiB), short request timeout
@@ -134,6 +138,14 @@ bot-authored post/reply changes as data without treating them as requests.
 deadline and count bound, and private resumable checkpoints. It fails on detected
 history gaps and scope/ledger/policy changes. Filters reduce delivery, not authority.
 See [watching](watching.md) for configured coverage and output-acknowledgment limits.
+
+Polling reads content through the fixed, credential-holding HTTP client, then
+persists only resource fingerprints and observation metadata. Whole-channel
+polling includes old posts' replies; scope, page/record limits, a minimum interval
+and per-context remote request budget bound this work. A partial or failed snapshot
+cannot advance the baseline. Polling never synthesizes mentions or treats a
+resource creator as its last editor. Only observe_all permits unknown-actor
+observations, and no observation grants host or send authority.
 
 ## Review and recovery
 
@@ -169,7 +181,9 @@ Verify the eligible bot's API mode and permissions with the operator socket.
 Confirm the actual worker cannot open the operator socket or state/secret files,
 or reach another authenticated WeCom tool or session. Preserve existing
 integrations using the [coexistence guidance](research.md#coexistence-with-an-existing-official-cli).
-Exercise the encrypted URL challenge, and test one explicitly authorized reply
+For polling, verify a quiet baseline, a new post, a reply to an existing post,
+selected-thread filtering and checkpoint resume without a public listener. For
+callback deployments, also exercise the encrypted URL challenge. Test one explicitly authorized reply
 in a designated test channel. Confirm that a replay cannot send it twice and
 that the reverse proxy records neither callback bodies nor query strings.
 

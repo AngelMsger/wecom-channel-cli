@@ -4,6 +4,7 @@ The initial deliverable is a bounded broker-backed CLI, not an agent runtime.</p
 <h2 id="components">Components</h2>
 <pre><code class="language-mermaid">flowchart LR
   W[WeCom] --&gt;|Signed encrypted callback| B[Credential-holding broker]
+  B --&gt;|Bounded HTTPS polling reads| W
   B --&gt;|Fixed HTTPS APIs| W
   A[Sandboxed agent] --&gt;|Agent Unix socket| B
   O[Trusted operator] --&gt;|Private operator socket| B
@@ -95,8 +96,33 @@ processing acknowledgment; crash windows can replay records and downstream
 processing failures require consumer-owned acknowledgments. See <a href="watching.html">watching</a>.</p>
 <p>The checkpoint is local consumer state; broker read-only mode still permits
 observation. The CLI's local read-only posture gates checkpoint writes, and
-dry-run reads coverage without creating a checkpoint or lock. No watch sends
-messages, retrieves content or launches tools automatically.</p>
+dry-run reads coverage without remote reads, state changes, a checkpoint or lock.
+No watch sends messages or launches tools. Polling reads message content inside
+the broker for comparison; it persists fingerprints and emits metadata only.</p>
+<h3 id="polling-and-callback-adapters">Polling and callback adapters</h3>
+<p>The operator selects <code>auto</code>, <code>poll</code> or <code>callback</code>. Auto preserves callback intake
+when configured and otherwise selects polling. <code>event.scan</code> accepts the same
+scope and returns the same inbox contract for either backend. The client honors
+the polling interval reported by the broker; its own interval cannot shorten it.
+Backend/policy changes invalidate the existing scope-bound checkpoint.</p>
+<p><code>internal/broker/poll.go</code> serializes refreshes per context, rate-limits remote
+reads and caches scope attempts for the minimum interval. It reads complete,
+bounded post/reply snapshots using the existing <code>apiclient.Client.Read</code> path.
+Whole-channel scopes discover all posts; selected scopes read only their exact
+posts. Creation-time pagination cannot serve as a change cursor, so old posts
+and replies are revisited. The request and record budgets fail explicitly when
+the snapshot is too large. Retained inbox pages can drain without remote I/O.</p>
+<p><code>internal/state/poll.go</code> atomically commits scope baselines, resource fingerprints
+and derived events in the existing ledger transaction. Overlapping scopes share
+fingerprints, including when a new scope observes a resource for an already
+initialized scope. Initial snapshots suppress historical records; failed pages,
+cursor cycles, capacity errors and cancellation commit nothing. A failed disk
+fsync after rename retains the committed in-memory state, as for existing events.</p>
+<p>Polling records are observation-only and never become mention authorization.
+They identify their transport and inference basis; their change actor is unknown.
+A returned recall flag is evidence, but absence is not. Intermediate changes,
+reactions and membership events are not reconstructed. No background job runs
+without an active watch. See <a href="watching.html">watching</a> for coverage and limits.</p>
 <h2 id="write-state">Write state</h2>
 <pre><code class="language-text">proposal -&gt; pending -&gt; sending -&gt; sent
                     \          -&gt; uncertain
@@ -200,6 +226,14 @@ WeCom Calendar's local <code>meta</code> write gate was checked separately.</p>
 </tr>
 </tbody>
 </table>
+<p>For polling, Jenkins <code>internal/app/build_log.go</code> and OpenObserve
+<code>internal/app/search.go</code> provide the cancellable streaming reference. WeCom
+Calendar <code>internal/sync/sync.go</code> provides the comparison-before-watermark lesson,
+but its server ETags do not exist in the channel API. Confluence page watching
+changes a remote subscription and is intentionally different. Bitbucket activity,
+Jira worklog history and Prometheus queries remain bounded reads, not a channel
+snapshot ledger. Their shared output/transport/time-bound contracts apply; this
+product-specific polling implementation requires no sibling changes.</p>
 <p>The new broker deliberately strengthens authorization beyond a CLI-local
 <code>--allow-writes</code>: a separate operator must approve every send. These safeguards
 could inform a future family-wide untrusted-content project, but this task does

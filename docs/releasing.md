@@ -1,7 +1,7 @@
 # First release handoff
 
-The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.2**
-(the Skill was revised for bounded watches), with GitHub coordinates
+The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.3**
+(the Skill was revised for polling watches), with GitHub coordinates
 `AngelMsger/wecom-channel-cli` and npm package `@angelmsger/wecom-channel-cli`.
 Metadata and workflows are prepared locally. No remote repository, tag, GitHub
 Release, npm version or Pages deployment is created by the preparation commands.
@@ -34,8 +34,10 @@ outside this change's write scope.
 
 1. Review the **Blue Current** site candidate and source changes. Confirm the
    proposed repository/package names and that the owner will publish under them.
-2. Verify an eligible WeCom bot in a designated test channel: authenticated URL
-   challenge, channel access, one explicitly approved reply, replay rejection,
+2. Verify an eligible WeCom bot in a designated test channel: channel access,
+   polling baseline/change detection, selected-thread filtering and resume;
+   also verify the authenticated URL challenge for optional callbacks. Test
+   one explicitly approved reply, replay rejection,
    and actual worker denial of operator sockets/state/credentials. Offline tests
    do not prove tenant rollout or OS deployment. Prefer a dedicated test bot when
    the existing bot serves another integration; follow the

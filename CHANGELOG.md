@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Polling without public ingress
+
+- Use HTTP polling for event watch when no callback listener is configured;
+  retain the command, NDJSON trust envelope, channel context and checkpoints.
+- Compare complete bounded snapshots, establish quiet baselines, share resource
+  fingerprints across watch scopes and commit derived events atomically.
+- Report polling provenance and unknown change actors; never infer deletion from
+  absence or manufacture mentions. Honor recall flags returned by WeCom.
+- Enforce operator-controlled interval, request/record budgets and scope capacity;
+  fail incomplete reads without advancing state and keep dry-run offline.
+- Update setup examples, website, deployment guides and companion Skill to 0.1.3.
+
 ### Watch support and family presentation
 
 - Add bounded event watch for whole-channel and selected-thread scopes, durable
