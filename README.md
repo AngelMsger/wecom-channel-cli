@@ -12,8 +12,8 @@ propose text posts, replies or native emoji reactions for independent operator a
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
-deployment and live sending remain unverified.** Linux and macOS are supported. No package
-or remote repository has been published by this work.
+deployment and live sending remain unverified.** Linux and macOS are supported.
+The source is hosted on GitHub; no npm package or versioned release has been published.
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the

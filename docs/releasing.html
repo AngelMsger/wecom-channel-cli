@@ -85,11 +85,11 @@ No sibling repositories were modified.</p>
 </tr>
 <tr>
 <td>Publication infrastructure</td>
-<td>No local origin or release tag; npm package lookup returned 404; the GitHub connection could not resolve the proposed repository (404)</td>
+<td>The owner created the canonical GitHub repository and origin is configured; Actions/Pages setup is in progress. No release tag or npm package is published</td>
 </tr>
 </tbody>
 </table>
-<h2 id="decisions-and-external-prerequisites-before-the-first-pushtag">Decisions and external prerequisites before the first push/tag</h2>
+<h2 id="first-release-publication-prerequisites">First-release publication prerequisites</h2>
 <ol>
 <li>Review the source changes. Confirm the
 proposed repository/package names and that the owner will publish under them.</li>
@@ -102,8 +102,9 @@ do not prove tenant rollout or OS deployment. Prefer a dedicated test bot when
 the existing bot serves another integration; follow the
 <a href="research.html#coexistence-with-an-existing-official-cli">coexistence checks</a>.
 The worker must also lack access to other authenticated WeCom tools or sessions.</li>
-<li>Create or select the approved GitHub repository, set its canonical <code>origin</code>,
-and push reviewed commits. No remote is configured in this local repository yet.</li>
+<li>Push reviewed commits to the approved canonical repository,
+<code>AngelMsger/wecom-channel-cli</code>. The local origin uses HTTPS authentication
+delegated to the existing GitHub CLI login; no credential is stored in the repository.</li>
 <li>Enable Pages with source <strong>GitHub Actions</strong>. The workflow uploads only <code>docs/</code>;
 it checks generated material and local links before deploying. All site assets
 are local; no external font/CDN/runtime service is required.</li>

@@ -63,9 +63,9 @@ No sibling repositories were modified.
 | Live operator-approved reply | Not run; requires a reviewed destination and exact content |
 | Live native emoji add/remove | Not run; wire, permission, membership, restart and CLI-process checks passed against synthetic APIs |
 | Live URL callback delivery | Not run; optional transport, not required for polling deployment |
-| Publication infrastructure | No local origin or release tag; npm package lookup returned 404; the GitHub connection could not resolve the proposed repository (404) |
+| Publication infrastructure | The owner created the canonical GitHub repository and origin is configured; Actions/Pages setup is in progress. No release tag or npm package is published |
 
-## Decisions and external prerequisites before the first push/tag
+## First-release publication prerequisites
 
 1. Review the source changes. Confirm the
    proposed repository/package names and that the owner will publish under them.
@@ -78,8 +78,9 @@ No sibling repositories were modified.
    the existing bot serves another integration; follow the
    [coexistence checks](research.md#coexistence-with-an-existing-official-cli).
    The worker must also lack access to other authenticated WeCom tools or sessions.
-3. Create or select the approved GitHub repository, set its canonical `origin`,
-   and push reviewed commits. No remote is configured in this local repository yet.
+3. Push reviewed commits to the approved canonical repository,
+   `AngelMsger/wecom-channel-cli`. The local origin uses HTTPS authentication
+   delegated to the existing GitHub CLI login; no credential is stored in the repository.
 4. Enable Pages with source **GitHub Actions**. The workflow uploads only `docs/`;
    it checks generated material and local links before deploying. All site assets
    are local; no external font/CDN/runtime service is required.
