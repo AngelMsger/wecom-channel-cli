@@ -112,6 +112,35 @@ class MaterialTest(unittest.TestCase):
 
 
 class PublisherTest(unittest.TestCase):
+    def test_first_publish_resolves_new_draft_before_verifying_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            (root/'build/npm').mkdir(parents=True); (root/'dist').mkdir()
+            (root/'build/npm/package.json').write_text(json.dumps({'name':'@angelmsger/wecom-channel-cli','version':'0.1.0'}))
+            names=(*material.asset_names('0.1.0'),'checksums.txt','release-manifest.json')
+            for name in names: (root/'dist'/name).write_bytes(name.encode())
+            assets=[{'name':name,'state':'uploaded','digest':'sha256:'+material.digest(root/'dist'/name)} for name in names]
+            draft={'id':123,'tag_name':'v0.1.0','draft':True,'assets':[]}
+            calls=[]
+            def require(argv):
+                calls.append(argv)
+                return 'a'*40 if argv[0]=='git' else ''
+            def github(path, optional=False):
+                if '/git/ref/' in path: return {'object':{'type':'commit','sha':'a'*40}}
+                self.assertTrue(path.endswith('/releases/123'))
+                return {**draft,'assets':assets}
+            with mock.patch.object(publisher,'ROOT',root), mock.patch.object(publisher,'require',side_effect=require), \
+                 mock.patch.object(publisher,'github',side_effect=github), \
+                 mock.patch.object(publisher,'release_by_tag',side_effect=[None,draft]) as lookup, \
+                 mock.patch.object(publisher,'npm_state',side_effect=['missing','matching']), \
+                 mock.patch('sys.argv',['publisher','--apply']), mock.patch.dict('os.environ',{},clear=True), \
+                 mock.patch('sys.stdout',new_callable=io.StringIO):
+                self.assertEqual(publisher.main(),0)
+                self.assertEqual(lookup.call_count,2)
+            self.assertEqual(len([a for a in calls if a[:3]==['gh','release','create']]),1)
+            self.assertEqual(len([a for a in calls if a[:3]==['gh','release','upload']]),7)
+            self.assertEqual(len([a for a in calls if a[:2]==['npm','publish']]),1)
+
     def test_preview_does_not_publish_and_apply_never_clobbers(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -124,17 +153,16 @@ class PublisherTest(unittest.TestCase):
             assets = [{"name": name, "state":"uploaded", "digest":"sha256:" + value} for name, value in local.items()]
             for apply in (False, True):
                 calls = []
-                reads = 0
                 def require(argv):
                     calls.append(argv)
                     return "a" * 40 if argv[0] == "git" else ""
                 def github(path, optional=False):
-                    nonlocal reads
                     if "/git/ref/" in path: return {"object":{"type":"commit", "sha":"a" * 40}}
-                    reads += 1
-                    return {"assets":assets[:1] if reads == 1 else assets, "draft":True}
+                    self.assertTrue(path.endswith('/releases/123'))
+                    return {"id":123,"tag_name":"v0.1.0","assets":assets,"draft":True}
                 with mock.patch.object(publisher, "ROOT", root), mock.patch.object(publisher, "require", side_effect=require), \
                      mock.patch.object(publisher, "github", side_effect=github), mock.patch.object(publisher, "npm_state", return_value="matching"), \
+                     mock.patch.object(publisher, "release_by_tag", return_value={"id":123,"tag_name":"v0.1.0","assets":assets[:1],"draft":True}), \
                      mock.patch("sys.argv", ["publisher", "--apply"] if apply else ["publisher"]), \
                      mock.patch.dict("os.environ", {}, clear=True), mock.patch("sys.stdout", new_callable=io.StringIO):
                     self.assertEqual(publisher.main(), 0)
@@ -146,6 +174,29 @@ class PublisherTest(unittest.TestCase):
                     self.assertEqual(len(uploads), len(names)-1)
                     self.assertFalse(any("--clobber" in a for a in mutations))
                     self.assertTrue(any("--draft=false" in a for a in mutations))
+
+    def test_draft_lookup_uses_database_identity(self):
+        record = {"id":123,"tag_name":"v0.1.0","draft":True,"assets":[]}
+        result = subprocess.CompletedProcess([],0,json.dumps({"databaseId":123,"tagName":"v0.1.0"}),"")
+        with mock.patch.object(publisher,"run",return_value=result), mock.patch.object(publisher,"github",return_value=record) as read:
+            self.assertEqual(publisher.release_by_tag("v0.1.0"),record)
+            read.assert_called_once_with('repos/AngelMsger/wecom-channel-cli/releases/123')
+
+    def test_release_lookup_distinguishes_absence_and_failure(self):
+        for message, missing in (("release not found\n",True),("HTTP 403",False),("network unavailable",False)):
+            with mock.patch.object(publisher,"run",return_value=subprocess.CompletedProcess([],1,"",message)):
+                if missing:
+                    self.assertIsNone(publisher.release_by_tag("v0.1.0"))
+                else:
+                    with self.assertRaises(RuntimeError): publisher.release_by_tag("v0.1.0")
+
+    def test_release_identity_mismatch_stops(self):
+        for identity in ({"databaseId":"123","tagName":"v0.1.0"},{"databaseId":123,"tagName":"wrong"}):
+            with mock.patch.object(publisher,"run",return_value=subprocess.CompletedProcess([],0,json.dumps(identity),"")):
+                with self.assertRaises(RuntimeError): publisher.release_by_tag("v0.1.0")
+        with mock.patch.object(publisher,"run",return_value=subprocess.CompletedProcess([],0,'{"databaseId":123,"tagName":"v0.1.0"}',"")), \
+             mock.patch.object(publisher,"github",return_value={"id":456,"tag_name":"v0.1.0"}):
+            with self.assertRaises(RuntimeError): publisher.release_by_tag("v0.1.0")
 
     def test_missing_assets_only(self):
         self.assertEqual(publisher.upload_plan({"a": "aaa", "b": "bbb"},

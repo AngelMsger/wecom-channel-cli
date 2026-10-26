@@ -31,6 +31,9 @@ build provenance, checksum manifest and npm archive contents. Never overwrite
 published assets on a retry: reconcile their digests, upload only missing assets,
 and publish the already-verified npm tarball. Exercise the release guard tests
 and synthetic Linux UID/group isolation fixture before the first release.
+Resolve draft releases to their database ID with gh release view, then read
+assets through the release-ID endpoint. GitHub's published-release-by-tag route
+must not be used to verify or resume draft uploads.
 
 Watching is observation, not authorization: observe_all may admit post/reply
 changes from bots and humans, but cannot widen human mention eligibility. Watches

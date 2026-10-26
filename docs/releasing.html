@@ -140,7 +140,10 @@ isolation fixture. <code>scripts/publish-release.py --apply</code> then verifies
 remote tag resolves to the reviewed commit. It creates a draft release, uploads
 only missing assets, verifies all remote SHA-256 digests, and publishes the draft.
 Existing mismatched, duplicate or unverified assets stop the workflow; it never
-uses <code>--clobber</code>. A network/auth error is not treated as an absent release.</p>
+uses <code>--clobber</code>. A network/auth error is not treated as an absent release.
+Drafts are resolved with <code>gh release view</code> to a database ID and verified through
+the release-ID API. The REST published-release-by-tag endpoint does not return
+drafts and must not be used to check uploaded draft assets or recover a retry.</p>
 <p>The same verified npm tarball is published with provenance and trusted publishing.
 An existing npm version is accepted only when its registry SHA-512 integrity
 matches that archive. Failed lookups stop rather than trigger a blind publish.

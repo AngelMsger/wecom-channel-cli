@@ -123,6 +123,9 @@ remote tag resolves to the reviewed commit. It creates a draft release, uploads
 only missing assets, verifies all remote SHA-256 digests, and publishes the draft.
 Existing mismatched, duplicate or unverified assets stop the workflow; it never
 uses `--clobber`. A network/auth error is not treated as an absent release.
+Drafts are resolved with `gh release view` to a database ID and verified through
+the release-ID API. The REST published-release-by-tag endpoint does not return
+drafts and must not be used to check uploaded draft assets or recover a retry.
 
 The same verified npm tarball is published with provenance and trusted publishing.
 An existing npm version is accepted only when its registry SHA-512 integrity

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve draft release IDs before checking assets, so successful uploads can be
+  verified and resumed without treating a draft as a missing published release.
+
 ### Native emoji reactions
 
 - Add reaction types, list and propose commands for native post/reply reactions,
