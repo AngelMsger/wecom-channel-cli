@@ -1,6 +1,7 @@
 # WeCom Channel CLI 0.1.0
 
-Initial release candidate for the grayscale WeCom channel APIs.
+Initial release for the grayscale WeCom channel APIs, published on 2026-10-27
+from `3a65bf9` with npm provenance.
 
 - Named channel security contexts, with offline family-style configuration and
   independent socket, policy, inbox and approval boundaries.

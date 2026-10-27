@@ -6,18 +6,29 @@
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.</p>
-<p><strong>Status: 0.1.0 release candidate, tested offline against synthetic services and
+<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">0.1.0 is published</a>, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.</strong> Linux and macOS are supported.
-The source is hosted on GitHub; no npm package or versioned release has been published.</p>
+Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub release</a>.</p>
 <p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
 stay with the broker. This only forms a host security boundary when the agent
 and operator have separate OS identities and the agent's tools are sandboxed.
 Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
+<h2 id="install">Install</h2>
+<p>With Node.js 20 or newer, run this in a trusted operator setup session:</p>
+<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.1.0
+wecom-channel-cli version
+wecom-channel-cli auth guide
+</code></pre>
+<p>The installer downloads the matching Linux/macOS binary and verifies its SHA-256
+checksum. If your npm policy blocks install scripts, review the package before
+allowing its <code>postinstall</code> script or download a native binary from GitHub.
+Agent commands never download a missing binary automatically. Configure the broker
+and context below before reading channel data.</p>
 <h2 id="build-and-inspect">Build and inspect</h2>
 <p>Requires Go 1.25 or newer. From this repository:</p>
 <pre><code class="language-sh">make build
@@ -218,7 +229,7 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 <li><a href="watching.html">Watching channels and threads</a></li>
 <li><a href="reactions.html">Native emoji reactions</a></li>
 <li><a href="releasing.html">Release preparation</a></li>
-<li><a href="index.html">Website candidate</a></li>
+<li><a href="https://angelmsger.github.io/wecom-channel-cli/">Documentation site</a></li>
 <li><a href="security.html">Security and deployment</a></li>
 <li><a href="technical-design.html">Technical design and family applicability</a></li>
 <li><a href="research.html">Official research and API coverage</a></li>

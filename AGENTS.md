@@ -34,6 +34,11 @@ and synthetic Linux UID/group isolation fixture before the first release.
 Resolve draft releases to their database ID with gh release view, then read
 assets through the release-ID endpoint. GitHub's published-release-by-tag route
 must not be used to verify or resume draft uploads.
+After npm reports success, allow bounded read-only registry propagation checks;
+never retry publication in that loop or accept a mismatched integrity. Public
+diagnostics may retain npm error codes, not raw authentication output. Keep a
+first-publication bootstrap stage until a real version and its provenance are
+verified; rejecting the last stage before publication can remove package trust.
 
 Watching is observation, not authorization: observe_all may admit post/reply
 changes from bots and humans, but cannot widen human mention eligibility. Watches
@@ -83,7 +88,7 @@ for the accepted layout and update all generated page chrome together. Keep
 Get started action share a type scale. The family slogan is "Built for agents.
 Designed for humans." Keep it prominent in the hero and README overview.
 
-The website is a static GitHub Pages candidate in `docs/`; regenerate narrative
+The website is a static GitHub Pages site in `docs/`; regenerate narrative
 HTML and command reference with `make docs`. Keep source Markdown canonical.
 Do not deploy, push a tag or publish npm until the owner reviews the candidate.
 The initial GitHub push is complete. Main now requires the Ubuntu/macOS test and

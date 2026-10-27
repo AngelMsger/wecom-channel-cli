@@ -1,10 +1,12 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="first-release-handoff">First release handoff</h1>
-<p>The proposed first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.4</strong>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="release-guide">Release guide</h1>
+<p>The first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.4</strong>
 (the Skill was revised for native reactions), with GitHub coordinates
 <code>AngelMsger/wecom-channel-cli</code> and npm package <code>@angelmsger/wecom-channel-cli</code>.
-Metadata and workflows are prepared locally. No remote repository, tag, GitHub
-Release, npm version or Pages deployment is created by the preparation commands.
-The Blue Current visual design has been accepted; publication remains owner-controlled.</p>
+It was published on 2026-10-27 from <code>3a65bf9</code> on
+<a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">npm</a> and
+<a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub Releases</a>.
+The <a href="https://angelmsger.github.io/wecom-channel-cli/">documentation site</a> is live.
+Preparation commands do not publish; subsequent releases remain owner-controlled.</p>
 <h2 id="local-release-gate">Local release gate</h2>
 <pre><code class="language-sh">make lint test e2e docs-check site-check
 npm test --prefix build/npm
@@ -85,15 +87,30 @@ No sibling repositories were modified.</p>
 </tr>
 <tr>
 <td>Publication infrastructure</td>
-<td>Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. No release tag or npm package is published</td>
+<td>Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. Version 0.1.0 was published on 2026-10-27</td>
 </tr>
 </tbody>
 </table>
+<h3 id="publication-verification-on-2026-10-27">Publication verification on 2026-10-27</h3>
+<p>All seven GitHub assets retain their original verified digests. The npm tarball
+matches the CI archive (SHA-256
+<code>581de5c206b935e6f511c0b226f663b35f5b14c4ef5dec4f5e7ba67c0e194439</code>).
+<code>npm audit signatures</code> verified its registry signature and attestation. The SLSA
+statement names the reviewed commit, <code>refs/tags/v0.1.0</code>, <code>release.yml</code> and
+<a href="https://github.com/AngelMsger/wecom-channel-cli/actions/runs/40361741630/attempts/3">release attempt 3</a>.
+A fresh macOS arm64 npm installation downloaded the checksum-matching binary,
+reported version <code>0.1.0</code> / commit <code>3a65bf9</code>, and returned all 115 reaction types.
+This establishes the installed CLI path, not live WeCom writes or every native platform.</p>
+<p>That workflow attempt reports failure because its immediate post-publish read
+did not yet expose the successful publication. Independent registry, signature,
+provenance and installation checks reconciled the result without publishing again.
+The bounded confirmation fix is on main for future releases; the original tag and
+release assets remain unchanged.</p>
 <p>Main requires the GitHub Actions checks <code>test (ubuntu-latest)</code>,
 <code>test (macos-latest)</code> and <code>isolation</code>, with an up-to-date branch and resolved review
 conversations. These requirements also apply to administrators; force pushes and
 deletion are disabled. Use a feature branch and pull request for subsequent work.</p>
-<h2 id="first-release-publication-prerequisites">First-release publication prerequisites</h2>
+<h2 id="publication-prerequisites">Publication prerequisites</h2>
 <ol>
 <li>Review the source changes. Confirm the
 proposed repository/package names and that the owner will publish under them.</li>
@@ -119,7 +136,14 @@ organization rights and the registry's first-publication bootstrap process.
 Do not assume OIDC creates a new package or account authorization automatically.
 New trusted-publisher configurations must complete their first publication
 within two days; configure this close to the approved release. See the
-<a href="https://docs.npmjs.com/trusted-publishers/">official npm guidance</a>.</li>
+<a href="https://docs.npmjs.com/trusted-publishers/">official npm guidance</a>.
+When staging is used to initialize a new package, retain a separate temporary
+staged version until the real version is published and verified. Do not stage
+the intended release version merely to reserve the package: staged versions
+occupy their version slot. During the first release, rejecting the only stage
+before publication removed the package's trusted-publisher configuration.
+Reconcile the real version and trust before rejecting the temporary stage;
+never approve a bootstrap-only package as a product release.</li>
 <li>The protected GitHub <strong>release</strong> environment requires <code>AngelMsger</code> review and
 permits only <code>v*</code> tags. Self-review remains available for the sole maintainer;
 the workflow never approves its own deployment. Review the final changelog and
@@ -146,7 +170,12 @@ the release-ID API. The REST published-release-by-tag endpoint does not return
 drafts and must not be used to check uploaded draft assets or recover a retry.</p>
 <p>The same verified npm tarball is published with provenance and trusted publishing.
 An existing npm version is accepted only when its registry SHA-512 integrity
-matches that archive. Failed lookups stop rather than trigger a blind publish.
+matches that archive. After npm reports success, confirmation makes at most seven
+fresh reads with 125 seconds of total backoff and a 20-second npm fetch timeout
+per read. Only missing versions are retried; conflicts, malformed responses and
+authentication/network failures stop immediately. Publication itself is never
+retried by this confirmation loop. Safe npm error codes are preserved without
+printing credential-bearing command output.
 If npm publication fails after GitHub succeeds, retain the release and reconcile
 that exact npm version before retrying. Do not overwrite assets or bump the version
 merely to recover. Reuse the original toolchains when rebuilding for a retry.</p>

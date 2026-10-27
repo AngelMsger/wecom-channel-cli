@@ -6,6 +6,14 @@
 
 - Resolve draft release IDs before checking assets, so successful uploads can be
   verified and resumed without treating a draft as a missing published release.
+- Confirm successful npm publication with bounded fresh registry reads, without
+  republishing or accepting conflicting content. Retain safe npm error codes in
+  diagnostics and document first-publication bootstrap retention.
+- Update installation instructions and release status for the published 0.1.0.
+
+## [0.1.0] — 2026-10-27
+
+Published from `3a65bf9` through GitHub Actions with npm provenance.
 
 ### Native emoji reactions
 
@@ -58,10 +66,6 @@
   using WeCom only as a color reference. Rebuild the layout, product illustration,
   iconography, interactive explorer and generated documentation styling.
 
-## [0.1.0] — Release candidate
-
-Prepared for owner review; no tag or publication has occurred.
-
 ### Contexts and release preparation
 
 - Add kit-backed named client contexts and one-channel server boundaries, with
@@ -89,8 +93,9 @@ Prepared for owner review; no tag or publication has occurred.
 
 ### Limitations
 
-- Live grayscale tenant access, callback deployment and full worker isolation
-  require operator verification. No package release is published.
-- Media, emoji mutations, edits/deletes, forwarded chat expansion and channel
-  long connections are not implemented. The agent runtime itself is not sandboxed
-  by this CLI; deployment must provide that boundary.
+- Live authentication, discovery, polling, filtering and resume passed in one
+  test tenant; distinct-user isolation passed in a synthetic Linux container.
+  Live text/reaction writes, optional callbacks and the actual production worker
+  environment still require operator verification.
+- Media transfer, content edits/deletes, forwarded chat expansion, Windows and
+  channel long connections are not implemented. Deployment must sandbox the agent.
