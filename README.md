@@ -8,12 +8,12 @@ An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.
 
-**Status: 0.1.0 release candidate, tested offline against synthetic services and
+**Status: [0.1.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0), tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
-The source is hosted on GitHub; no npm package or versioned release has been published.
+Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0).
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
@@ -21,6 +21,22 @@ exact proposal digest. Credentials, callback keys, policy and the write ledger
 stay with the broker. This only forms a host security boundary when the agent
 and operator have separate OS identities and the agent's tools are sandboxed.
 Read the [security and deployment guide](docs/security.md) before connecting a bot.
+
+## Install
+
+With Node.js 20 or newer, run this in a trusted operator setup session:
+
+```sh
+npm install -g @angelmsger/wecom-channel-cli@0.1.0
+wecom-channel-cli version
+wecom-channel-cli auth guide
+```
+
+The installer downloads the matching Linux/macOS binary and verifies its SHA-256
+checksum. If your npm policy blocks install scripts, review the package before
+allowing its `postinstall` script or download a native binary from GitHub.
+Agent commands never download a missing binary automatically. Configure the broker
+and context below before reading channel data.
 
 ## Build and inspect
 
@@ -256,7 +272,7 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 - [Watching channels and threads](docs/watching.md)
 - [Native emoji reactions](docs/reactions.md)
 - [Release preparation](docs/releasing.md)
-- [Website candidate](docs/index.html)
+- [Documentation site](https://angelmsger.github.io/wecom-channel-cli/)
 - [Security and deployment](docs/security.md)
 - [Technical design and family applicability](docs/technical-design.md)
 - [Official research and API coverage](docs/research.md)

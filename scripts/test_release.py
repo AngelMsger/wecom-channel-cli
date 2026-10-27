@@ -132,11 +132,13 @@ class PublisherTest(unittest.TestCase):
             with mock.patch.object(publisher,'ROOT',root), mock.patch.object(publisher,'require',side_effect=require), \
                  mock.patch.object(publisher,'github',side_effect=github), \
                  mock.patch.object(publisher,'release_by_tag',side_effect=[None,draft]) as lookup, \
-                 mock.patch.object(publisher,'npm_state',side_effect=['missing','matching']), \
+                 mock.patch.object(publisher,'npm_state',side_effect=['missing','missing','matching']), \
+                 mock.patch.object(publisher.time,'sleep') as sleep, \
                  mock.patch('sys.argv',['publisher','--apply']), mock.patch.dict('os.environ',{},clear=True), \
                  mock.patch('sys.stdout',new_callable=io.StringIO):
                 self.assertEqual(publisher.main(),0)
                 self.assertEqual(lookup.call_count,2)
+                sleep.assert_called_once_with(5)
             self.assertEqual(len([a for a in calls if a[:3]==['gh','release','create']]),1)
             self.assertEqual(len([a for a in calls if a[:3]==['gh','release','upload']]),7)
             self.assertEqual(len([a for a in calls if a[:2]==['npm','publish']]),1)
@@ -226,6 +228,39 @@ class PublisherTest(unittest.TestCase):
                 publisher.github("repos/test/releases/tags/v1", optional=True)
         with mock.patch.object(publisher, "run", return_value=subprocess.CompletedProcess([], 1, "", "not found (HTTP 404)")):
             self.assertIsNone(publisher.github("repos/test/releases/tags/v1", optional=True))
+
+    def test_registry_confirmation_is_bounded_without_republishing(self):
+        with mock.patch.object(publisher, "npm_state", return_value="missing") as lookup, \
+             mock.patch.object(publisher.time, "sleep") as sleep, \
+             mock.patch.object(publisher, "require") as write:
+            with self.assertRaisesRegex(RuntimeError, "test@1 is not confirmed"):
+                publisher.confirm_npm("test@1", "sha512-matching")
+            self.assertEqual(lookup.call_count, 7)
+            self.assertEqual(sum(c.args[0] for c in sleep.call_args_list), 125)
+            write.assert_not_called()
+
+    def test_registry_confirmation_stops_on_unknown_or_conflicting_state(self):
+        for rc, output in ((1, '{"error":{"code":"E403"}}'), (1, "offline"),
+                           (0, '"sha512-different"'), (0, "not json")):
+            with self.subTest(output=output), \
+                 mock.patch.object(publisher, "run", return_value=subprocess.CompletedProcess([], rc, output, "")) as read, \
+                 mock.patch.object(publisher.time, "sleep") as sleep:
+                with self.assertRaises(RuntimeError):
+                    publisher.confirm_npm("test@1", "sha512-matching")
+                read.assert_called_once()
+                self.assertIn("--prefer-online", read.call_args.args[0])
+                self.assertIn("--fetch-retries=0", read.call_args.args[0])
+                self.assertIn("--fetch-timeout=20000", read.call_args.args[0])
+                sleep.assert_not_called()
+
+    def test_npm_error_retains_only_code(self):
+        result = subprocess.CompletedProcess([], 1, "private stdout", "npm error code E403\nnpm_token=secret\nhttps://example.test/auth?secret=value")
+        with mock.patch.object(publisher, "run", return_value=result):
+            with self.assertRaises(RuntimeError) as error:
+                publisher.require(["npm", "publish", "archive.tgz"])
+            self.assertIn("(E403)", str(error.exception))
+            for private in ("private stdout", "secret", "example.test"):
+                self.assertNotIn(private, str(error.exception))
 
 
 if __name__ == "__main__":

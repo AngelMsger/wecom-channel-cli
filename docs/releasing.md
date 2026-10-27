@@ -1,11 +1,13 @@
-# First release handoff
+# Release guide
 
-The proposed first CLI release is **0.1.0**, embedding companion Skill **0.1.4**
+The first CLI release is **0.1.0**, embedding companion Skill **0.1.4**
 (the Skill was revised for native reactions), with GitHub coordinates
 `AngelMsger/wecom-channel-cli` and npm package `@angelmsger/wecom-channel-cli`.
-Metadata and workflows are prepared locally. No remote repository, tag, GitHub
-Release, npm version or Pages deployment is created by the preparation commands.
-The Blue Current visual design has been accepted; publication remains owner-controlled.
+It was published on 2026-10-27 from `3a65bf9` on
+[npm](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0) and
+[GitHub Releases](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0).
+The [documentation site](https://angelmsger.github.io/wecom-channel-cli/) is live.
+Preparation commands do not publish; subsequent releases remain owner-controlled.
 
 ## Local release gate
 
@@ -63,14 +65,32 @@ No sibling repositories were modified.
 | Live operator-approved reply | Not run; requires a reviewed destination and exact content |
 | Live native emoji add/remove | Not run; wire, permission, membership, restart and CLI-process checks passed against synthetic APIs |
 | Live URL callback delivery | Not run; optional transport, not required for polling deployment |
-| Publication infrastructure | Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. No release tag or npm package is published |
+| Publication infrastructure | Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. Version 0.1.0 was published on 2026-10-27 |
+
+### Publication verification on 2026-10-27
+
+All seven GitHub assets retain their original verified digests. The npm tarball
+matches the CI archive (SHA-256
+`581de5c206b935e6f511c0b226f663b35f5b14c4ef5dec4f5e7ba67c0e194439`).
+`npm audit signatures` verified its registry signature and attestation. The SLSA
+statement names the reviewed commit, `refs/tags/v0.1.0`, `release.yml` and
+[release attempt 3](https://github.com/AngelMsger/wecom-channel-cli/actions/runs/40361741630/attempts/3).
+A fresh macOS arm64 npm installation downloaded the checksum-matching binary,
+reported version `0.1.0` / commit `3a65bf9`, and returned all 115 reaction types.
+This establishes the installed CLI path, not live WeCom writes or every native platform.
+
+That workflow attempt reports failure because its immediate post-publish read
+did not yet expose the successful publication. Independent registry, signature,
+provenance and installation checks reconciled the result without publishing again.
+The bounded confirmation fix is on main for future releases; the original tag and
+release assets remain unchanged.
 
 Main requires the GitHub Actions checks `test (ubuntu-latest)`,
 `test (macos-latest)` and `isolation`, with an up-to-date branch and resolved review
 conversations. These requirements also apply to administrators; force pushes and
 deletion are disabled. Use a feature branch and pull request for subsequent work.
 
-## First-release publication prerequisites
+## Publication prerequisites
 
 1. Review the source changes. Confirm the
    proposed repository/package names and that the owner will publish under them.
@@ -97,6 +117,13 @@ deletion are disabled. Use a feature branch and pull request for subsequent work
    New trusted-publisher configurations must complete their first publication
    within two days; configure this close to the approved release. See the
    [official npm guidance](https://docs.npmjs.com/trusted-publishers/).
+   When staging is used to initialize a new package, retain a separate temporary
+   staged version until the real version is published and verified. Do not stage
+   the intended release version merely to reserve the package: staged versions
+   occupy their version slot. During the first release, rejecting the only stage
+   before publication removed the package's trusted-publisher configuration.
+   Reconcile the real version and trust before rejecting the temporary stage;
+   never approve a bootstrap-only package as a product release.
 6. The protected GitHub **release** environment requires `AngelMsger` review and
    permits only `v*` tags. Self-review remains available for the sole maintainer;
    the workflow never approves its own deployment. Review the final changelog and
@@ -129,7 +156,12 @@ drafts and must not be used to check uploaded draft assets or recover a retry.
 
 The same verified npm tarball is published with provenance and trusted publishing.
 An existing npm version is accepted only when its registry SHA-512 integrity
-matches that archive. Failed lookups stop rather than trigger a blind publish.
+matches that archive. After npm reports success, confirmation makes at most seven
+fresh reads with 125 seconds of total backoff and a 20-second npm fetch timeout
+per read. Only missing versions are retried; conflicts, malformed responses and
+authentication/network failures stop immediately. Publication itself is never
+retried by this confirmation loop. Safe npm error codes are preserved without
+printing credential-bearing command output.
 If npm publication fails after GitHub succeeds, retain the release and reconcile
 that exact npm version before retrying. Do not overwrite assets or bump the version
 merely to recover. Reuse the original toolchains when rebuilding for a retry.

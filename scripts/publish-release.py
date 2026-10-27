@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
+import time
 
 from release_material import REPOSITORY, asset_names, digest, npm_name
 
@@ -21,7 +23,11 @@ def run(argv):
 def require(argv):
     result = run(argv)
     if result.returncode:
-        raise RuntimeError(f"Command failed: {argv[0]} {argv[1]}; reconcile the existing release/version before retrying")
+        # npm output can contain credentials or authentication URLs. Retain only
+        # its machine error code, never arbitrary stdout/stderr in public logs.
+        code = re.search(r"npm (?:error|ERR!) code ([A-Z][A-Z0-9_]+)\b", result.stderr)
+        detail = f" ({code.group(1)})" if argv[0] == "npm" and code else ""
+        raise RuntimeError(f"Command failed: {argv[0]} {argv[1]}{detail}; reconcile the existing release/version before retrying")
     return result.stdout
 
 
@@ -65,7 +71,8 @@ def upload_plan(local, remote):
 
 
 def npm_state(package, integrity):
-    result = run(["npm", "view", package, "dist.integrity", "--json", "--registry", REGISTRY])
+    result = run(["npm", "view", package, "dist.integrity", "--json", "--registry", REGISTRY,
+                  "--prefer-online", "--fetch-retries=0", "--fetch-timeout=20000"])
     try:
         value = json.loads(result.stdout)
     except ValueError:
@@ -77,6 +84,17 @@ def npm_state(package, integrity):
     if value != integrity:
         raise RuntimeError("The npm version already exists with different content; it will not be replaced")
     return "matching"
+
+
+def confirm_npm(package, integrity):
+    # Registry reads can lag a successful publish. Retry only missing reads;
+    # conflicts, authentication errors and unknown results still stop at once.
+    for delay in (0, 5, 10, 20, 30, 30, 30):
+        if delay:
+            time.sleep(delay)
+        if npm_state(package, integrity) == "matching":
+            return
+    raise RuntimeError(f"Publish returned success but {package} is not confirmed; reconcile it before retrying")
 
 
 def main():
@@ -124,8 +142,7 @@ def main():
     if registry == "missing":
         require(["npm", "publish", str(archive), "--access", "public", "--provenance", "--registry", REGISTRY])
         # A failed follow-up preserves the known version; a retry must reconcile it.
-        if npm_state(package, integrity) != "matching":
-            raise RuntimeError(f"Publish returned success but {package} is not confirmed; reconcile it before retrying")
+        confirm_npm(package, integrity)
     print(json.dumps({"tag": tag, "npm_package": package, "verified": True}))
     return 0
 
