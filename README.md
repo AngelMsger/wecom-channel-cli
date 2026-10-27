@@ -271,7 +271,7 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 - [Channel contexts](docs/contexts.md)
 - [Watching channels and threads](docs/watching.md)
 - [Native emoji reactions](docs/reactions.md)
-- [Release preparation](docs/releasing.md)
+- [Releasing](docs/releasing.md)
 - [Documentation site](https://angelmsger.github.io/wecom-channel-cli/)
 - [Security and deployment](docs/security.md)
 - [Technical design and family applicability](docs/technical-design.md)

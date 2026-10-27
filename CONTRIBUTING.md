@@ -18,8 +18,9 @@ writes and secret-free output, in addition to ordinary successful requests.
 `make docs` regenerates the Markdown/HTML CLI reference and narrative HTML.
 The buildless landing page, styles and interactions live in `docs/index.html` and
 `docs/assets/`. `make site-check` validates local links and offline assets.
-`make package release-check` prepares binary checksums and the npm tarball without
-publishing. See docs/releasing.md for the final owner-controlled release gate.
+`make cross` prepares native binaries without publishing. Preview the npm contents
+with `npm pack --ignore-scripts --dry-run` in `build/npm`. See docs/releasing.md
+for the tag-triggered family release process.
 Run `make release-tests` after release-script changes, and `make cross isolation-check`
 for the synthetic Linux service/worker permission checks (Docker required).
 
@@ -30,5 +31,5 @@ After the initial repository bootstrap, main is protected for administrators too
 Push subsequent changes to a branch and use a pull request with passing Ubuntu,
 macOS and Linux isolation checks from GitHub Actions. Resolve review conversations
 before merging; force pushes and branch deletion are disabled. Do not disable
-these checks to work around a failing build. Version publication separately needs
-the owner's approval in the release environment.
+these checks to work around a failing build. Pushing a version tag authorizes
+automatic publication; the release environment has no manual approval requirement.

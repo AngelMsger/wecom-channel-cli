@@ -1,7 +1,7 @@
 GO ?= go
-VERSION ?= 0.1.0
-COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo uncommitted)
-BUILD_TIME ?= $(shell git show -s --format=%cI HEAD 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS = -s -w -X github.com/angelmsger/wecom-channel-cli/pkg/constants.Version=$(VERSION) -X github.com/angelmsger/wecom-channel-cli/pkg/constants.Commit=$(COMMIT) -X github.com/angelmsger/wecom-channel-cli/pkg/constants.BuildTime=$(BUILD_TIME)
 
 .PHONY: build lint test e2e docs docs-check cross
@@ -26,25 +26,15 @@ docs-check:
 	$(GO) run ./cmd/gen-docs --check
 
 cross:
-	mkdir -p dist
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/wecom-channel-cli-linux-amd64 ./cmd/wecom-channel-cli
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/wecom-channel-cli-linux-arm64 ./cmd/wecom-channel-cli
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/wecom-channel-cli-darwin-arm64 ./cmd/wecom-channel-cli
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/wecom-channel-cli-darwin-amd64 ./cmd/wecom-channel-cli
+	VERSION=$(VERSION) COMMIT=$(COMMIT) ./scripts/build.sh
 
-.PHONY: package release-check site-check release-tests isolation-check
-package: cross
-	cd build/npm && npm pack --ignore-scripts --pack-destination ../../dist
-	python3 scripts/package.py
+.PHONY: site-check release-tests isolation-check
 
 release-tests:
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 
 isolation-check:
 	python3 scripts/run-isolation-check.py
-
-release-check:
-	python3 scripts/release-check.py
 
 site-check:
 	python3 scripts/check-site.py

@@ -3,6 +3,7 @@ package constants
 
 const AppName = "wecom-channel-cli"
 
-var Version = "0.1.0"
-var Commit = "unknown"
+// Build metadata is injected by Makefile and scripts/build.sh from the Git tag.
+var Version = "dev"
+var Commit = "none"
 var BuildTime = "unknown"
