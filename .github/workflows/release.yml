@@ -1,44 +1,85 @@
 name: Release
+
+# Triggered by pushing a version tag, e.g.  git tag v0.1.0 && git push origin v0.1.0
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
+
 permissions:
-  contents: write
-  id-token: write
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  contents: write # create the GitHub Release
+  id-token: write # OIDC token for npm trusted publishing
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Existing npm OIDC identity; this environment has no required reviewers.
     environment: release
     env:
       TAG: ${{ github.ref_name }}
-      GOWORK: 'off'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # full history + tags so `git describe` yields the tag
+
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
+          cache: true
+
+      - name: unit tests
+        run: go test ./...
+
+      - name: cross-compile binaries
+        run: make cross
+
+      - name: checksums
+        working-directory: dist
+        run: sha256sum wecom-channel-cli-* > checksums.txt
+
+      # Idempotent: if the release already exists (e.g. a re-run after the npm
+      # step failed) refresh its assets instead of failing the whole workflow.
+      - name: create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists — re-uploading assets"
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "$TAG" --generate-notes
+          fi
+
+      # No registry-url on purpose: actions/setup-node's registry-url writes an
+      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}`. With no token set that
+      # expands to an empty string, and npm then uses (empty) token auth and
+      # skips OIDC trusted publishing entirely. Omitting it leaves npm without
+      # credentials, so it performs the trusted-publishing exchange. The public
+      # registry is the default, so no registry config is needed.
+      # Node 24 bundles npm >= 11.5.1, which is required for trusted
+      # publishing — so there is no fragile `npm install -g npm@latest`
+      # self-upgrade step (it intermittently corrupts the npm install).
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - name: Validate the reviewed source
+
+      # Publishes @angelmsger/wecom-channel-cli via npm trusted publishing
+      # (OIDC): no token is needed — the `id-token: write` permission above lets
+      # the npm CLI authenticate, and provenance is attested automatically.
+      # Requires the package's trusted publisher to be configured on npmjs.com
+      # first. The GitHub Release above is already complete if this step fails.
+      #
+      # Idempotent: skip publishing when this version is already on the
+      # registry, so the workflow can be re-run safely.
+      - name: publish to npm
+        working-directory: build/npm
         run: |
-          make lint test e2e docs-check site-check
-          go test -race ./...
-          make vuln
-          npm test --prefix build/npm
-          make release-tests
-      - name: Build and verify the release candidate
-        run: |
-          test "$TAG" = "v$(node -p "require('./build/npm/package.json').version")"
-          make package
-          make isolation-check
-          python3 scripts/release-check.py --publish
-      - name: Reconcile and publish the verified artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/publish-release.py --apply
+          echo "node $(node --version) / npm $(npm --version)"
+          echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          VERSION="${TAG#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          if npm view "@angelmsger/wecom-channel-cli@$VERSION" version >/dev/null 2>&1; then
+            echo "@angelmsger/wecom-channel-cli@$VERSION already published — skipping"
+          else
+            npm publish --access public
+          fi

@@ -2,14 +2,16 @@
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- Resolve draft release IDs before checking assets, so successful uploads can be
-  verified and resumed without treating a draft as a missing published release.
-- Confirm successful npm publication with bounded fresh registry reads, without
-  republishing or accepting conflicting content. Retain safe npm error codes in
-  diagnostics and document first-publication bootstrap retention.
-- Update installation instructions and release status for the published 0.1.0.
+- Align release automation with the sibling CLIs: push a version tag to run unit
+  tests, cross-compile, checksum binaries, create or refresh the GitHub Release,
+  and publish npm through OIDC without a separate environment approval.
+- Derive binary version/commit metadata from Git and set npm's version from the
+  tag. Replace the custom Python publication pipeline with the family workflow
+  and build script; keep Linux/macOS as this connector's supported targets.
+- Document the existing approval-free environment reference required by the
+  validated npm identity and test publication/rerun paths without remote writes.
 
 ## [0.1.0] — 2026-10-27
 

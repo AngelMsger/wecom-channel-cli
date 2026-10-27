@@ -1,192 +1,179 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="release-guide">Release guide</h1>
-<p>The first CLI release is <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.4</strong>
-(the Skill was revised for native reactions), with GitHub coordinates
-<code>AngelMsger/wecom-channel-cli</code> and npm package <code>@angelmsger/wecom-channel-cli</code>.
-It was published on 2026-10-27 from <code>3a65bf9</code> on
-<a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">npm</a> and
-<a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub Releases</a>.
-The <a href="https://angelmsger.github.io/wecom-channel-cli/">documentation site</a> is live.
-Preparation commands do not publish; subsequent releases remain owner-controlled.</p>
-<h2 id="local-release-gate">Local release gate</h2>
-<pre><code class="language-sh">make lint test e2e docs-check site-check
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Release guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html" aria-current="page">Release guide</a></aside><article class="doc-article"><h1 id="releasing">Releasing</h1>
+<p>WeCom Channel CLI follows the sibling CLI release process. Pushing a <code>v*</code> tag
+runs the release workflow automatically; there is no separate approval click.
+GitHub Releases holds the native binaries and checksums, and npm distributes the
+installer wrapper with OIDC provenance.</p>
+<h2 id="publishing-setup">Publishing setup</h2>
+<p>The public repository is <code>AngelMsger/wecom-channel-cli</code>, the npm package is
+<code>@angelmsger/wecom-channel-cli</code>, and the workflow filename is <code>release.yml</code>.
+The workflow grants <code>contents: write</code> and <code>id-token: write</code>, uses Node 24's
+bundled npm, and does not inject a registry token or configure <code>registry-url</code>
+on <code>actions/setup-node</code>.</p>
+<p>The existing validated npm trusted publisher includes Environment <code>release</code>.
+The workflow retains that environment name solely to match the OIDC identity.
+Its GitHub configuration has <strong>no required reviewers and no wait timer</strong>; its
+<code>v*</code> tag restriction does not require human interaction. This single configuration
+reference is the compatibility difference from the siblings, whose npm Environment
+field is blank. Replacing a validated publisher is unnecessary for automatic
+publication and would require a successful first publish within two days of the
+new binding. See <a href="https://docs.npmjs.com/trusted-publishers/">npm's trusted-publisher guidance</a>.</p>
+<p>Do not add deployment reviewers as a second release gate. The maintainer's tag
+push is the authorization to publish. Main's existing required Ubuntu/macOS and
+Linux isolation checks remain contributor safeguards; use pull requests for
+source changes and do not bypass branch protection.</p>
+<h2 id="cutting-a-release">Cutting a release</h2>
+<p>Before tagging:</p>
+<ol>
+<li>Run the checks below, including the pinned dependency build with <code>GOWORK=off</code>.</li>
+<li>Move the changelog's <code>[Unreleased]</code> changes into the version/date section and
+create a new empty <code>[Unreleased]</code> section. Update <code>build/npm/package.json</code>
+to the intended version.</li>
+<li>Update the companion Skill version and loaded handshake if its content changed.
+Refresh generated docs and relevant README/site version references.</li>
+<li>Commit the reviewed changes and merge the pull request after required checks.</li>
+<li>From that clean commit, create and push the intended semantic-version tag.
+Do not create a tag merely to exercise a test.</li>
+</ol>
+<p>For example, after preparing version <code>0.1.1</code>:</p>
+<pre><code class="language-sh">git tag v0.1.1
+git push origin v0.1.1
+</code></pre>
+<p>The workflow uses the same sequence as WeCom Calendar and the other sibling CLIs:</p>
+<ol>
+<li>Check out the complete history and install the Go version from <code>go.mod</code>.</li>
+<li>Run <code>go test ./...</code>.</li>
+<li>Run <code>make cross</code>, which invokes <code>scripts/build.sh</code> and injects the Git version,
+commit and build time into each native binary.</li>
+<li>Write SHA-256 checksums for the binaries in <code>dist/</code>.</li>
+<li>Create the GitHub Release with generated notes, or refresh its assets on rerun.</li>
+<li>Install Node 24, set the npm version from the tag without <code>v</code>, and run
+<code>npm publish --access public</code> unless that exact version already exists.</li>
+</ol>
+<p>No custom Python publisher, release manifest, staged-package approval, or
+immediate post-publish confirmation loop participates in this workflow. npm
+trusted publishing authenticates automatically; routine releases do not need
+another npm login or two-factor challenge.</p>
+<p>The <code>go.mod</code> toolchain directive retains the compiler verified for the first
+release when adopting the family's <code>go-version-file</code> setup. Update that toolchain
+alongside vulnerability checks; the source language minimum remains Go 1.25.</p>
+<h2 id="validation">Validation</h2>
+<pre><code class="language-sh">GOWORK=off make lint test e2e build docs-check site-check
 npm test --prefix build/npm
 make release-tests
-go test -race ./...
+GOWORK=off go test -race ./...
 make vuln
-GOWORK=off make test
-make package
-make isolation-check
-make release-check
+make cross isolation-check
 </code></pre>
-<p><code>make package</code> cross-compiles Linux/macOS on amd64/arm64, injects version/commit/
-build metadata, packs npm without installation scripts, then hashes all five
-assets into <code>dist/checksums.txt</code> and <code>release-manifest.json</code>. The build timestamp
-defaults to the source commit timestamp so rebuilding with the same toolchains
-does not introduce a new clock value. Toolchain changes can still change bytes.
-<code>release-check</code> verifies the exact platform/asset set, HEAD commit, clean Go build
-provenance, native version/commit, checksums, sizes and npm contents against the
-reviewed source. It does not contact a registry or publish. Rebuild after a source
-commit; stale or dirty-source binaries are rejected.</p>
-<p><code>make release-tests</code> exercises malformed, missing, stale, tampered and unsafe
-release material plus retry decisions. <code>make isolation-check</code> runs the Linux
-binary in a disposable Docker container with synthetic credentials, distinct
-service/worker UIDs, separate channel groups, a read-only root and no network.
-Only the executable and fixture are mounted, read-only; no host credentials or
-Docker socket are exposed. The fixture supervisor has only the capabilities
-needed to set up identities and terminate children; worker capabilities are zero.
-This verifies the reference permission boundary, not every production host.</p>
-<p>The npm installer follows the family's binary-wrapper architecture. It deliberately
-requires one valid matching checksum, bounds HTTPS downloads and writes atomically.
-The runtime launcher does not download code. This strengthens the older sibling
-installer pattern that can skip an unavailable checksum; those repositories are
-outside this change's write scope.</p>
-<p>The older sibling release workflows also use wall-clock build timestamps and
-asset replacement on retries. This project now rejects replacement and uses a
-stable source timestamp; that release-hardening difference is intentional here.
-No sibling repositories were modified.</p>
-<h2 id="verification-recorded-on-2026-10-26">Verification recorded on 2026-10-26</h2>
+<p><code>make release-tests</code> executes the actual workflow shell steps with local <code>gh</code>,
+<code>npm</code> and compiler substitutes. It checks Git tag version injection, fresh and
+existing release paths, npm duplicate skipping, failure propagation, checksums
+and the supported platform set without contacting publishing services.</p>
+<p>CI retains the connector's protocol, CLI-process, race, vulnerability, generated
+site and distinct-user Linux isolation checks. These are domain validation, not
+additional release approvals. The installer continues to reject missing or
+mismatched checksums and never downloads code implicitly during an agent command.</p>
+<h2 id="retry-and-artifact-contract">Retry and artifact contract</h2>
+<p>The family workflow supports reruns after partial failure. It refreshes GitHub
+assets using <code>gh release upload --clobber</code> and skips an npm version that is already
+on the registry. This means a rerun may replace native assets; inspect the cause
+and intended source before rerunning. Do not move an already published tag.
+An npm name/version cannot be overwritten. Inspect registry state before deciding
+whether a failed npm step needs another attempt.</p>
+<p>The installer depends on these stable names:</p>
+<pre><code class="language-text">wecom-channel-cli-darwin-amd64
+wecom-channel-cli-darwin-arm64
+wecom-channel-cli-linux-amd64
+wecom-channel-cli-linux-arm64
+checksums.txt
+</code></pre>
+<p>Download pattern:
+<code>https://github.com/AngelMsger/wecom-channel-cli/releases/download/v&lt;version&gt;/&lt;asset&gt;</code>.
+The broker requires Unix sockets, so Windows is not an advertised target. The
+initial <code>v0.1.0</code> release additionally contains its historical npm archive and
+manifest; those seven existing assets and that tag are unchanged. Later tags use
+the family artifact set above.</p>
+<h2 id="family-comparison">Family comparison</h2>
+<p>The comparison was made against all seven maintained CLI workflows. This task
+changes only WeCom Channel CLI; it does not modify sibling checkouts or the kit.</p>
 <table>
 <thead>
 <tr>
-<th>Check</th>
-<th>Evidence and status</th>
+<th>Sibling</th>
+<th>Applicable release pattern</th>
+<th>Alignment</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Live authentication and channel discovery</td>
-<td>Passed with a dedicated test bot; one channel</td>
+<td>Bitbucket CLI</td>
+<td>Tag, unit tests, cross-build, checksums, GitHub Release, npm OIDC</td>
+<td>Same pipeline</td>
 </tr>
 <tr>
-<td>Live polling baseline, whole channel and selected thread</td>
-<td>Passed; four whole-channel and three selected-thread observations</td>
+<td>Confluence CLI</td>
+<td>Same family template</td>
+<td>Same pipeline</td>
 </tr>
 <tr>
-<td>Live checkpoint resume, unrelated-post filtering and trust envelope</td>
-<td>Passed; no public listener and no messages sent by the test</td>
+<td>Jenkins CLI</td>
+<td>Same family template</td>
+<td>Same pipeline</td>
 </tr>
 <tr>
-<td>Linux reference isolation</td>
-<td>Passed 19 synthetic checks, including own/cross-context sockets, operator access, files, environment, escalation and network denial</td>
+<td>Jira CLI</td>
+<td>Same family template</td>
+<td>Same pipeline</td>
 </tr>
 <tr>
-<td>Actual production deployment</td>
-<td>Operator-specific; not attested by the local/container checks</td>
+<td>OpenObserve CLI</td>
+<td>Same family template</td>
+<td>Same pipeline</td>
 </tr>
 <tr>
-<td>Live operator-approved reply</td>
-<td>Not run; requires a reviewed destination and exact content</td>
+<td>Prometheus CLI</td>
+<td>Same pipeline, plus duplicate-publication error recognition</td>
+<td>Common template retained; that extra recovery branch is not shared by the other six</td>
 </tr>
 <tr>
-<td>Live native emoji add/remove</td>
-<td>Not run; wire, permission, membership, restart and CLI-process checks passed against synthetic APIs</td>
+<td>WeCom Calendar CLI</td>
+<td>Same family template and build script</td>
+<td>Direct implementation reference; only supported platform targets differ</td>
 </tr>
 <tr>
-<td>Live URL callback delivery</td>
-<td>Not run; optional transport, not required for polling deployment</td>
-</tr>
-<tr>
-<td>Publication infrastructure</td>
-<td>Canonical repository/origin configured; Pages uses Actions with HTTPS and main-only deployments; the release environment requires AngelMsger review for v* tags. Version 0.1.0 was published on 2026-10-27</td>
+<td>Agent CLI Kit</td>
+<td>Owner-tagged Go module; no npm release workflow</td>
+<td>No change needed</td>
 </tr>
 </tbody>
 </table>
-<h3 id="publication-verification-on-2026-10-27">Publication verification on 2026-10-27</h3>
-<p>All seven GitHub assets retain their original verified digests. The npm tarball
-matches the CI archive (SHA-256
-<code>581de5c206b935e6f511c0b226f663b35f5b14c4ef5dec4f5e7ba67c0e194439</code>).
-<code>npm audit signatures</code> verified its registry signature and attestation. The SLSA
-statement names the reviewed commit, <code>refs/tags/v0.1.0</code>, <code>release.yml</code> and
+<p>The environment identity described above does not add a step or an approval.
+The stronger checksum installer and the connector's Unix-only platform boundary
+remain product-specific requirements.</p>
+<h2 id="first-release-evidence">First-release evidence</h2>
+<p>Version <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.4</strong>, was published on 2026-10-27
+from <code>3a65bf9</code> on <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">npm</a>
+and <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub Releases</a>.
+The <a href="https://angelmsger.github.io/wecom-channel-cli/">documentation site</a> is live.</p>
+<p>The npm archive matches its original CI asset, SHA-256
+<code>581de5c206b935e6f511c0b226f663b35f5b14c4ef5dec4f5e7ba67c0e194439</code>.
+<code>npm audit signatures</code> verified the registry signature and attestation. Provenance
+names the reviewed commit, <code>refs/tags/v0.1.0</code>, <code>release.yml</code> and
 <a href="https://github.com/AngelMsger/wecom-channel-cli/actions/runs/40361741630/attempts/3">release attempt 3</a>.
-A fresh macOS arm64 npm installation downloaded the checksum-matching binary,
-reported version <code>0.1.0</code> / commit <code>3a65bf9</code>, and returned all 115 reaction types.
-This establishes the installed CLI path, not live WeCom writes or every native platform.</p>
-<p>That workflow attempt reports failure because its immediate post-publish read
-did not yet expose the successful publication. Independent registry, signature,
-provenance and installation checks reconciled the result without publishing again.
-The bounded confirmation fix is on main for future releases; the original tag and
-release assets remain unchanged.</p>
-<p>Main requires the GitHub Actions checks <code>test (ubuntu-latest)</code>,
-<code>test (macos-latest)</code> and <code>isolation</code>, with an up-to-date branch and resolved review
-conversations. These requirements also apply to administrators; force pushes and
-deletion are disabled. Use a feature branch and pull request for subsequent work.</p>
-<h2 id="publication-prerequisites">Publication prerequisites</h2>
-<ol>
-<li>Review the source changes. Confirm the
-proposed repository/package names and that the owner will publish under them.</li>
-<li>Verify an eligible WeCom bot in a designated test channel: channel access,
-polling baseline/change detection, selected-thread filtering and resume;
-also verify the authenticated URL challenge for optional callbacks. Test
-one explicitly approved reply, replay rejection,
-and actual worker denial of operator sockets/state/credentials. Offline tests
-do not prove tenant rollout or OS deployment. Prefer a dedicated test bot when
-the existing bot serves another integration; follow the
-<a href="research.html#coexistence-with-an-existing-official-cli">coexistence checks</a>.
-The worker must also lack access to other authenticated WeCom tools or sessions.</li>
-<li>Push reviewed commits to the approved canonical repository,
-<code>AngelMsger/wecom-channel-cli</code>. The local origin uses HTTPS authentication
-delegated to the existing GitHub CLI login; no credential is stored in the repository.</li>
-<li>Pages is configured with source <strong>GitHub Actions</strong>, HTTPS enforcement and the
-<code>github-pages</code> environment restricted to <code>main</code>. The workflow uploads only <code>docs/</code>;
-it checks generated material and local links before deploying. All site assets
-are local; no external font/CDN/runtime service is required.</li>
-<li>Configure the npm package's trusted publisher for the repository and
-<code>release.yml</code>, with the <code>release</code> environment and permission for direct <code>npm publish</code>. Verify npm account/
-organization rights and the registry's first-publication bootstrap process.
-Do not assume OIDC creates a new package or account authorization automatically.
-New trusted-publisher configurations must complete their first publication
-within two days; configure this close to the approved release. See the
-<a href="https://docs.npmjs.com/trusted-publishers/">official npm guidance</a>.
-When staging is used to initialize a new package, retain a separate temporary
-staged version until the real version is published and verified. Do not stage
-the intended release version merely to reserve the package: staged versions
-occupy their version slot. During the first release, rejecting the only stage
-before publication removed the package's trusted-publisher configuration.
-Reconcile the real version and trust before rejecting the temporary stage;
-never approve a bootstrap-only package as a product release.</li>
-<li>The protected GitHub <strong>release</strong> environment requires <code>AngelMsger</code> review and
-permits only <code>v*</code> tags. Self-review remains available for the sole maintainer;
-the workflow never approves its own deployment. Review the final changelog and
-release notes. Create the release tag only after
-that review. The workflow is tag-driven and never tags source itself.</li>
-</ol>
-<pre><code class="language-sh">python3 scripts/release-check.py --publish
-</code></pre>
-<p>This stricter gate requires committed, clean source, the canonical origin, and
-an exact owner-approved <code>v0.1.0</code> tag on HEAD. It is expected to fail during local
-candidate review. It does not substitute for npm/Pages permissions or live checks.</p>
-<p>The vulnerability scanner uses the Go 1.26+ toolchain (automatic toolchain
-selection is supported). CI and release builds use the current stable Go release;
-the source minimum remains Go 1.25.</p>
-<h2 id="publishing-behavior">Publishing behavior</h2>
-<p>The release workflow reruns tests, builds/verifies assets and runs the container
-isolation fixture. <code>scripts/publish-release.py --apply</code> then verifies that the
-remote tag resolves to the reviewed commit. It creates a draft release, uploads
-only missing assets, verifies all remote SHA-256 digests, and publishes the draft.
-Existing mismatched, duplicate or unverified assets stop the workflow; it never
-uses <code>--clobber</code>. A network/auth error is not treated as an absent release.
-Drafts are resolved with <code>gh release view</code> to a database ID and verified through
-the release-ID API. The REST published-release-by-tag endpoint does not return
-drafts and must not be used to check uploaded draft assets or recover a retry.</p>
-<p>The same verified npm tarball is published with provenance and trusted publishing.
-An existing npm version is accepted only when its registry SHA-512 integrity
-matches that archive. After npm reports success, confirmation makes at most seven
-fresh reads with 125 seconds of total backoff and a 20-second npm fetch timeout
-per read. Only missing versions are retried; conflicts, malformed responses and
-authentication/network failures stop immediately. Publication itself is never
-retried by this confirmation loop. Safe npm error codes are preserved without
-printing credential-bearing command output.
-If npm publication fails after GitHub succeeds, retain the release and reconcile
-that exact npm version before retrying. Do not overwrite assets or bump the version
-merely to recover. Reuse the original toolchains when rebuilding for a retry.</p>
-<p>Check GitHub asset checksums, npm metadata/provenance and a clean-machine launch
-on each intended native platform. Cross-builds establish compilation, not native
-permission or signal behavior. Pages deploys on reviewed pushes to <code>main</code> or a
-manual workflow dispatch.</p>
-<h2 id="upgrade-contract">Upgrade contract</h2>
-<p>Upgrade the CLI, run <code>skill install</code> (use <code>--overwrite</code> only after reviewing
-changed installed content), then reload the agent context. <code>skill status</code> compares
-loaded, installed and embedded versions. The agent-side CLI does not run automatic
-release network checks, preserving offline socket-only operation. This is an
-intentional domain difference from the network-facing sibling clients.</p>
+A clean macOS arm64 npm installation matched the native checksum, reported
+<code>0.1.0</code> / <code>3a65bf9</code> and returned all 115 reaction types.</p>
+<p>That historical workflow reports failure because its immediate post-publish read
+had not yet exposed the successful publication. Independent registry, signature,
+provenance and installation checks reconciled it without republishing. The custom
+confirmation path has since been replaced by the family release workflow.</p>
+<p>Live authentication, channel discovery, whole-channel and selected-thread polling,
+filtering and checkpoint resume passed in one test tenant. All 19 synthetic Linux
+isolation checks passed. Live text/reaction writes, optional URL callbacks and the
+actual production deployment remain unverified. Publication does not attest those
+operator-specific conditions; see <a href="security.html">security and deployment</a>.</p>
+<h2 id="upgrade-and-documentation">Upgrade and documentation</h2>
+<p>After upgrading the CLI, install the matching companion Skill and reload the
+agent context. <code>skill status</code> detects loaded/installed/embedded version drift.
+The credential-free agent CLI performs no automatic release network lookup.</p>
+<p>Pages deploys <code>docs/</code> on main through GitHub Actions. Regenerate narrative HTML
+and command reference with <code>make docs</code>, and keep Markdown canonical.</p>
 </article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

@@ -24,21 +24,16 @@ prove concurrent compatibility. Follow docs/research.md for live coexistence
 checks, and include alternate authenticated tools in worker isolation checks.
 
 Keep the npm installer fail-closed on missing/mismatched checksums; no implicit
-network download belongs in an agent command. Update the release manifest and
-version/Skill handshakes together, and preserve the owner-controlled publish gate.
-Release preflight must verify the exact platform set, source commit, clean Go
-build provenance, checksum manifest and npm archive contents. Never overwrite
-published assets on a retry: reconcile their digests, upload only missing assets,
-and publish the already-verified npm tarball. Exercise the release guard tests
-and synthetic Linux UID/group isolation fixture before the first release.
-Resolve draft releases to their database ID with gh release view, then read
-assets through the release-ID endpoint. GitHub's published-release-by-tag route
-must not be used to verify or resume draft uploads.
-After npm reports success, allow bounded read-only registry propagation checks;
-never retry publication in that loop or accept a mismatched integrity. Public
-diagnostics may retain npm error codes, not raw authentication output. Keep a
-first-publication bootstrap stage until a real version and its provenance are
-verified; rejecting the last stage before publication can remove package trust.
+network download belongs in an agent command. Follow the sibling CLI release
+pipeline in `.github/workflows/release.yml`: a pushed `v*` tag authorizes testing,
+cross-compilation, checksums, GitHub Release and npm OIDC publication automatically.
+Do not add a custom publisher or a separate human approval step. The `release`
+environment is retained solely for the existing npm OIDC identity and must have
+no required reviewers or wait timer. Binary metadata comes from Git tags through
+Makefile and scripts/build.sh; npm uses the tag without its leading `v`.
+Keep artifact names stable. The family workflow refreshes GitHub assets on a
+rerun and skips an npm version already present. Test release commands against
+local substitutes; never publish a version merely to test the workflow.
 
 Watching is observation, not authorization: observe_all may admit post/reply
 changes from bots and humans, but cannot widen human mention eligibility. Watches
@@ -90,11 +85,12 @@ Designed for humans." Keep it prominent in the hero and README overview.
 
 The website is a static GitHub Pages site in `docs/`; regenerate narrative
 HTML and command reference with `make docs`. Keep source Markdown canonical.
-Do not deploy, push a tag or publish npm until the owner reviews the candidate.
+Do not create or push release tags unless the owner requests a release.
+The owner's version-tag push is the publication authorization.
 The initial GitHub push is complete. Main now requires the Ubuntu/macOS test and
 Linux isolation checks, including for administrators; use a branch and pull request
 for subsequent changes. Do not bypass protection or force-update main to recover
-from failed checks. Release environment approval remains a separate human action.
+from failed checks. Publication must not wait for a separate environment approval.
 
 Run `make lint test e2e build docs-check site-check` and `npm test --prefix build/npm`. Run `make vuln` before release; update a
 vulnerable dependency and regenerate affected docs/artifacts before claiming readiness. Also test with `GOWORK=off` before
