@@ -2,7 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- `pkg/apiclient` exports `Reader` and `Writer`; `Client` is now their union,
+  with the same method set and signatures as before.
+
 ### Changed
+
+- The broker's read-only API wrapper keeps the inner client only as a `Reader`
+  and blocks each `Writer` method itself, so a write added without a blocking
+  override fails to compile instead of reaching WeCom from a read-only broker.
+  No CLI behavior, output or error changes.
 
 - Align release automation with the sibling CLIs: push a version tag to run unit
   tests, cross-compile, checksum binaries, create or refresh the GitHub Release,

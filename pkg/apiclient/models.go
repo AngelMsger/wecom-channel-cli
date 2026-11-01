@@ -83,8 +83,28 @@ type SendResult struct {
 	Kind string `json:"kind"`
 }
 
+// Client is the WeCom channel API surface the broker uses. It is the union of
+// Reader and Writer, so every method is classified as one or the other;
+// NewReadOnly relies on that split.
 type Client interface {
+	Reader
+	Writer
+}
+
+// Reader is the part of Client that never changes channel content: the
+// documented read operations (BuildRead), all of which are observation even
+// though the protocol sends them as POST. The read-only wrapper delegates
+// exactly this interface, so a method that can post, reply or react must never
+// be declared here.
+type Reader interface {
 	Read(context.Context, Query) (Page, error)
+}
+
+// Writer is the part of Client that changes channel content: posts, replies
+// and native reactions (BuildWrite). The read-only wrapper (NewReadOnly) blocks
+// each method explicitly, so adding one here without its blocking override
+// fails compilation.
+type Writer interface {
 	Send(context.Context, WriteRequest) (SendResult, error)
 }
 
@@ -135,9 +155,19 @@ func Digest(v any) string {
 	return hex.EncodeToString(h[:])
 }
 
-type readOnly struct{ Client }
+// readOnly is the broker's read-only enforcement layer, behind the broker's own
+// policy check. It keeps the inner client only as a Reader, so reads are
+// delegated unchanged and no write can reach it. Every Writer method is
+// overridden below to return READONLY_BLOCKED; the assertion that follows stops
+// compilation when a new Writer method lacks its override.
+type readOnly struct{ Reader }
 
+var _ Client = (*readOnly)(nil)
+
+// NewReadOnly wraps c so that every write returns READONLY_BLOCKED before any
+// request is sent; reads pass straight through.
 func NewReadOnly(c Client) Client { return &readOnly{c} }
+
 func (*readOnly) Send(context.Context, WriteRequest) (SendResult, error) {
 	return SendResult{}, e.New(e.CategoryPermission, "READONLY_BLOCKED", "The broker is read-only.").WithHint("Only the operator can change the broker's read-only policy.")
 }

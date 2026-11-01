@@ -216,7 +216,13 @@ and cross-ledger exactly-once delivery are not claimed.
   outbound control/bidi characters and unsupported inline placeholders are
   rejected. Files and mentions are not resolved from Markdown.
 - Broker read-only defaults to true. Changing it requires operator policy and
-  restart; an agent's local session override cannot weaken it.
+  restart; an agent's local session override cannot weaken it. A read-only
+  broker refuses approval execution itself and also wraps its API client with
+  `apiclient.NewReadOnly`. `Client` is the union of `Reader` and `Writer`, and
+  the wrapper keeps the inner client only as a `Reader`, so a `Writer` method
+  without a blocking override fails to compile rather than reaching WeCom.
+  Unit tests check the wrapper's blocked-write and delegated-read tables
+  against both method sets.
 
 ## Family applicability
 
