@@ -187,7 +187,7 @@ broker refuses approval execution itself and also wraps its API client with
 the wrapper keeps the inner client only as a <code>Reader</code>, so a <code>Writer</code> method
 without a blocking override fails to compile rather than reaching WeCom.
 Unit tests check the wrapper's blocked-write and delegated-read tables
-against both method sets.</li>
+against both method sets, and that a read-only broker installs the wrapper.</li>
 </ul>
 <h2 id="family-applicability">Family applicability</h2>
 <p>All seven maintained siblings were inspected before implementation. The common

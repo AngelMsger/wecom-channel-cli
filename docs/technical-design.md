@@ -222,7 +222,7 @@ and cross-ledger exactly-once delivery are not claimed.
   the wrapper keeps the inner client only as a `Reader`, so a `Writer` method
   without a blocking override fails to compile rather than reaching WeCom.
   Unit tests check the wrapper's blocked-write and delegated-read tables
-  against both method sets.
+  against both method sets, and that a read-only broker installs the wrapper.
 
 ## Family applicability
 
