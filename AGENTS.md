@@ -13,6 +13,12 @@ Validate directory ownership and permissions through every ancestor, not only
 the leaf file; keep these checks in `internal/securefs` and test symlink and
 writable-parent rejection.
 
+`apiclient.Client` is the union of `Reader` (observation, even when the protocol
+sends it as POST) and `Writer` (anything that posts, replies or reacts). A new
+write goes on `Writer` with a blocking override on the read-only wrapper in
+`pkg/apiclient/models.go`; the build fails until it has one. A new read goes on
+`Reader`, and the delegation test in `readonly_test.go` fails until it covers it.
+
 Use agent-cli-kit for errors, rendering, argv normalization and transport.
 Policy and durable event/proposal state are channel-specific, not replacements
 for the family's configuration or credential libraries. Credentials are supplied

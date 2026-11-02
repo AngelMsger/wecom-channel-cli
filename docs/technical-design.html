@@ -181,7 +181,13 @@ retained without automatic pruning. Full storage rejects new work.</li>
 outbound control/bidi characters and unsupported inline placeholders are
 rejected. Files and mentions are not resolved from Markdown.</li>
 <li>Broker read-only defaults to true. Changing it requires operator policy and
-restart; an agent's local session override cannot weaken it.</li>
+restart; an agent's local session override cannot weaken it. A read-only
+broker refuses approval execution itself and also wraps its API client with
+<code>apiclient.NewReadOnly</code>. <code>Client</code> is the union of <code>Reader</code> and <code>Writer</code>, and
+the wrapper keeps the inner client only as a <code>Reader</code>, so a <code>Writer</code> method
+without a blocking override fails to compile rather than reaching WeCom.
+Unit tests check the wrapper's blocked-write and delegated-read tables
+against both method sets, and that a read-only broker installs the wrapper.</li>
 </ul>
 <h2 id="family-applicability">Family applicability</h2>
 <p>All seven maintained siblings were inspected before implementation. The common

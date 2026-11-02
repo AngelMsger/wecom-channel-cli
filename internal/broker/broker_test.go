@@ -110,6 +110,31 @@ func assertCode(t *testing.T, err error, code string) {
 	}
 }
 
+// TestReadOnlyBrokerWrapsItsAPI: a read-only broker refuses approvals itself
+// (the first gate) and also wraps its API client (the second), so a write that
+// got past the policy check still cannot reach WeCom. A writable broker keeps
+// the client it was given.
+func TestReadOnlyBrokerWrapsItsAPI(t *testing.T) {
+	write := apiclient.WriteRequest{Kind: "post", Channel: "channel-a", Content: "x", Key: "k"}
+	for _, readOnly := range []bool{true, false} {
+		cfg := config.Default()
+		cfg.ReadOnly = readOnly
+		api := &fakeAPI{}
+		b := New(cfg, nil, api, nil)
+		_, err := b.API.Send(context.Background(), write)
+		if readOnly {
+			assertCode(t, err, "READONLY_BLOCKED")
+			if api.sends != 0 {
+				t.Fatal("a read-only broker's API client forwarded a write")
+			}
+			continue
+		}
+		if err != nil || api.sends != 1 {
+			t.Fatalf("a writable broker's API client did not forward the write: %v, %d sends", err, api.sends)
+		}
+	}
+}
+
 func TestPolicyAndAgentCannotApprove(t *testing.T) {
 	b, api := fixture(t)
 	p := proposal(t, b)
