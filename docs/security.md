@@ -29,6 +29,17 @@ identities for mutually distrusting workers, as described in [contexts](contexts
 The broker process is trusted across its contexts; isolate deployments by bot
 and service identity when that is not acceptable. This is not a multi-replica service.
 
+## Discovery during operator setup
+
+Before a channel policy exists, the trusted operator can run `broker discover`
+with a bot ID and `WECOM_CHANNEL_BOT_SECRET`. This short-lived broker command
+uses the same pinned HTTPS client and curated output as the service to enumerate
+one page of joined channels. It does not create a listener, ledger, policy or
+client configuration, save credentials, or add an agent-socket operation.
+The Secret and temporary token remain in the operator process. Keep that process
+and its environment inaccessible to the worker, exactly as for `broker serve`.
+Channel names remain untrusted data; selecting an ID is not an authorization grant.
+
 ## Enforced controls
 
 | Threat | Implemented control | Limit |
@@ -40,7 +51,7 @@ and service identity when that is not acceptable. This is not a multi-replica se
 | Self-approval | Separate listener-bound authority; private operator socket; no request field or flag grants it | Same-user development runs do not isolate the sockets from that user |
 | Changed draft or destination | Immutable request and SHA-256 digest; exact event-to-channel/post/reply binding; short expiry; policy digest recheck | A digest is not authentication; only operator socket access grants approval |
 | Duplicate sends | Persist `sending` before I/O; terminal states reject replay; same-key submissions are idempotent | No documented remote idempotency key; operator-driven duplicates remain possible |
-| Credential exfiltration | Secret environment only in broker; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned | A compromised broker OS account or host root remains trusted |
+| Credential exfiltration | Secret environment only in operator broker commands; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned | A compromised broker OS account or host root remains trusted |
 | Filesystem/SSRF abuse | No remote file-path operations, shell commands, URL following, media fetch/upload, or arbitrary API method | Markdown links remain untrusted text, not approved network destinations |
 | Resource exhaustion | Request/response sizes, JSON depth, page sizes, timeouts, concurrency, rate budgets, retention and ledger capacity | Volumetric attacks need reverse-proxy/network controls; authenticated users can consume permitted capacity |
 | Terminal/UI spoofing | JSON escaping; no table/raw output or removable trust fields; outbound control/bidi overrides rejected | Review untrusted inbound text without rendering Markdown, links or terminal escapes |

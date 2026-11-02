@@ -5,6 +5,20 @@ socket, policy, event inbox, proposal ledger and checkpoints. The client uses
 named contexts through the same `agent-cli-kit/config` engine as the other CLIs.
 Context names select connections; Unix permissions and server policy enforce access.
 
+## Discover before configuring
+
+For first-time setup, the trusted operator supplies the bot Secret through
+`WECOM_CHANNEL_BOT_SECRET` and runs `wecom-channel-cli broker discover --bot-id BOT_ID`.
+No channel ID, policy, sockets or client context is needed. Match `data.topic_name`
+and retain `data.topic_id`; continue with `--cursor` when `has_more` is true.
+Do not ask users to find a channel ID in the WeCom client. Configure the broker
+policy from the selected IDs before saving the client contexts below. See the
+[operator setup guide](../README.md#operator-setup) for the complete sequence.
+
+An already running broker also supports discovery via `channel list` on its
+private operator socket. An agent's `channel list` remains restricted to its
+configured channel. Discovery never grants permission or edits existing contexts.
+
 ## Client configuration
 
 The default file is `~/.angelmsger/wecom-channel/config.yaml`. Override its

@@ -14,7 +14,7 @@ Usage:
 Available Commands:
   approval    Operator-only review and execution; requires the private operator socket
   auth        Explain credential ownership and verify through the broker
-  broker      Run the isolated credential-holding broker
+  broker      Discover channels and run the isolated credential-holding broker
   channel     Inspect channel data through broker policy
   config      Inspect operator policy offline
   doctor      Check broker connectivity and read-only policy
@@ -235,7 +235,7 @@ Global Flags:
 
 ## wecom-channel-cli broker
 
-Run the isolated credential-holding broker
+Discover channels and run the isolated credential-holding broker
 
 ```text
 Usage:
@@ -243,6 +243,7 @@ Usage:
   wecom-channel-cli broker [command]
 
 Available Commands:
+  discover    Operator-only: discover joined channels from bot credentials before configuring a broker
   serve       Serve agent/operator Unix sockets and optional encrypted callbacks
 
 Global Flags:
@@ -254,6 +255,34 @@ Global Flags:
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 
 Use "wecom-channel-cli broker [command] --help" for more information about a command.
+```
+
+## wecom-channel-cli broker discover
+
+Operator-only: discover joined channels from bot credentials before configuring a broker
+
+```text
+Usage:
+  wecom-channel-cli broker discover [flags]
+
+Examples:
+  wecom-channel-cli broker discover --bot-id BOT_ID
+  wecom-channel-cli broker discover --bot-id BOT_ID --cursor NEXT_CURSOR
+  wecom-channel-cli broker discover --bot-id BOT_ID --dry-run
+
+Flags:
+      --bot-id string   Bot ID (or WECOM_CHANNEL_BOT_ID); independent of client contexts
+      --cursor string   Continuation cursor from the previous discovery page
+      --dry-run         Preview the channel request without credentials, network or local writes
+      --limit int       Maximum channels in this page (1–50) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 ```
 
 ## wecom-channel-cli broker serve
@@ -332,7 +361,7 @@ Usage:
 
 Available Commands:
   delete-context delete-context in the client configuration
-  example        Print a deny-by-default operator policy template
+  example        Print an operator policy template; discover channel IDs with broker discover first
   get-contexts   List named channel security contexts
   path           Show the client configuration path
   set-context    Prepare an offline channel context without credentials or changing broker policy
@@ -373,11 +402,15 @@ Global Flags:
 
 ## wecom-channel-cli config example
 
-Print a deny-by-default operator policy template
+Print an operator policy template; discover channel IDs with broker discover first
 
 ```text
 Usage:
   wecom-channel-cli config example [flags]
+
+Flags:
+      --bot-id string    Verified bot ID to insert into the template
+      --channel string   Channel data.topic_id from broker discover
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -436,7 +469,7 @@ Usage:
 Flags:
       --activate         Make this context current
       --bot-id string    Expected broker bot ID
-      --channel string   Expected channel ID
+      --channel string   Expected channel ID from broker discover (operator setup) or channel list
       --dry-run          Preview the exact context merge without writing
       --overwrite        Replace conflicting public context coordinates
       --socket string    Agent socket for this channel context

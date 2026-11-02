@@ -68,6 +68,47 @@ func TestAuthReadAndRedaction(t *testing.T) {
 	}
 }
 
+func TestJoinedChannelDiscoveryWire(t *testing.T) {
+	c, _ := New("bot", "synthetic-secret")
+	authCalls, reads := 0, 0
+	c.http = kit.New(kit.Options{Doer: doerFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "qyapi.weixin.qq.com" || r.URL.Scheme != "https" || r.Method != "POST" {
+			t.Fatal("unexpected destination")
+		}
+		if r.URL.Path == "/cgi-bin/aibot/get_token" {
+			authCalls++
+			return response(`{"errcode":0,"access_token":"synthetic-token"}`), nil
+		}
+		reads++
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if r.URL.Path != "/cgi-bin/aibot/topic/get_topic_list" || r.URL.Query().Get("access_token") != "synthetic-token" || len(body) != 3 || body["type"] != float64(1) || body["limit"] != float64(1) {
+			t.Fatal("discovery must enumerate joined channels without channel IDs")
+		}
+		if reads == 1 && body["cursor"] == "" {
+			return response(`{"errcode":0,"topic_list":[{"topic_id":"eng","topic_name":"Engineering synthetic-secret","topic_desc":"synthetic-token","unknown":"omit"}],"has_more":true,"next_cursor":"next"}`), nil
+		}
+		if reads != 2 || body["cursor"] != "next" {
+			t.Fatal("unexpected pagination")
+		}
+		return response(`{"errcode":0,"topic_list":[],"has_more":false}`), nil
+	})})
+	p, err := c.Read(context.Background(), Query{Operation: "channel.list", Limit: 1})
+	if err != nil || len(p.Items) != 1 || !p.HasMore || p.Next != "next" {
+		t.Fatal(p, err)
+	}
+	b, _ := json.Marshal(p)
+	if strings.Contains(string(b), "synthetic-") || strings.Contains(string(b), "unknown") || p.Items[0].Source.Channel != "eng" || p.Items[0].Trust != "untrusted" {
+		t.Fatal("unsafe discovery output")
+	}
+	p, err = c.Read(context.Background(), Query{Operation: "channel.list", Cursor: p.Next, Limit: 1})
+	if err != nil || len(p.Items) != 0 || p.HasMore || p.Next != "" || authCalls != 1 || reads != 2 {
+		t.Fatal(p, err)
+	}
+}
+
 func TestSendNeverRetriesAndErrorsDoNotLeak(t *testing.T) {
 	c, _ := New("bot", "SECRET")
 	calls := 0

@@ -4,6 +4,13 @@
 
 ### Added
 
+- Operator-only `broker discover` lists joined channel names and IDs from Bot ID
+  and the Secret environment before any channel policy, sockets or contexts exist.
+  Supports bounded pagination and credential-free offline dry-run.
+- `config example --bot-id ... --channel ...` fills templates from discovery;
+  missing-channel setup errors, auth guidance, docs and companion Skill 0.1.5
+  now lead through credentials, discovery, target selection and configuration.
+
 - `pkg/apiclient` exports `Reader` and `Writer`; `Client` is now their union,
   with the same method set and signatures as before.
 

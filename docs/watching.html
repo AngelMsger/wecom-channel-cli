@@ -6,7 +6,10 @@ channel HTTP APIs: no public address, tunnel or callback keys are needed. Existi
 callback deployments retain their event intake. Watches never execute message
 instructions, launch an agent or approve a write.</p>
 <h2 id="operator-prerequisites">Operator prerequisites</h2>
-<p>For polling, supply the bot Secret to the broker and use a channel context with:</p>
+<p>For first-time setup, use the operator's Bot ID and Secret with <code>broker discover</code>
+to obtain <code>data.topic_id</code> before filling <code>CHANNEL_ID</code>; see
+<a href="guide.html#operator-setup">operator setup</a>. The WeCom client does not display it.
+For polling, supply the bot Secret to the broker and use a channel context with:</p>
 <pre><code class="language-json">{
   &quot;watch_backend&quot;: &quot;auto&quot;,
   &quot;poll_interval_seconds&quot;: 30,
