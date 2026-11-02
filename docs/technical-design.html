@@ -23,9 +23,9 @@ from <code>agent-cli-kit</code>.</p>
 <p>The executable itself has no supported arbitrary URL/method flag, external
 command hook, media downloader, remote path handler or credential export. The
 Go API client is a protocol library, not the OS security boundary: downstream
-library users must enforce their own policy. In this CLI, only broker commands
-construct that client and hold the Secret. <code>broker discover</code> is a short-lived
-operator bootstrap command; <code>broker serve</code> owns the long-running deployment.</p>
+library users must enforce their own policy. In this CLI, only operator entry points
+construct that client and hold the Secret: explicit <code>channel list --bot-id</code> for
+setup and <code>broker serve</code> for the long-running deployment.</p>
 <h2 id="authentication-and-callbacks">Authentication and callbacks</h2>
 <p>A deployment has one configured bot identity and receives its Secret through an
 operator-managed environment. It signs the documented token request with a
@@ -56,17 +56,22 @@ at most 24 hours old and at most five minutes in the future; mention reads and
 approvals are bounded by the event's 24-hour age. An event retained for audit
 does not extend WeCom's permission window.</p>
 <h2 id="credential-first-bootstrap">Credential-first bootstrap</h2>
-<p><code>broker discover</code> accepts a bot ID from its flag or <code>WECOM_CHANNEL_BOT_ID</code>, and
-reads the Secret only from the operator's <code>WECOM_CHANNEL_BOT_SECRET</code>. It invokes
-the existing <code>channel.list</code> reader (<code>get_topic_list</code>, type 1) before any channel
+<p><code>channel list</code> is the sole channel listing command. An explicit <code>--bot-id</code>
+selects the operator's <code>WECOM_CHANNEL_BOT_SECRET</code> environment for first-time setup.
+It invokes the existing <code>channel.list</code> reader (<code>get_topic_list</code>, type 1) before any channel
 policy, state directory, sockets or client contexts exist. The CLI deadline bounds
 token acquisition and the single page read together. Dry-run validates and builds
 the same query without reading credentials or performing I/O. Output retains the
 kit list envelope, pagination notices, curated channel model and trust metadata.
 Empty results carry membership/API-access recovery guidance, not an invented ID.</p>
-<p>Discovery does not load client configuration, select a saved context, persist
-credentials, change policy or expose a socket operation. It is restricted by the
-same operator credential/OS boundary as broker startup. The operator selects an
+<p>The explicit credential mode does not load client configuration, select a saved
+context, persist credentials, change policy or expose a new socket operation.
+Without <code>--bot-id</code>, the same command uses the existing broker path and enforces
+its agent/operator scope. Credentials in the environment never select direct
+access; failed or denied broker calls never fall back. Explicit socket/context
+flags conflict with <code>--bot-id</code>. Broker-mode dry-run resolves public connection
+coordinates offline and never calls the broker. Credential mode uses the same
+operator credential/OS boundary as broker startup. The operator selects an
 ID from the result, uses <code>config example --bot-id ... --channel ...</code> to fill the
 policy template, and provisions the deployment before configuring the client.
 Missing channel IDs in client setup point back to discovery. Existing client
@@ -280,7 +285,7 @@ for host isolation.</p>
 kit output/error conventions; their <code>config set-context</code> implementations remain
 offline. Bitbucket, Confluence, Jenkins, Jira, OpenObserve, Prometheus and WeCom
 Calendar authenticate directly to their own services and have no credential-held
-channel broker to bootstrap. Only this connector needs the operator command;
+channel broker to bootstrap. Only this connector needs the explicit credential mode for channel listing;
 no sibling or kit changes are required.</p>
 <p>Other deliberate differences:</p>
 <ul>

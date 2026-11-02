@@ -14,8 +14,7 @@ import (
 )
 
 func (s *appState) brokerCommands() *cobra.Command {
-	g := &cobra.Command{Use: "broker", Short: "Discover channels and run the isolated credential-holding broker"}
-	g.AddCommand(s.discoveryCommand(func(bot, secret string) (apiclient.Reader, error) { return apiclient.New(bot, secret) }))
+	g := &cobra.Command{Use: "broker", Short: "Run the isolated credential-holding broker"}
 	var path string
 	var dry bool
 	c := &cobra.Command{Use: "serve", Short: "Serve agent/operator Unix sockets and optional encrypted callbacks", Args: cobra.NoArgs}
@@ -79,7 +78,7 @@ func (s *appState) configCommands() *cobra.Command {
 	g := &cobra.Command{Use: "config", Short: "Inspect operator policy offline"}
 	var path string
 	var bot, channel string
-	example := &cobra.Command{Use: "example", Short: "Print an operator policy template; discover channel IDs with broker discover first", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	example := &cobra.Command{Use: "example", Short: "Print an operator policy template; discover channel IDs with channel list first", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		cfg := ExampleConfig()
 		if cmd.Flags().Changed("bot-id") {
 			if !apiclient.Identifier(bot, 256) {
@@ -89,14 +88,14 @@ func (s *appState) configCommands() *cobra.Command {
 		}
 		if cmd.Flags().Changed("channel") {
 			if !apiclient.Identifier(channel, 128) {
-				return e.New(e.CategoryUsage, "BAD_CHANNEL_ID", "Use a channel ID returned by broker discover.").WithNextSteps("wecom-channel-cli broker discover --help")
+				return e.New(e.CategoryUsage, "BAD_CHANNEL_ID", "Use a channel ID returned by channel list.").WithNextSteps("wecom-channel-cli channel list --help")
 			}
 			cfg.Channels[0].ID = channel
 		}
 		return s.emit(cmd, cfg)
 	}}
 	example.Flags().StringVar(&bot, "bot-id", "", "Verified bot ID to insert into the template")
-	example.Flags().StringVar(&channel, "channel", "", "Channel data.topic_id from broker discover")
+	example.Flags().StringVar(&channel, "channel", "", "Channel data.topic_id from channel list")
 	g.AddCommand(example)
 	c := &cobra.Command{Use: "validate", Short: "Strictly validate an operator policy file without credentials or I/O effects", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		deployment, err := config.LoadDeployment(path)
@@ -119,11 +118,11 @@ func (s *appState) authCommands() *cobra.Command {
 			"credential_owner": "isolated broker operator", "required_broker_environment": []string{"WECOM_CHANNEL_BOT_SECRET"},
 			"callback_environment": []string{"WECOM_CHANNEL_CALLBACK_TOKEN", "WECOM_CHANNEL_ENCODING_AES_KEY"},
 			"watch_setup":          "Polling needs read_all and observe_all with post/reply events enabled; leave callback_listen empty. Callback environment variables are optional and required only when a callback listener is configured.",
-			"credential_guide":     "Obtain the API-mode bot ID and Secret from WeCom bot administration. In a trusted operator session, supply --bot-id (or WECOM_CHANNEL_BOT_ID) and WECOM_CHANNEL_BOT_SECRET from your secret manager. No channel ID is needed for broker discover; never send the Secret through chat or argv.",
-			"channel_discovery":    "Run broker discover before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
+			"credential_guide":     "Obtain the API-mode bot ID and Secret from WeCom bot administration. In a trusted operator session, run channel list with --bot-id and supply WECOM_CHANNEL_BOT_SECRET through your secret manager. No channel ID is needed for channel list --bot-id; never send the Secret through chat or argv.",
+			"channel_discovery":    "Run channel list --bot-id BOT_ID before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
 			"official_cli_reuse":   map[string]any{"supported": false, "reason": "The official CLI uses get_cli_config and a gateway Bearer token. Channel get_token credentials are a separate contract; encrypted private stores are not an integration API."},
 			"documentation":        "https://developer.work.weixin.qq.com/document/path/101910",
-			"next_steps":           []string{"wecom-channel-cli broker discover --bot-id BOT_ID", "wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
+			"next_steps":           []string{"wecom-channel-cli channel list --bot-id BOT_ID", "wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
 		})
 	}})
 	g.AddCommand(&cobra.Command{Use: "status", Short: "Read broker readiness (does not verify WeCom authentication)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, broker.Request{Operation: "health"}) }})

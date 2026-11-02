@@ -9,7 +9,7 @@ instructions, launch an agent or approve a write.
 
 ## Operator prerequisites
 
-For first-time setup, use the operator's Bot ID and Secret with `broker discover`
+For first-time setup, use the operator's Bot ID and Secret with `channel list --bot-id BOT_ID`
 to obtain `data.topic_id` before filling `CHANNEL_ID`; see
 [operator setup](../README.md#operator-setup). The WeCom client does not display it.
 For polling, supply the bot Secret to the broker and use a channel context with:

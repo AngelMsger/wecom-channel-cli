@@ -22,13 +22,15 @@ write goes on `Writer` with a blocking override on the read-only wrapper in
 Use agent-cli-kit for errors, rendering, argv normalization and transport.
 Policy and durable event/proposal state are channel-specific, not replacements
 for the family's configuration or credential libraries. Credentials are supplied
-only to the broker by the operator; the agent has no login or secret export path.
+only to operator setup and the broker service; the agent has no login or secret export path.
 Do not read the official CLI's private credential files or reuse its gateway
 Bearer token as a channel access token.
-Initial setup must discover IDs before requiring them: operator-only
-`broker discover` uses Bot ID plus the broker Secret environment without a
-channel policy or running service. Keep it to the bounded channel reader, with
-no credential persistence or worker socket operation. Never direct users to
+Initial setup must discover IDs before requiring them. Keep one channel listing
+command: `channel list --bot-id ID` explicitly uses operator credentials before a
+policy or service exists; `channel list` otherwise uses the selected broker socket.
+Never select direct access from ambient credentials or after a broker failure.
+Reject explicit bot/socket/context conflicts. Keep credentials out of client
+contexts and do not add another discovery command or worker socket operation. Never direct users to
 copy channel IDs from the WeCom UI. Keep auth guidance, context errors, policy
 template flags and the companion Skill aligned with this bootstrap sequence.
 Preserve existing bot integrations during setup; separate token endpoints do not

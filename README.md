@@ -56,8 +56,8 @@ amd64/arm64 executables; cross-compilation is not native runtime verification.
 
 ## Operator setup
 
-`broker discover` and the template flags below are unreleased; build from source
-until the next CLI release.
+The `channel list --bot-id` mode and template flags below are unreleased; build
+from source until the next CLI release.
 
 Start with the API-mode bot's **Bot ID and Secret**, not a channel ID. The WeCom
 client does not display channel IDs. In a trusted operator session, have your
@@ -65,10 +65,11 @@ secret manager supply `WECOM_CHANNEL_BOT_SECRET`, then discover the bot's joined
 channels before creating policy, sockets or client contexts:
 
 ```sh
-wecom-channel-cli broker discover --bot-id BOT_ID
+wecom-channel-cli channel list --bot-id BOT_ID
 ```
 
-`WECOM_CHANNEL_BOT_ID` can supply the ID instead of `--bot-id`. No policy file or
+`--bot-id` explicitly selects operator credentials; if you keep the bot ID in
+`WECOM_CHANNEL_BOT_ID`, pass `--bot-id "$WECOM_CHANNEL_BOT_ID"`. No policy file or
 running broker is needed. Match `data.topic_name` and select its `data.topic_id`;
 that is the value used by `--channel` and the policy's `channels[].id`. Names need
 not be unique, so retain the returned ID. Discovery returns one bounded page in
@@ -79,9 +80,24 @@ An empty list is a successful read with no joined channels on that page. If the
 target was not on an earlier page, verify bot membership and channel API access;
 do not guess its ID. Authentication and permission errors are reported separately.
 Membership and `permission` (public/private channel visibility) do not establish
-`read_all` or write capability. `broker discover --bot-id BOT_ID --dry-run` previews
+`read_all` or write capability. `channel list --bot-id BOT_ID --dry-run` previews
 the request offline without a Secret. Discovery saves no credentials or local state.
 Keep the Secret out of argv, chat, source control and the worker environment.
+
+The same `channel list` command serves both stages:
+
+| Invocation | Connection and scope |
+| --- | --- |
+| `channel list --bot-id BOT_ID` | Initial operator setup: Secret environment, bot's joined channels |
+| `--use-context default channel list` | Saved broker connection: that socket's permitted channels |
+| `--socket /run/wecom-channel-admin/admin.sock channel list` | Existing operator connection: bot's joined channels |
+
+Without `--bot-id`, listing always uses the broker. Environment credentials never
+switch modes, including after a failed or denied broker request. Explicit `--bot-id`
+ignores saved/environment connection settings; combining it with explicit
+`--socket` or `--use-context` is an error. `--dry-run` previews either connection
+without contacting the broker or WeCom. Channel listing belongs under `channel`;
+`broker serve` runs the service, and `config` prepares policy or client settings.
 
 After choosing the channel:
 
@@ -121,7 +137,7 @@ After choosing the channel:
    configure WeCom deliberately. Changing connection mode invalidates the previous
    connection. Do not change a working bot merely to try this CLI.
 
-`auth status` and `doctor` check local readiness. `broker discover` authenticates
+`auth status` and `doctor` check local readiness. `channel list --bot-id` authenticates
 during initial setup; `auth check` verifies an existing deployment through its
 private operator socket. Neither establishes every channel's grayscale permissions.
 
@@ -130,16 +146,21 @@ private operator socket. Neither establishes every channel's grayscale permissio
 Each channel is a security context with separate agent/operator sockets, policy,
 inbox and proposal ledger. Named client contexts use the family config engine.
 Use a channel ID selected during [operator setup](#operator-setup), then configure
-the client connection. One bot deployment can route its single authenticated callback to up to 32
-channel contexts while sharing the token cache. See [contexts](docs/contexts.md).
+the client connection. One bot deployment can route its single authenticated
+callback to up to 32 channel contexts while sharing the token cache. See [contexts](docs/contexts.md).
 
 ```sh
-wecom-channel-cli config set-context engineering \
-  --socket /run/wecom-channel/engineering-agent/agent.sock \
+wecom-channel-cli config set-context default \
+  --socket /run/wecom-channel-agent/agent.sock \
   --bot-id BOT_ID --channel CHANNEL_ID
 wecom-channel-cli config get-contexts
-wecom-channel-cli --use-context engineering event list
+wecom-channel-cli --use-context default channel list
 ```
+
+The template's broker name is `default`; the client context name must match it.
+This example uses the same socket as `config example`. For contexts such as
+`engineering` and `security`, provision the matching named policies and sockets
+from the [multi-context guide](docs/contexts.md) first.
 
 Context names select connections; OS permissions and broker identity checks
 enforce access. A worker with permission to open every context socket can access

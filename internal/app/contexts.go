@@ -121,7 +121,7 @@ func (s *appState) addContextCommands(group *cobra.Command) {
 	}}
 	set.Flags().StringVar(&socket, "socket", "", "Agent socket for this channel context")
 	set.Flags().StringVar(&bot, "bot-id", "", "Expected broker bot ID")
-	set.Flags().StringVar(&channel, "channel", "", "Expected channel ID from broker discover (operator setup) or channel list")
+	set.Flags().StringVar(&channel, "channel", "", "Expected data.topic_id returned by channel list")
 	set.Flags().BoolVar(&overwrite, "overwrite", false, "Replace conflicting public context coordinates")
 	set.Flags().BoolVar(&activate, "activate", false, "Make this context current")
 	set.Flags().BoolVar(&dry, "dry-run", false, "Preview the exact context merge without writing")

@@ -49,13 +49,16 @@ identities for mutually distrusting workers, as described in <a href="contexts.h
 The broker process is trusted across its contexts; isolate deployments by bot
 and service identity when that is not acceptable. This is not a multi-replica service.</p>
 <h2 id="discovery-during-operator-setup">Discovery during operator setup</h2>
-<p>Before a channel policy exists, the trusted operator can run <code>broker discover</code>
-with a bot ID and <code>WECOM_CHANNEL_BOT_SECRET</code>. This short-lived broker command
+<p>Before a channel policy exists, the trusted operator can run <code>channel list --bot-id ID</code>
+with <code>WECOM_CHANNEL_BOT_SECRET</code>. This explicit credential mode
 uses the same pinned HTTPS client and curated output as the service to enumerate
 one page of joined channels. It does not create a listener, ledger, policy or
 client configuration, save credentials, or add an agent-socket operation.
 The Secret and temporary token remain in the operator process. Keep that process
 and its environment inaccessible to the worker, exactly as for <code>broker serve</code>.
+Without an explicit <code>--bot-id</code>, <code>channel list</code> uses the selected broker socket;
+ambient credentials cannot change that route. Explicit socket/context flags cannot
+be combined with <code>--bot-id</code>, and no failure triggers a fallback to direct access.
 Channel names remain untrusted data; selecting an ID is not an authorization grant.</p>
 <h2 id="enforced-controls">Enforced controls</h2>
 <table>
@@ -104,7 +107,7 @@ Channel names remain untrusted data; selecting an ID is not an authorization gra
 </tr>
 <tr>
 <td>Credential exfiltration</td>
-<td>Secret environment only in operator broker commands; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned</td>
+<td>Secret environment only in operator setup and broker service; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned</td>
 <td>A compromised broker OS account or host root remains trusted</td>
 </tr>
 <tr>

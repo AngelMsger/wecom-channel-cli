@@ -8,22 +8,27 @@ Context names select connections; Unix permissions and server policy enforce acc
 ## Discover before configuring
 
 For first-time setup, the trusted operator supplies the bot Secret through
-`WECOM_CHANNEL_BOT_SECRET` and runs `wecom-channel-cli broker discover --bot-id BOT_ID`.
-No channel ID, policy, sockets or client context is needed. Match `data.topic_name`
-and retain `data.topic_id`; continue with `--cursor` when `has_more` is true.
+`WECOM_CHANNEL_BOT_SECRET` and runs `wecom-channel-cli channel list --bot-id BOT_ID`.
+No channel ID, policy, sockets or client context is needed. The explicit
+`--bot-id` selects credentials; environment credentials alone never select it.
+Match `data.topic_name` and retain `data.topic_id`; continue with `--cursor` when `has_more` is true.
 Do not ask users to find a channel ID in the WeCom client. Configure the broker
 policy from the selected IDs before saving the client contexts below. See the
 [operator setup guide](../README.md#operator-setup) for the complete sequence.
 
-An already running broker also supports discovery via `channel list` on its
-private operator socket. An agent's `channel list` remains restricted to its
-configured channel. Discovery never grants permission or edits existing contexts.
+After setup, the same `channel list` command uses the broker. On its
+private operator socket it lists joined channels. An agent's `channel list` remains
+restricted to its configured channel. Discovery never grants permission or edits existing contexts.
 
 ## Client configuration
 
 The default file is `~/.angelmsger/wecom-channel/config.yaml`. Override its
 directory with `--config-dir` or `WECOM_CHANNEL_CONFIG`. No credential is stored
 in this file. Setup is offline and does not alter the broker's policy.
+The client context name must match the broker policy's `name`. A single-context
+`config example` uses `default` and `/run/wecom-channel-agent/agent.sock`; use
+those values for that deployment. The engineering/security examples below assume
+the matching version 2 deployment described later on this page.
 
 ```sh
 wecom-channel-cli config set-context engineering \

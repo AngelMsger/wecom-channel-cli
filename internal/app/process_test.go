@@ -24,6 +24,17 @@ type processAPI struct {
 }
 
 func (p *processAPI) Read(_ context.Context, q apiclient.Query) (apiclient.Page, error) {
+	if q.Operation == "channel.list" {
+		ids := q.ChannelIDs
+		if ids == nil {
+			ids = []string{"channel-a", "other-channel"}
+		}
+		page := apiclient.Page{Items: []apiclient.Record{}}
+		for _, id := range ids {
+			page.Items = append(page.Items, apiclient.Untrusted(apiclient.Topic{ID: id, Name: id}, id, "", ""))
+		}
+		return page, nil
+	}
 	if q.Operation == "post.get" {
 		message := apiclient.Message{PostID: q.Post}
 		if p.reacted.Load() {
@@ -107,7 +118,7 @@ func TestCLIProcess(t *testing.T) {
 	runBinary := func(socket string, stdin string, args ...string) (string, string, int) {
 		t.Helper()
 		cmd := exec.Command(binary, args...)
-		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.5"}
+		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.6", "WECOM_CHANNEL_BOT_ID=test-bot", "WECOM_CHANNEL_BOT_SECRET=synthetic-secret"}
 		cmd.Stdin = strings.NewReader(stdin)
 		var out, stderr bytes.Buffer
 		cmd.Stdout = &out
@@ -122,6 +133,32 @@ func TestCLIProcess(t *testing.T) {
 			}
 		}
 		return out.String(), stderr.String(), code
+	}
+	for _, socket := range []string{cfg.AgentSocket, cfg.AdminSocket} {
+		out, stderr, code := runBinary(socket, "", "channel", "list")
+		if code != 0 || !strings.Contains(out, "channel-a") || strings.Contains(out, "synthetic-secret") || strings.Contains(out, "other-channel") != (socket == cfg.AdminSocket) {
+			t.Fatal("channel list lost socket authority or used ambient credentials", code, out, stderr)
+		}
+	}
+	// Complete setup using an ID returned by listing, then read through the saved
+	// context. The name and socket must match the provisioned broker policy.
+	listed, stderr, code := runBinary(cfg.AdminSocket, "", "channel", "list")
+	var channels struct {
+		Items []struct {
+			Data apiclient.Topic `json:"data"`
+		} `json:"items"`
+	}
+	if code != 0 || json.Unmarshal([]byte(listed), &channels) != nil || len(channels.Items) == 0 {
+		t.Fatal(listed, stderr, code)
+	}
+	clientDir := filepath.Join(dir, "client")
+	_, stderr, code = runBinary(cfg.AgentSocket, "", "--config-dir", clientDir, "config", "set-context", cfg.Name, "--socket", cfg.AgentSocket, "--bot-id", cfg.Bot, "--channel", channels.Items[0].Data.ID)
+	if code != 0 {
+		t.Fatal(stderr, code)
+	}
+	listed, stderr, code = runBinary(cfg.AgentSocket, "", "--config-dir", clientDir, "--use-context", cfg.Name, "channel", "list")
+	if code != 0 || !strings.Contains(listed, `"context": "default"`) || strings.Contains(listed, "other-channel") {
+		t.Fatal("configured channel list did not preserve broker scope", listed, stderr, code)
 	}
 	out, stderr, code := runBinary(cfg.AgentSocket, "", "post", "list", "--channel", "channel-a", "--format", "ndjson")
 	if code != 0 || !json.Valid([]byte(out)) || !strings.Contains(out, `"trust":"untrusted"`) || !strings.Contains(stderr, `"next":"second"`) {
