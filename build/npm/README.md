@@ -4,13 +4,19 @@ An independent channel connector for agents. Named channel contexts, a protected
 credential broker, polling without public ingress, optional authenticated
 callbacks, native emoji reactions, and exact-intent operator approvals.
 
-After the first release:
+Install or upgrade:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli
+npm install -g @angelmsger/wecom-channel-cli@0.2.0
 wecom-channel-cli auth guide
 wecom-channel-cli skill install
 ```
+
+For initial operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally and run
+`wecom-channel-cli channel list --bot-id BOT_ID` before configuring a channel.
+Choose `data.topic_id`, generate policy with `config example --bot-id BOT_ID
+--channel CHANNEL_ID`, then provision the broker and matching client context.
+Normal `channel list` uses the configured broker socket.
 
 Reload the agent context after refreshing the Skill. Operator provisioning and
 OS isolation are required before unattended use. Installation downloads the

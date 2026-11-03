@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
 <blockquote>
 <p><strong>Built for agents. Designed for humans.</strong></p>
 </blockquote>
@@ -6,12 +6,12 @@
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.</p>
-<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">0.1.0 is published</a>, tested offline against synthetic services and
+<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.2.0">0.2.0 is published</a>, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.</strong> Linux and macOS are supported.
-Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub release</a>.</p>
+Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.2.0">GitHub release</a>.</p>
 <p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
@@ -20,7 +20,7 @@ and operator have separate OS identities and the agent's tools are sandboxed.
 Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
 <h2 id="install">Install</h2>
 <p>With Node.js 20 or newer, run this in a trusted operator setup session:</p>
-<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.1.0
+<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.2.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 </code></pre>
@@ -41,8 +41,7 @@ make lint test e2e docs-check site-check
 to verify the pinned <code>agent-cli-kit v0.5.0</code>. <code>make cross</code> builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.</p>
 <h2 id="operator-setup">Operator setup</h2>
-<p>The <code>channel list --bot-id</code> mode and template flags below are unreleased; build
-from source until the next CLI release.</p>
+<p>The <code>channel list --bot-id</code> mode and template flags below are available in 0.2.0.</p>
 <p>Start with the API-mode bot's <strong>Bot ID and Secret</strong>, not a channel ID. The WeCom
 client does not display channel IDs. In a trusted operator session, have your
 secret manager supply <code>WECOM_CHANNEL_BOT_SECRET</code>, then discover the bot's joined

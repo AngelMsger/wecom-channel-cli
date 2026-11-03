@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-03
+
 ### Added
 
 - Extend the existing `channel list` with explicit `--bot-id` operator setup,
@@ -121,3 +123,7 @@ Published from `3a65bf9` through GitHub Actions with npm provenance.
   environment still require operator verification.
 - Media transfer, content edits/deletes, forwarded chat expansion, Windows and
   channel long connections are not implemented. Deployment must sandbox the agent.
+
+[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0
