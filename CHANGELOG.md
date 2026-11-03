@@ -21,6 +21,9 @@
 
 ### Changed
 
+- Update `golang.org/x/sys` to v0.44.0, removing GO-2026-5024 from the module
+  dependency graph. The vulnerable Windows package is not used by this connector.
+
 - The broker's read-only API wrapper keeps the inner client only as a `Reader`
   and blocks each `Writer` method itself, so a write added without a blocking
   override fails to compile instead of reaching WeCom from a read-only broker.
