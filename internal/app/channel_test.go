@@ -252,7 +252,13 @@ func TestChannelListConnectionSelection(t *testing.T) {
 		t.Fatal(code, out, stderr)
 	}
 	// A broker failure stays a broker failure, even with usable-looking credentials.
-	code, out, stderr = run(t, "--socket", filepath.Join(t.TempDir(), "absent.sock"), "channel", "list")
+	// macOS test temp paths can exceed the Unix socket path limit.
+	socketDir, err := os.MkdirTemp("/tmp", "wc-socket-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
+	code, out, stderr = run(t, "--socket", filepath.Join(socketDir, "absent.sock"), "channel", "list")
 	if code != 8 || out != "" || !strings.Contains(stderr, "BROKER_UNREACHABLE") {
 		t.Fatal(code, out, stderr)
 	}

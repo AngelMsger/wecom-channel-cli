@@ -89,6 +89,8 @@ policy remains separate. Each agent socket is bound to one channel, and its ledg
 must not be rebound. Version 2 deployments share callback verification/token cache
 only, never agent sockets or proposal state. Test cross-context denial at the server
 and CLI, callback routing, scope-bound restart and configuration precedence.
+Use short temporary paths for Unix socket tests on both Linux and macOS; the
+default macOS test directory can exceed the supported 100-byte socket path.
 
 Keep this project's visual identity independent of FX Devkit. WeCom is a color
 reference only, not a layout or component template. Follow `docs/visual-design.md`
