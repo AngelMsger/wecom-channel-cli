@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Operator guide — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html" aria-current="page">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="wecom-channel-cli">wecom-channel-cli</h1>
 <blockquote>
 <p><strong>Built for agents. Designed for humans.</strong></p>
 </blockquote>
@@ -6,12 +6,12 @@
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.</p>
-<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0">0.1.0 is published</a>, tested offline against synthetic services and
+<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.2.0">0.2.0 is published</a>, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.</strong> Linux and macOS are supported.
-Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0">GitHub release</a>.</p>
+Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.2.0">GitHub release</a>.</p>
 <p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
@@ -20,7 +20,7 @@ and operator have separate OS identities and the agent's tools are sandboxed.
 Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
 <h2 id="install">Install</h2>
 <p>With Node.js 20 or newer, run this in a trusted operator setup session:</p>
-<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.1.0
+<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.2.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 </code></pre>
@@ -40,38 +40,78 @@ make lint test e2e docs-check site-check
 <p>Inside the fx workspace, <code>go.work</code> uses the local kit. Use <code>GOWORK=off make test</code>
 to verify the pinned <code>agent-cli-kit v0.5.0</code>. <code>make cross</code> builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.</p>
-<h2 id="named-channel-contexts">Named channel contexts</h2>
-<p>Each channel is a security context with separate agent/operator sockets, policy,
-inbox and proposal ledger. Named client contexts use the family config engine.
-One bot deployment can route its single authenticated callback to up to 32
-channel contexts while sharing the token cache. See <a href="contexts.html">contexts</a>.</p>
-<pre><code class="language-sh">wecom-channel-cli config set-context engineering \
-  --socket /run/wecom-channel/engineering-agent/agent.sock \
-  --bot-id BOT_ID --channel CHANNEL_ID
-wecom-channel-cli config get-contexts
-wecom-channel-cli --use-context engineering event list
-</code></pre>
-<p>Context names select connections; OS permissions and broker identity checks
-enforce access. A worker with permission to open every context socket can access
-every such context. Provision separate context groups for mutually untrusted workers.</p>
 <h2 id="operator-setup">Operator setup</h2>
+<p>The <code>channel list --bot-id</code> mode and template flags below are available in 0.2.0.</p>
+<p>Start with the API-mode bot's <strong>Bot ID and Secret</strong>, not a channel ID. The WeCom
+client does not display channel IDs. In a trusted operator session, have your
+secret manager supply <code>WECOM_CHANNEL_BOT_SECRET</code>, then discover the bot's joined
+channels before creating policy, sockets or client contexts:</p>
+<pre><code class="language-sh">wecom-channel-cli channel list --bot-id BOT_ID
+</code></pre>
+<p><code>--bot-id</code> explicitly selects operator credentials; if you keep the bot ID in
+<code>WECOM_CHANNEL_BOT_ID</code>, pass <code>--bot-id &quot;$WECOM_CHANNEL_BOT_ID&quot;</code>. No policy file or
+running broker is needed. Match <code>data.topic_name</code> and select its <code>data.topic_id</code>;
+that is the value used by <code>--channel</code> and the policy's <code>channels[].id</code>. Names need
+not be unique, so retain the returned ID. Discovery returns one bounded page in
+the usual <code>{items,next,has_more}</code> envelope. When <code>has_more</code> is true, pass <code>next</code>
+as <code>--cursor</code> with the same bot; the default limit is 20, maximum 50.</p>
+<p>An empty list is a successful read with no joined channels on that page. If the
+target was not on an earlier page, verify bot membership and channel API access;
+do not guess its ID. Authentication and permission errors are reported separately.
+Membership and <code>permission</code> (public/private channel visibility) do not establish
+<code>read_all</code> or write capability. <code>channel list --bot-id BOT_ID --dry-run</code> previews
+the request offline without a Secret. Discovery saves no credentials or local state.
+Keep the Secret out of argv, chat, source control and the worker environment.</p>
+<p>The same <code>channel list</code> command serves both stages:</p>
+<table>
+<thead>
+<tr>
+<th>Invocation</th>
+<th>Connection and scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>channel list --bot-id BOT_ID</code></td>
+<td>Initial operator setup: Secret environment, bot's joined channels</td>
+</tr>
+<tr>
+<td><code>--use-context default channel list</code></td>
+<td>Saved broker connection: that socket's permitted channels</td>
+</tr>
+<tr>
+<td><code>--socket /run/wecom-channel-admin/admin.sock channel list</code></td>
+<td>Existing operator connection: bot's joined channels</td>
+</tr>
+</tbody>
+</table>
+<p>Without <code>--bot-id</code>, listing always uses the broker. Environment credentials never
+switch modes, including after a failed or denied broker request. Explicit <code>--bot-id</code>
+ignores saved/environment connection settings; combining it with explicit
+<code>--socket</code> or <code>--use-context</code> is an error. <code>--dry-run</code> previews either connection
+without contacting the broker or WeCom. Channel listing belongs under <code>channel</code>;
+<code>broker serve</code> runs the service, and <code>config</code> prepares policy or client settings.</p>
+<p>After choosing the channel:</p>
 <ol>
 <li>
 <p>Provision the broker and agent identities using <a href="security.html">the deployment guide</a>.</p>
 </li>
 <li>
-<p>Copy <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/broker.example.json">the single-context policy</a> or
-<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/contexts.example.json">multi-context deployment</a> to an operator-controlled
-file. Replace the bot/channel/user IDs with verified IDs. Empty channel and
-sender lists deny mention-triggered requests. For callback-free watching, start
-with <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/watch.example.json">the polling policy</a>, which explicitly enables
-read_all and observe_all. Keep <code>read_only: true</code> during setup.</p>
+<p>Generate a policy template with the discovered identity:</p>
+<pre><code class="language-sh">wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID
+</code></pre>
+<p>Save it to an operator-controlled file and review its paths and permissions.
+Alternatively adapt <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/broker.example.json">the single-context policy</a>,
+<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/watch.example.json">polling policy</a> or
+<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/contexts.example.json">multi-context deployment</a>. The generated template
+enables read_all and observe_all for polling, keeps <code>read_only: true</code>, and
+disables posting and replying. Sender allowlists are required only for eligible
+human mention requests; discover user IDs after the broker is running.</p>
 </li>
 <li>
-<p>Supply the existing bot Secret to the broker's environment as
-<code>WECOM_CHANNEL_BOT_SECRET</code>. For callbacks, also supply
-<code>WECOM_CHANNEL_CALLBACK_TOKEN</code> and <code>WECOM_CHANNEL_ENCODING_AES_KEY</code>.
-Never supply these to the agent or put them in argv, source control or chat.</p>
+<p>Supply the same bot's <code>WECOM_CHANNEL_BOT_SECRET</code> to the broker service environment.
+For callbacks only, also supply <code>WECOM_CHANNEL_CALLBACK_TOKEN</code> and
+<code>WECOM_CHANNEL_ENCODING_AES_KEY</code>. None belongs in the worker environment.</p>
 </li>
 <li>
 <p>Preview and run the broker:</p>
@@ -81,22 +121,42 @@ wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json
 </code></pre>
 </li>
 <li>
-<p>Use the private socket for <code>auth check</code>, <code>channel list</code> and <code>member list</code> to
-discover IDs. The operator can list joined channels with an empty allowlist;
-member/content reads require the channel to be listed in policy. Restart the
-broker after deliberate policy edits. The broker does not configure WeCom.</p>
+<p>Use the private socket for <code>auth check</code>, <code>channel list</code> and <code>member list</code>.
+An existing broker can still list joined channels with an empty version 1
+allowlist via its operator socket; member/content reads require the selected
+channel in policy. Restart the broker after deliberate policy edits.</p>
 </li>
 <li>
-<p>Polling watches work with an empty <code>callback_listen</code>; no public address or
-callback keys are required. For optional callback events, expose only the loopback <code>/callback</code> endpoint through
-your HTTPS reverse proxy and configure WeCom deliberately. Changing the bot's
-connection mode invalidates its previous connection. Do not change an existing
-working bot merely to try this CLI.</p>
+<p>Create the named client context below using the selected bot/channel and the
+provisioned agent socket. Polling works with an empty <code>callback_listen</code>; no
+public address or callback keys are required. For optional callbacks, expose
+only the loopback <code>/callback</code> endpoint through your HTTPS reverse proxy and
+configure WeCom deliberately. Changing connection mode invalidates the previous
+connection. Do not change a working bot merely to try this CLI.</p>
 </li>
 </ol>
-<p><code>auth status</code> and <code>doctor</code> check local readiness. Only <code>auth check</code> makes a
-bounded authenticated request, and it requires the private operator socket.
-Authentication success does not establish every channel's grayscale permissions.</p>
+<p><code>auth status</code> and <code>doctor</code> check local readiness. <code>channel list --bot-id</code> authenticates
+during initial setup; <code>auth check</code> verifies an existing deployment through its
+private operator socket. Neither establishes every channel's grayscale permissions.</p>
+<h2 id="named-channel-contexts">Named channel contexts</h2>
+<p>Each channel is a security context with separate agent/operator sockets, policy,
+inbox and proposal ledger. Named client contexts use the family config engine.
+Use a channel ID selected during <a href="#operator-setup">operator setup</a>, then configure
+the client connection. One bot deployment can route its single authenticated
+callback to up to 32 channel contexts while sharing the token cache. See <a href="contexts.html">contexts</a>.</p>
+<pre><code class="language-sh">wecom-channel-cli config set-context default \
+  --socket /run/wecom-channel-agent/agent.sock \
+  --bot-id BOT_ID --channel CHANNEL_ID
+wecom-channel-cli config get-contexts
+wecom-channel-cli --use-context default channel list
+</code></pre>
+<p>The template's broker name is <code>default</code>; the client context name must match it.
+This example uses the same socket as <code>config example</code>. For contexts such as
+<code>engineering</code> and <code>security</code>, provision the matching named policies and sockets
+from the <a href="contexts.html">multi-context guide</a> first.</p>
+<p>Context names select connections; OS permissions and broker identity checks
+enforce access. A worker with permission to open every context socket can access
+every such context. Provision separate context groups for mutually untrusted workers.</p>
 <h2 id="agent-usage">Agent usage</h2>
 <p>The operator supplies <code>WECOM_CHANNEL_SOCKET=/run/wecom-channel-agent/agent.sock</code>.
 No credential belongs in the agent environment. Load the bundled Skill with

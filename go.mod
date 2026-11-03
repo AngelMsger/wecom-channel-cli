@@ -8,7 +8,7 @@ require (
 	github.com/angelmsger/agent-cli-kit v0.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.7.17
-	golang.org/x/sys v0.37.0
+	golang.org/x/sys v0.44.0
 )
 
 require (

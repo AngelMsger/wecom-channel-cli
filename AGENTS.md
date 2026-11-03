@@ -22,9 +22,17 @@ write goes on `Writer` with a blocking override on the read-only wrapper in
 Use agent-cli-kit for errors, rendering, argv normalization and transport.
 Policy and durable event/proposal state are channel-specific, not replacements
 for the family's configuration or credential libraries. Credentials are supplied
-only to the broker by the operator; the agent has no login or secret export path.
+only to operator setup and the broker service; the agent has no login or secret export path.
 Do not read the official CLI's private credential files or reuse its gateway
 Bearer token as a channel access token.
+Initial setup must discover IDs before requiring them. Keep one channel listing
+command: `channel list --bot-id ID` explicitly uses operator credentials before a
+policy or service exists; `channel list` otherwise uses the selected broker socket.
+Never select direct access from ambient credentials or after a broker failure.
+Reject explicit bot/socket/context conflicts. Keep credentials out of client
+contexts and do not add another discovery command or worker socket operation. Never direct users to
+copy channel IDs from the WeCom UI. Keep auth guidance, context errors, policy
+template flags and the companion Skill aligned with this bootstrap sequence.
 Preserve existing bot integrations during setup; separate token endpoints do not
 prove concurrent compatibility. Follow docs/research.md for live coexistence
 checks, and include alternate authenticated tools in worker isolation checks.
@@ -81,6 +89,8 @@ policy remains separate. Each agent socket is bound to one channel, and its ledg
 must not be rebound. Version 2 deployments share callback verification/token cache
 only, never agent sockets or proposal state. Test cross-context denial at the server
 and CLI, callback routing, scope-bound restart and configuration precedence.
+Use short temporary paths for Unix socket tests on both Linux and macOS; the
+default macOS test directory can exceed the supported 100-byte socket path.
 
 Keep this project's visual identity independent of FX Devkit. WeCom is a color
 reference only, not a layout or component template. Follow `docs/visual-design.md`

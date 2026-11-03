@@ -1,12 +1,28 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Channel contexts — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html" aria-current="page">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="channel-security-contexts">Channel security contexts</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Channel contexts — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html" aria-current="page">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="channel-security-contexts">Channel security contexts</h1>
 <p>Each context binds one bot/channel identity to its own agent socket, operator
 socket, policy, event inbox, proposal ledger and checkpoints. The client uses
 named contexts through the same <code>agent-cli-kit/config</code> engine as the other CLIs.
 Context names select connections; Unix permissions and server policy enforce access.</p>
+<h2 id="discover-before-configuring">Discover before configuring</h2>
+<p>For first-time setup, the trusted operator supplies the bot Secret through
+<code>WECOM_CHANNEL_BOT_SECRET</code> and runs <code>wecom-channel-cli channel list --bot-id BOT_ID</code>.
+No channel ID, policy, sockets or client context is needed. The explicit
+<code>--bot-id</code> selects credentials; environment credentials alone never select it.
+Match <code>data.topic_name</code> and retain <code>data.topic_id</code>; continue with <code>--cursor</code> when <code>has_more</code> is true.
+Do not ask users to find a channel ID in the WeCom client. Configure the broker
+policy from the selected IDs before saving the client contexts below. See the
+<a href="guide.html#operator-setup">operator setup guide</a> for the complete sequence.</p>
+<p>After setup, the same <code>channel list</code> command uses the broker. On its
+private operator socket it lists joined channels. An agent's <code>channel list</code> remains
+restricted to its configured channel. Discovery never grants permission or edits existing contexts.</p>
 <h2 id="client-configuration">Client configuration</h2>
 <p>The default file is <code>~/.angelmsger/wecom-channel/config.yaml</code>. Override its
 directory with <code>--config-dir</code> or <code>WECOM_CHANNEL_CONFIG</code>. No credential is stored
-in this file. Setup is offline and does not alter the broker's policy.</p>
+in this file. Setup is offline and does not alter the broker's policy.
+The client context name must match the broker policy's <code>name</code>. A single-context
+<code>config example</code> uses <code>default</code> and <code>/run/wecom-channel-agent/agent.sock</code>; use
+those values for that deployment. The engineering/security examples below assume
+the matching version 2 deployment described later on this page.</p>
 <pre><code class="language-sh">wecom-channel-cli config set-context engineering \
   --socket /run/wecom-channel/engineering-agent/agent.sock \
   --bot-id BOT_ID --channel ENGINEERING_CHANNEL --dry-run

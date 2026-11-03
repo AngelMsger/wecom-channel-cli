@@ -4,15 +4,32 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.4
+version: 0.1.6
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.4` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.6` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
+
+For first-time setup, do not ask the user for a channel ID from the WeCom client;
+it is not displayed there. Start with `auth guide`. The trusted operator supplies
+Bot ID and Secret locally, then runs `channel list --bot-id ID` with
+`WECOM_CHANNEL_BOT_SECRET` from their secret manager. No channel policy, socket or
+client context is needed. `--bot-id` explicitly selects this operator mode;
+otherwise `channel list` always uses the broker. Environment credentials do not
+select direct access, and a broker failure or denial is never a reason to switch.
+Do not combine `--bot-id` with explicit `--socket` or `--use-context`.
+Never request the Secret in chat or pass it in argv.
+Match `data.topic_name`, retain `data.topic_id`, and follow `--cursor` when needed.
+If empty, check bot membership/API access instead of inventing an ID. Discovery
+proves neither read_all nor write permission. Only after the user selects a target,
+prepare `config example --bot-id ID --channel DISCOVERED_ID`, provision the broker,
+and configure the client with the policy's exact name and agent socket. The generated
+single-context template uses `default`. This bootstrap belongs to a trusted operator session;
+a worker handling channel content must not obtain credentials or bypass its socket.
 
 Use the named channel context supplied by the operator (`--use-context` or
 `WECOM_CHANNEL_CONTEXT`). Discover configured names with `config get-contexts`.

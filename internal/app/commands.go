@@ -12,8 +12,8 @@ import (
 )
 
 func (s *appState) readCommands() []*cobra.Command {
-	var out []*cobra.Command
-	for _, noun := range []string{"channel", "member", "post", "reply", "search"} {
+	out := []*cobra.Command{s.channelCommands()}
+	for _, noun := range []string{"member", "post", "reply", "search"} {
 		group := &cobra.Command{Use: noun, Short: "Inspect " + noun + " data through broker policy"}
 		verbs := []string{"list"}
 		if noun == "post" || noun == "reply" {
@@ -37,9 +37,7 @@ func (s *appState) readCommands() []*cobra.Command {
 				}
 				return s.call(cmd, broker.Request{Operation: q.Operation, Query: q})
 			}
-			if noun != "channel" {
-				cmd.Flags().StringVar(&q.Channel, "channel", "", "Channel ID from channel list or an authenticated event")
-			}
+			cmd.Flags().StringVar(&q.Channel, "channel", "", "Channel ID from channel list or an authenticated event")
 			if noun == "reply" || (noun == "post" && verb == "get") {
 				cmd.Flags().StringVar(&q.Post, "post", "", "Post ID from post list, search result, or event get")
 			}

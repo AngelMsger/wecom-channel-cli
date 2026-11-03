@@ -43,6 +43,9 @@ func init() {
 		Words:   kit.Words{App: "wecom-channel-cli", ContextFlag: "--use-context", ContextEnv: "WECOM_CHANNEL_CONTEXT", NoHintEnv: "WECOM_CHANNEL_NO_CONTEXT_HINT", ListContexts: "config get-contexts", UseContext: "config use-context", SetContext: "config set-context", AuthGuide: "auth guide", AuthLogin: "auth status"},
 		Schemes: []string{"broker"},
 		Validate: func(v kit.Values) error {
+			if v["channel_id"] == "" {
+				return e.New(e.CategoryConfig, "CHANNEL_REQUIRED", "Discover a channel ID before creating a channel context.").WithHint("In a trusted operator session, use channel list --bot-id BOT_ID with the Secret environment; then select data.topic_id. For an existing broker, ask its operator or use channel list on an authorized socket.").WithNextSteps("wecom-channel-cli auth guide", "wecom-channel-cli channel list --help")
+			}
 			if v[kit.KeyServer] != apiclient.Origin || !validSocket(v["socket"]) || !apiclient.Identifier(v["bot_id"], 256) || !apiclient.Identifier(v["channel_id"], 128) {
 				return e.New(e.CategoryConfig, "BAD_CONTEXT", "A context requires a canonical socket path, bot ID and channel ID; the upstream host is fixed.")
 			}

@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Security model — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html" aria-current="page">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="security-boundary-and-deployment">Security boundary and deployment</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Security model — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html" aria-current="page">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="security-boundary-and-deployment">Security boundary and deployment</h1>
 <p>The enforceable boundary is <strong>an isolated broker plus a sandboxed agent</strong>.
 A warning or system prompt alone cannot prevent a model with a shell from
 deleting files or reading credentials. This program does not intercept another
@@ -48,6 +48,18 @@ separate sockets, policy and durable state. Use distinct socket groups and worke
 identities for mutually distrusting workers, as described in <a href="contexts.html">contexts</a>.
 The broker process is trusted across its contexts; isolate deployments by bot
 and service identity when that is not acceptable. This is not a multi-replica service.</p>
+<h2 id="discovery-during-operator-setup">Discovery during operator setup</h2>
+<p>Before a channel policy exists, the trusted operator can run <code>channel list --bot-id ID</code>
+with <code>WECOM_CHANNEL_BOT_SECRET</code>. This explicit credential mode
+uses the same pinned HTTPS client and curated output as the service to enumerate
+one page of joined channels. It does not create a listener, ledger, policy or
+client configuration, save credentials, or add an agent-socket operation.
+The Secret and temporary token remain in the operator process. Keep that process
+and its environment inaccessible to the worker, exactly as for <code>broker serve</code>.
+Without an explicit <code>--bot-id</code>, <code>channel list</code> uses the selected broker socket;
+ambient credentials cannot change that route. Explicit socket/context flags cannot
+be combined with <code>--bot-id</code>, and no failure triggers a fallback to direct access.
+Channel names remain untrusted data; selecting an ID is not an authorization grant.</p>
 <h2 id="enforced-controls">Enforced controls</h2>
 <table>
 <thead>
@@ -95,7 +107,7 @@ and service identity when that is not acceptable. This is not a multi-replica se
 </tr>
 <tr>
 <td>Credential exfiltration</td>
-<td>Secret environment only in broker; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned</td>
+<td>Secret environment only in operator setup and broker service; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned</td>
 <td>A compromised broker OS account or host root remains trusted</td>
 </tr>
 <tr>
