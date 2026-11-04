@@ -38,7 +38,7 @@ bin/wecom-channel-cli config example
 make lint test e2e docs-check site-check
 </code></pre>
 <p>Inside the fx workspace, <code>go.work</code> uses the local kit. Use <code>GOWORK=off make test</code>
-to verify the pinned <code>agent-cli-kit v0.5.0</code>. <code>make cross</code> builds Linux/macOS
+to verify the <code>agent-cli-kit</code> version pinned in <code>go.mod</code>. <code>make cross</code> builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.</p>
 <h2 id="operator-setup">Operator setup</h2>
 <p>The <code>channel list --bot-id</code> mode and template flags below are available in 0.2.0.</p>
