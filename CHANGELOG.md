@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use agent-cli-kit v0.6.0. The CLI session's `READONLY_BLOCKED` (from
+  `WECOM_CHANNEL_CLI_READ_ONLY`) now has the family's shared wording: the
+  message names the blocked operation (`operation "proposal.create" blocked:
+  read-only mode is enabled`), the hint says read-only mode is the user's
+  setting, and the next steps are `--dry-run` and, only for a write the user
+  authorized, `--allow-writes`. Code, category and exit code are unchanged.
+  The broker's own read-only policy is the operator's and keeps its error,
+  which `--allow-writes` cannot lift. `pkg/errors` re-exports `ReadOnlyBlocked`,
+  `ReadOnlyMode` and `CodeReadOnlyBlocked`.
+
 ## [0.2.0] — 2026-11-03
 
 ### Added

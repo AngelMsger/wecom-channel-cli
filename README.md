@@ -51,7 +51,7 @@ make lint test e2e docs-check site-check
 ```
 
 Inside the fx workspace, `go.work` uses the local kit. Use `GOWORK=off make test`
-to verify the pinned `agent-cli-kit v0.5.0`. `make cross` builds Linux/macOS
+to verify the `agent-cli-kit` version pinned in `go.mod`. `make cross` builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.
 
 ## Operator setup

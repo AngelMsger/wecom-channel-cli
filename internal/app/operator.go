@@ -26,7 +26,7 @@ func (s *appState) brokerCommands() *cobra.Command {
 		if dry {
 			return s.emit(cmd, map[string]any{"dry_run": true, "policy_digest": apiclient.Digest(deployment), "policy": deployment, "next_steps": []string{"Provision isolated OS accounts and socket directories as described in docs/security.md."}})
 		}
-		if err := s.guard(); err != nil {
+		if err := s.guard("broker serve"); err != nil {
 			return err
 		}
 		api, err := apiclient.New(deployment.Bot, os.Getenv("WECOM_CHANNEL_BOT_SECRET"))

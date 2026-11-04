@@ -265,7 +265,7 @@ WeCom Calendar's local `meta` write gate was checked separately.
 | OpenObserve CLI | Kit transport/output and read-only client surface | Read-oriented telemetry domain. No changes |
 | Prometheus CLI | Kit pagination and guarded admin writes | Metric/admin domain. No changes |
 | WeCom Calendar CLI | Kit baseline plus domain-specific private local store | CalDAV identity and calendar-only reads remain separate. No changes |
-| Agent CLI Kit | Reuse published v0.5.0 config, errors, output, transport, flags and Skill metadata | No business-product code or new shared abstraction added |
+| Agent CLI Kit | Reuse the published release pinned in `go.mod` for config, errors, output, transport, flags and Skill metadata | No business-product code or new shared abstraction added |
 
 For polling, Jenkins `internal/app/build_log.go` and OpenObserve
 `internal/app/search.go` provide the cancellable streaming reference. WeCom

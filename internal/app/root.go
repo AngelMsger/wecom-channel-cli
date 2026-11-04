@@ -102,7 +102,7 @@ func (s *appState) emit(cmd *cobra.Command, v any) error {
 func (s *appState) call(cmd *cobra.Command, r broker.Request) error {
 	skillDriftNotice(cmd)
 	if !r.DryRun && (r.Operation == "proposal.create" || strings.HasPrefix(r.Operation, "approval.") && r.Operation != "approval.list") {
-		if err := s.guard(); err != nil {
+		if err := s.guard(r.Operation); err != nil {
 			return err
 		}
 	}
@@ -122,7 +122,12 @@ func (s *appState) call(cmd *cobra.Command, r broker.Request) error {
 	}
 	return output.Emit(resp.Item, opt)
 }
-func (s *appState) guard() error {
+
+// guard blocks op under the CLI session's read-only mode with the family's
+// READONLY_BLOCKED error. The mode is the user's setting, so the error names
+// WECOM_CHANNEL_CLI_READ_ONLY as theirs to change. The broker's own read-only
+// policy is the operator's and is enforced separately by the broker.
+func (s *appState) guard(op string) error {
 	v := os.Getenv("WECOM_CHANNEL_CLI_READ_ONLY")
 	if v == "" {
 		return nil
@@ -132,7 +137,7 @@ func (s *appState) guard() error {
 		return e.New(e.CategoryConfig, "BAD_READ_ONLY", "WECOM_CHANNEL_CLI_READ_ONLY must be a boolean.")
 	}
 	if ro && !s.allowWrites {
-		return e.New(e.CategoryPermission, "READONLY_BLOCKED", "This CLI session is read-only.").WithHint("Use --dry-run or an authorized --allow-writes; broker policy remains enforced.")
+		return e.ReadOnlyBlocked(op, e.ReadOnlyMode{Env: "WECOM_CHANNEL_CLI_READ_ONLY", DryRun: true})
 	}
 	return nil
 }

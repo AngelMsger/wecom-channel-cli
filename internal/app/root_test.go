@@ -66,7 +66,10 @@ func TestDryBrokerPreviewAndSkillLifecycle(t *testing.T) {
 	}
 	t.Setenv("WECOM_CHANNEL_CLI_READ_ONLY", "true")
 	code, out, err = run(t, "post", "propose", "--channel", "c", "--key", "k", "--text", "x")
-	if code != 5 || out != "" || !strings.Contains(err, "READONLY_BLOCKED") {
+	if code != 5 || out != "" || !strings.Contains(err, "READONLY_BLOCKED") ||
+		!strings.Contains(err, `operation \"proposal.create\" blocked: read-only mode is enabled`) ||
+		!strings.Contains(err, "Only if the user authorized this write, re-run with --allow-writes") ||
+		strings.Contains(err, "unset") {
 		t.Fatal(code, out, err)
 	}
 }

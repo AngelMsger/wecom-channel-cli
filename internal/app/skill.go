@@ -46,7 +46,7 @@ func (s *appState) skillCommands() *cobra.Command {
 				row := map[string]any{"path": path, "status": observed.Status, "version": observed.Version, "alignment": observed.Alignment}
 				if verb == "install" {
 					if !dry {
-						if err := s.guard(); err != nil {
+						if err := s.guard("skill install"); err != nil {
 							return err
 						}
 					}

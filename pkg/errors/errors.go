@@ -26,6 +26,14 @@ var Newf = kit.Newf
 var AsCLIError = kit.AsCLIError
 var ExitCode = kit.ExitCode
 
+// ReadOnlyMode names the switches that turn read-only mode on, and
+// ReadOnlyBlocked builds the family's READONLY_BLOCKED error from it.
+type ReadOnlyMode = kit.ReadOnlyMode
+
+const CodeReadOnlyBlocked = kit.CodeReadOnlyBlocked
+
+var ReadOnlyBlocked = kit.ReadOnlyBlocked
+
 func init() {
 	kit.SetGuidance(func(c kit.Category) (string, []string) {
 		if c == kit.CategoryAuth {
