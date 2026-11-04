@@ -110,7 +110,7 @@ func (s *appState) addContextCommands(group *cobra.Command) {
 			return err
 		}
 		if !dry && plan.Changed {
-			if err = s.guard(); err != nil {
+			if err = s.guard("config set-context"); err != nil {
 				return err
 			}
 			if err = config.SaveClients(dir, config.FromKit(plan.File)); err != nil {
@@ -147,7 +147,7 @@ func (s *appState) addContextCommands(group *cobra.Command) {
 				return err
 			}
 			if !preview {
-				if err = s.guard(); err != nil {
+				if err = s.guard("config " + verb); err != nil {
 					return err
 				}
 				if verb == "delete-context" && !yes {

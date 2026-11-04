@@ -63,7 +63,7 @@ func (s *appState) watchCommand() *cobra.Command {
 			return err
 		}
 		if checkpoint != "" && !dry {
-			if err = s.guard(); err != nil {
+			if err = s.guard("event watch --checkpoint"); err != nil {
 				return err
 			}
 		}
