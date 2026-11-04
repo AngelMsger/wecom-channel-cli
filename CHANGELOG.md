@@ -16,10 +16,8 @@
 - Use agent-cli-kit v0.7.0. The `READONLY_BLOCKED` hint names only
   `WECOM_CHANNEL_CLI_READ_ONLY` as the switch the user turned on; with
   v0.6.0 it also named `defaults.read_only`, a setting this CLI does not have.
-  The kit's HTTP client no longer follows a redirect of a POST, and every
-  WeCom API call is a POST, so a call answered with a 3xx fails with
-  `HTTP_REJECTED` and that status. Before, Go followed it as a GET without the
-  body, or sent the POST again on a 307 or 308.
+  The kit's change to its default HTTP client's redirects does not apply:
+  this CLI passes its own client, which already followed no redirect.
 
 ## [0.2.0] — 2026-11-03
 
