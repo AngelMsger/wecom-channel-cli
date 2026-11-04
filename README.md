@@ -8,12 +8,12 @@ An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.
 
-**Status: [0.1.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.1.0), tested offline against synthetic services and
+**Status: [0.2.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.2.0), tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
-Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0).
+Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.2.0).
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
@@ -27,7 +27,7 @@ Read the [security and deployment guide](docs/security.md) before connecting a b
 With Node.js 20 or newer, run this in a trusted operator setup session:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.1.0
+npm install -g @angelmsger/wecom-channel-cli@0.2.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 ```
@@ -54,38 +54,69 @@ Inside the fx workspace, `go.work` uses the local kit. Use `GOWORK=off make test
 to verify the pinned `agent-cli-kit v0.5.0`. `make cross` builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.
 
-## Named channel contexts
-
-Each channel is a security context with separate agent/operator sockets, policy,
-inbox and proposal ledger. Named client contexts use the family config engine.
-One bot deployment can route its single authenticated callback to up to 32
-channel contexts while sharing the token cache. See [contexts](docs/contexts.md).
-
-```sh
-wecom-channel-cli config set-context engineering \
-  --socket /run/wecom-channel/engineering-agent/agent.sock \
-  --bot-id BOT_ID --channel CHANNEL_ID
-wecom-channel-cli config get-contexts
-wecom-channel-cli --use-context engineering event list
-```
-
-Context names select connections; OS permissions and broker identity checks
-enforce access. A worker with permission to open every context socket can access
-every such context. Provision separate context groups for mutually untrusted workers.
-
 ## Operator setup
 
+The `channel list --bot-id` mode and template flags below are available in 0.2.0.
+
+Start with the API-mode bot's **Bot ID and Secret**, not a channel ID. The WeCom
+client does not display channel IDs. In a trusted operator session, have your
+secret manager supply `WECOM_CHANNEL_BOT_SECRET`, then discover the bot's joined
+channels before creating policy, sockets or client contexts:
+
+```sh
+wecom-channel-cli channel list --bot-id BOT_ID
+```
+
+`--bot-id` explicitly selects operator credentials; if you keep the bot ID in
+`WECOM_CHANNEL_BOT_ID`, pass `--bot-id "$WECOM_CHANNEL_BOT_ID"`. No policy file or
+running broker is needed. Match `data.topic_name` and select its `data.topic_id`;
+that is the value used by `--channel` and the policy's `channels[].id`. Names need
+not be unique, so retain the returned ID. Discovery returns one bounded page in
+the usual `{items,next,has_more}` envelope. When `has_more` is true, pass `next`
+as `--cursor` with the same bot; the default limit is 20, maximum 50.
+
+An empty list is a successful read with no joined channels on that page. If the
+target was not on an earlier page, verify bot membership and channel API access;
+do not guess its ID. Authentication and permission errors are reported separately.
+Membership and `permission` (public/private channel visibility) do not establish
+`read_all` or write capability. `channel list --bot-id BOT_ID --dry-run` previews
+the request offline without a Secret. Discovery saves no credentials or local state.
+Keep the Secret out of argv, chat, source control and the worker environment.
+
+The same `channel list` command serves both stages:
+
+| Invocation | Connection and scope |
+| --- | --- |
+| `channel list --bot-id BOT_ID` | Initial operator setup: Secret environment, bot's joined channels |
+| `--use-context default channel list` | Saved broker connection: that socket's permitted channels |
+| `--socket /run/wecom-channel-admin/admin.sock channel list` | Existing operator connection: bot's joined channels |
+
+Without `--bot-id`, listing always uses the broker. Environment credentials never
+switch modes, including after a failed or denied broker request. Explicit `--bot-id`
+ignores saved/environment connection settings; combining it with explicit
+`--socket` or `--use-context` is an error. `--dry-run` previews either connection
+without contacting the broker or WeCom. Channel listing belongs under `channel`;
+`broker serve` runs the service, and `config` prepares policy or client settings.
+
+After choosing the channel:
+
 1. Provision the broker and agent identities using [the deployment guide](docs/security.md).
-2. Copy [the single-context policy](deploy/broker.example.json) or
-   [multi-context deployment](deploy/contexts.example.json) to an operator-controlled
-   file. Replace the bot/channel/user IDs with verified IDs. Empty channel and
-   sender lists deny mention-triggered requests. For callback-free watching, start
-   with [the polling policy](deploy/watch.example.json), which explicitly enables
-   read_all and observe_all. Keep `read_only: true` during setup.
-3. Supply the existing bot Secret to the broker's environment as
-   `WECOM_CHANNEL_BOT_SECRET`. For callbacks, also supply
-   `WECOM_CHANNEL_CALLBACK_TOKEN` and `WECOM_CHANNEL_ENCODING_AES_KEY`.
-   Never supply these to the agent or put them in argv, source control or chat.
+2. Generate a policy template with the discovered identity:
+
+   ```sh
+   wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID
+   ```
+
+   Save it to an operator-controlled file and review its paths and permissions.
+   Alternatively adapt [the single-context policy](deploy/broker.example.json),
+   [polling policy](deploy/watch.example.json) or
+   [multi-context deployment](deploy/contexts.example.json). The generated template
+   enables read_all and observe_all for polling, keeps `read_only: true`, and
+   disables posting and replying. Sender allowlists are required only for eligible
+   human mention requests; discover user IDs after the broker is running.
+3. Supply the same bot's `WECOM_CHANNEL_BOT_SECRET` to the broker service environment.
+   For callbacks only, also supply `WECOM_CHANNEL_CALLBACK_TOKEN` and
+   `WECOM_CHANNEL_ENCODING_AES_KEY`. None belongs in the worker environment.
 4. Preview and run the broker:
 
    ```sh
@@ -94,19 +125,45 @@ every such context. Provision separate context groups for mutually untrusted wor
    wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json
    ```
 
-5. Use the private socket for `auth check`, `channel list` and `member list` to
-   discover IDs. The operator can list joined channels with an empty allowlist;
-   member/content reads require the channel to be listed in policy. Restart the
-   broker after deliberate policy edits. The broker does not configure WeCom.
-6. Polling watches work with an empty `callback_listen`; no public address or
-   callback keys are required. For optional callback events, expose only the loopback `/callback` endpoint through
-   your HTTPS reverse proxy and configure WeCom deliberately. Changing the bot's
-   connection mode invalidates its previous connection. Do not change an existing
-   working bot merely to try this CLI.
+5. Use the private socket for `auth check`, `channel list` and `member list`.
+   An existing broker can still list joined channels with an empty version 1
+   allowlist via its operator socket; member/content reads require the selected
+   channel in policy. Restart the broker after deliberate policy edits.
+6. Create the named client context below using the selected bot/channel and the
+   provisioned agent socket. Polling works with an empty `callback_listen`; no
+   public address or callback keys are required. For optional callbacks, expose
+   only the loopback `/callback` endpoint through your HTTPS reverse proxy and
+   configure WeCom deliberately. Changing connection mode invalidates the previous
+   connection. Do not change a working bot merely to try this CLI.
 
-`auth status` and `doctor` check local readiness. Only `auth check` makes a
-bounded authenticated request, and it requires the private operator socket.
-Authentication success does not establish every channel's grayscale permissions.
+`auth status` and `doctor` check local readiness. `channel list --bot-id` authenticates
+during initial setup; `auth check` verifies an existing deployment through its
+private operator socket. Neither establishes every channel's grayscale permissions.
+
+## Named channel contexts
+
+Each channel is a security context with separate agent/operator sockets, policy,
+inbox and proposal ledger. Named client contexts use the family config engine.
+Use a channel ID selected during [operator setup](#operator-setup), then configure
+the client connection. One bot deployment can route its single authenticated
+callback to up to 32 channel contexts while sharing the token cache. See [contexts](docs/contexts.md).
+
+```sh
+wecom-channel-cli config set-context default \
+  --socket /run/wecom-channel-agent/agent.sock \
+  --bot-id BOT_ID --channel CHANNEL_ID
+wecom-channel-cli config get-contexts
+wecom-channel-cli --use-context default channel list
+```
+
+The template's broker name is `default`; the client context name must match it.
+This example uses the same socket as `config example`. For contexts such as
+`engineering` and `security`, provision the matching named policies and sockets
+from the [multi-context guide](docs/contexts.md) first.
+
+Context names select connections; OS permissions and broker identity checks
+enforce access. A worker with permission to open every context socket can access
+every such context. Provision separate context groups for mutually untrusted workers.
 
 ## Agent usage
 

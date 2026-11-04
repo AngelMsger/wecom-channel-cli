@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
 <p>Scope: one new connector repository. No existing CLI or kit behavior is changed.
 The initial deliverable is a bounded broker-backed CLI, not an agent runtime.</p>
 <h2 id="components">Components</h2>
@@ -23,8 +23,9 @@ from <code>agent-cli-kit</code>.</p>
 <p>The executable itself has no supported arbitrary URL/method flag, external
 command hook, media downloader, remote path handler or credential export. The
 Go API client is a protocol library, not the OS security boundary: downstream
-library users must enforce their own policy. In this CLI, only the broker
-constructs that client and holds the Secret.</p>
+library users must enforce their own policy. In this CLI, only operator entry points
+construct that client and hold the Secret: explicit <code>channel list --bot-id</code> for
+setup and <code>broker serve</code> for the long-running deployment.</p>
 <h2 id="authentication-and-callbacks">Authentication and callbacks</h2>
 <p>A deployment has one configured bot identity and receives its Secret through an
 operator-managed environment. It signs the documented token request with a
@@ -54,6 +55,27 @@ callback timestamps have five-minute skew tolerance; event creation times are
 at most 24 hours old and at most five minutes in the future; mention reads and
 approvals are bounded by the event's 24-hour age. An event retained for audit
 does not extend WeCom's permission window.</p>
+<h2 id="credential-first-bootstrap">Credential-first bootstrap</h2>
+<p><code>channel list</code> is the sole channel listing command. An explicit <code>--bot-id</code>
+selects the operator's <code>WECOM_CHANNEL_BOT_SECRET</code> environment for first-time setup.
+It invokes the existing <code>channel.list</code> reader (<code>get_topic_list</code>, type 1) before any channel
+policy, state directory, sockets or client contexts exist. The CLI deadline bounds
+token acquisition and the single page read together. Dry-run validates and builds
+the same query without reading credentials or performing I/O. Output retains the
+kit list envelope, pagination notices, curated channel model and trust metadata.
+Empty results carry membership/API-access recovery guidance, not an invented ID.</p>
+<p>The explicit credential mode does not load client configuration, select a saved
+context, persist credentials, change policy or expose a new socket operation.
+Without <code>--bot-id</code>, the same command uses the existing broker path and enforces
+its agent/operator scope. Credentials in the environment never select direct
+access; failed or denied broker calls never fall back. Explicit socket/context
+flags conflict with <code>--bot-id</code>. Broker-mode dry-run resolves public connection
+coordinates offline and never calls the broker. Credential mode uses the same
+operator credential/OS boundary as broker startup. The operator selects an
+ID from the result, uses <code>config example --bot-id ... --channel ...</code> to fill the
+policy template, and provisions the deployment before configuring the client.
+Missing channel IDs in client setup point back to discovery. Existing client
+contexts and existing broker-based discovery retain their behavior.</p>
 <h2 id="reads-and-data-provenance">Reads and data provenance</h2>
 <p>The agent can enumerate only its context's single channel. Version 2 deployments
 route authenticated callbacks by channel into separate instances of the same
@@ -259,6 +281,12 @@ could inform a future family-wide untrusted-content project, but this task does
 not silently alter seven existing products. Existing sibling content can also
 contain prompt injection; their ordinary direct-CLI model should not be mistaken
 for host isolation.</p>
+<p>Bootstrap follows all seven siblings' discovery-before-resource-selection and
+kit output/error conventions; their <code>config set-context</code> implementations remain
+offline. Bitbucket, Confluence, Jenkins, Jira, OpenObserve, Prometheus and WeCom
+Calendar authenticate directly to their own services and have no credential-held
+channel broker to bootstrap. Only this connector needs the explicit credential mode for channel listing;
+no sibling or kit changes are required.</p>
 <p>Other deliberate differences:</p>
 <ul>
 <li>Operator-owned strict JSON policy remains separate from named client contexts.

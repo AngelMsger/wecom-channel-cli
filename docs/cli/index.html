@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.1.0</span><a href="../guide.html">Operator guide</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../reactions.html">Native reactions</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, approval, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose messages and native reactions through an isolated broker</p><pre><code>Usage:
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="../guide.html">Operator guide</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../reactions.html">Native reactions</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, approval, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose messages and native reactions through an isolated broker</p><pre><code>Usage:
   wecom-channel-cli [flags]
   wecom-channel-cli [command]
 
@@ -6,7 +6,7 @@ Available Commands:
   approval    Operator-only review and execution; requires the private operator socket
   auth        Explain credential ownership and verify through the broker
   broker      Run the isolated credential-holding broker
-  channel     Inspect channel data through broker policy
+  channel     List channels during operator setup or through broker policy
   config      Inspect operator policy offline
   doctor      Check broker connectivity and read-only policy
   event       Read or watch channel observations and authenticated callback events
@@ -177,12 +177,12 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-channel"><h2>wecom-channel-cli channel</h2><p>Inspect channel data through broker policy</p><pre><code>Usage:
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-channel"><h2>wecom-channel-cli channel</h2><p>List channels during operator setup or through broker policy</p><pre><code>Usage:
   wecom-channel-cli channel [flags]
   wecom-channel-cli channel [command]
 
 Available Commands:
-  list        Read one bounded page of channel data
+  list        List one page of channels; use --bot-id for initial operator setup
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -192,12 +192,20 @@ Global Flags:
       --timeout duration     Bound the entire local request (default 1m5s)
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 
-Use &#34;wecom-channel-cli channel [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-channel-list"><h2>wecom-channel-cli channel list</h2><p>Read one bounded page of channel data</p><pre><code>Usage:
+Use &#34;wecom-channel-cli channel [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-channel-list"><h2>wecom-channel-cli channel list</h2><p>List one page of channels; use --bot-id for initial operator setup</p><pre><code>Usage:
   wecom-channel-cli channel list [flags]
 
+Examples:
+  wecom-channel-cli channel list --bot-id BOT_ID
+  wecom-channel-cli channel list --bot-id BOT_ID --cursor NEXT_CURSOR
+  wecom-channel-cli --use-context default channel list
+  wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock channel list
+
 Flags:
-      --cursor string   Opaque continuation from the previous response
-      --limit int       Maximum records in one page (1–50; search results 1–20) (default 20)
+      --bot-id string   Use operator credentials to list joined channels before broker setup; Secret comes from WECOM_CHANNEL_BOT_SECRET
+      --cursor string   Continuation cursor from the previous channel list page
+      --dry-run         Preview the channel request without credentials, network or local writes
+      --limit int       Maximum channels in this page (1–50) (default 20)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -211,7 +219,7 @@ Global Flags:
 
 Available Commands:
   delete-context delete-context in the client configuration
-  example        Print a deny-by-default operator policy template
+  example        Print an operator policy template; discover channel IDs with channel list first
   get-contexts   List named channel security contexts
   path           Show the client configuration path
   set-context    Prepare an offline channel context without credentials or changing broker policy
@@ -239,8 +247,12 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-example"><h2>wecom-channel-cli config example</h2><p>Print a deny-by-default operator policy template</p><pre><code>Usage:
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-config-example"><h2>wecom-channel-cli config example</h2><p>Print an operator policy template; discover channel IDs with channel list first</p><pre><code>Usage:
   wecom-channel-cli config example [flags]
+
+Flags:
+      --bot-id string    Verified bot ID to insert into the template
+      --channel string   Channel data.topic_id from channel list
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -275,7 +287,7 @@ Global Flags:
 Flags:
       --activate         Make this context current
       --bot-id string    Expected broker bot ID
-      --channel string   Expected channel ID
+      --channel string   Expected data.topic_id returned by channel list
       --dry-run          Preview the exact context merge without writing
       --overwrite        Replace conflicting public context coordinates
       --socket string    Agent socket for this channel context

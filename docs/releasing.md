@@ -135,6 +135,13 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
+## Version 0.2.0
+
+Version 0.2.0 embeds companion Skill 0.1.6 and adds credential-based initial setup
+to the existing `channel list` command. See [release notes](release-notes.md) and
+the [changelog](../CHANGELOG.md) for the complete changes since 0.1.0. Its tag uses
+the family artifact set and npm OIDC workflow described above.
+
 ## First-release evidence
 
 Version **0.1.0**, embedding companion Skill **0.1.4**, was published on 2026-10-27

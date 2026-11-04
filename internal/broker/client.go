@@ -76,7 +76,7 @@ func Call(ctx context.Context, socket string, req Request) (Response, error) {
 
 func ValidateSocket(socket string) error {
 	if !filepath.IsAbs(socket) || len(socket) > 100 {
-		return e.New(e.CategoryConfig, "SOCKET_REQUIRED", "Supply an absolute broker socket path using --socket or WECOM_CHANNEL_SOCKET.")
+		return e.New(e.CategoryConfig, "SOCKET_REQUIRED", "Supply an absolute broker socket path using --socket or WECOM_CHANNEL_SOCKET.").WithHint("For first-time operator setup, use channel list --bot-id BOT_ID with WECOM_CHANNEL_BOT_SECRET before configuring channel policy or client contexts.").WithNextSteps("wecom-channel-cli auth guide", "wecom-channel-cli channel list --help", "wecom-channel-cli config set-context --help")
 	}
 	return nil
 }

@@ -2,12 +2,27 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-03
+
 ### Added
+
+- Extend the existing `channel list` with explicit `--bot-id` operator setup,
+  listing joined channel names/IDs from the Secret environment before any channel
+  policy, sockets or contexts exist. The default remains broker-based listing;
+  there is no second discovery command or automatic credential fallback. Both
+  modes support offline dry-run; direct reads retain bounded pagination.
+- `config example --bot-id ... --channel ...` fills templates from discovery;
+  missing-channel setup errors, auth guidance, docs and companion Skill 0.1.6
+  now lead through credentials, discovery, target selection and configuration.
+  The first context example matches the generated policy's default name and socket.
 
 - `pkg/apiclient` exports `Reader` and `Writer`; `Client` is now their union,
   with the same method set and signatures as before.
 
 ### Changed
+
+- Update `golang.org/x/sys` to v0.44.0, removing GO-2026-5024 from the module
+  dependency graph. The vulnerable Windows package is not used by this connector.
 
 - The broker's read-only API wrapper keeps the inner client only as a `Reader`
   and blocks each `Writer` method itself, so a write added without a blocking
@@ -111,3 +126,7 @@ Published from `3a65bf9` through GitHub Actions with npm provenance.
   environment still require operator verification.
 - Media transfer, content edits/deletes, forwarded chat expansion, Windows and
   channel long connections are not implemented. Deployment must sandbox the agent.
+
+[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0

@@ -29,7 +29,7 @@ type appState struct {
 func NewRootCmd() *cobra.Command {
 	s := &appState{}
 	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
-	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill."
+	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nFirst-time setup: auth guide -> channel list --bot-id -> config example -> broker serve -> config set-context."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")
 	root.PersistentFlags().StringVar(&s.configDir, "config-dir", "", "Client context directory (or WECOM_CHANNEL_CONFIG)")
 	root.PersistentFlags().StringVar(&s.useContext, "use-context", "", "Select a channel security context (or WECOM_CHANNEL_CONTEXT)")
