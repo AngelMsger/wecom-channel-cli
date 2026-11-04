@@ -13,6 +13,11 @@
   The broker's own read-only policy is the operator's and keeps its error,
   which `--allow-writes` cannot lift. `pkg/errors` re-exports `ReadOnlyBlocked`,
   `ReadOnlyMode` and `CodeReadOnlyBlocked`.
+- Use agent-cli-kit v0.7.0. The `READONLY_BLOCKED` hint names only
+  `WECOM_CHANNEL_CLI_READ_ONLY` as the switch the user turned on; with
+  v0.6.0 it also named `defaults.read_only`, a setting this CLI does not have.
+  The kit's change to its default HTTP client's redirects does not apply:
+  this CLI passes its own client, which already followed no redirect.
 
 ## [0.2.0] — 2026-11-03
 

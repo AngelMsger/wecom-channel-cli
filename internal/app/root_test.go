@@ -69,7 +69,8 @@ func TestDryBrokerPreviewAndSkillLifecycle(t *testing.T) {
 	if code != 5 || out != "" || !strings.Contains(err, "READONLY_BLOCKED") ||
 		!strings.Contains(err, `operation \"proposal.create\" blocked: read-only mode is enabled`) ||
 		!strings.Contains(err, "Only if the user authorized this write, re-run with --allow-writes") ||
-		strings.Contains(err, "unset") {
+		!strings.Contains(err, "The user turned it on (WECOM_CHANNEL_CLI_READ_ONLY)") ||
+		strings.Contains(err, "defaults.read_only") || strings.Contains(err, "unset") {
 		t.Fatal(code, out, err)
 	}
 }
