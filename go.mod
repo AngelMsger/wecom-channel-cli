@@ -5,7 +5,7 @@ go 1.25.0
 toolchain go1.27.3
 
 require (
-	github.com/angelmsger/agent-cli-kit v0.7.0
+	github.com/angelmsger/agent-cli-kit v0.8.1
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.7.17
 	golang.org/x/sys v0.44.0
