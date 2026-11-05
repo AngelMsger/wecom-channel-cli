@@ -18,6 +18,11 @@
   v0.6.0 it also named `defaults.read_only`, a setting this CLI does not have.
   The kit's change to its default HTTP client's redirects does not apply:
   this CLI passes its own client, which already followed no redirect.
+- Use agent-cli-kit v0.8.1. Its HTTP client changes (a read with a body
+  answered by the hop that kept its method, a write answered by its first
+  response with any client, a response that always names its request) do not
+  change this CLI: its own client follows no redirect, so every request is
+  answered by the response it got, as before.
 
 ## [0.2.0] — 2026-11-03
 
