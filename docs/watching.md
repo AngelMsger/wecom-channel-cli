@@ -186,7 +186,7 @@ errors. Wire service failure and queue-age monitoring to an ordinary operator
 monitor, not a periodic model prompt. The unit is a deployment reference, not a
 claim of a tested production installation or Grok-host compatibility.
 
-`relay-status` reads only the atomic local snapshot, even while the service runs.
+`relay status` reads only the atomic local snapshot, even while the service runs.
 It exposes queued/collected/filtered/acknowledged counts, inflight ID and attempts,
 coverage, and last-scan/last-ack timestamps (Unix milliseconds). `initialized`
 is false until the first successful broker handshake; startup retry budgets are

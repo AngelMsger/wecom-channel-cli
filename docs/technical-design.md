@@ -198,7 +198,7 @@ handshake without claiming coverage or permitting delivery. A 16 MiB file cap
 and bounded queue prevent unbounded growth;
 a full queue pauses collection without eviction. State validation checks trust
 metadata and queue counters. Persistence failures stop before another network
-operation, including ambiguous rename/fsync failures. `relay-status` reads the
+operation, including ambiguous rename/fsync failures. `relay status` reads the
 atomic file without locking or remote requests and exposes counts/timestamps.
 
 Deterministic filters run before enqueueing; skipped progress commits with

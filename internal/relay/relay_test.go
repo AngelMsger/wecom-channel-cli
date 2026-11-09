@@ -52,6 +52,9 @@ func TestQueueAtomicResumeAndImmutableBatch(t *testing.T) {
 	}
 	batch, _ := json.Marshal(s.Inflight.Batch)
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(dir, "state.json")
 	f, err := Open(path)
 	if err != nil {
@@ -131,12 +134,18 @@ func TestQueueCapacityAndCorruption(t *testing.T) {
 	for _, mode := range []string{"symlink", "public", "parent", "unrelated"} {
 		t.Run(mode, func(t *testing.T) {
 			dir, _ := filepath.EvalSymlinks(t.TempDir())
+			if err := os.Chmod(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
 			path := filepath.Join(dir, "state.json")
 			s, p, c := fixture()
 			_ = s.Collect(p, c, time.Now())
 			b, _ := json.Marshal(s)
 			if err := os.WriteFile(path, b, 0600); err != nil {
 				t.Fatal(err)
+			}
+			if _, exists, err := Read(path); err != nil || !exists {
+				t.Fatalf("valid state must be readable before corruption: %v", err)
 			}
 			switch mode {
 			case "symlink":

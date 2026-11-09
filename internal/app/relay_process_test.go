@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -52,7 +54,15 @@ func TestCLIProcessRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ledger.Close()
-	verifier, _ := callback.New("token", "jWmYm7qr5nMoAUwZRjGtBxmz3KA1tkAj3ykkR6q2B2C", "")
+	// Generate a process-local callback key; this test does not need a known-answer vector.
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := callback.New("token", base64.RawStdEncoding.EncodeToString(key), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	b := broker.New(cfg, ledger, noWatchNetwork{}, verifier)
 	ctx, cancel := context.WithCancel(context.Background())
 	ready, done := make(chan struct{}), make(chan error, 1)

@@ -98,7 +98,9 @@ fingerprints and preserve native localized labels as protocol catalog data.
 Read docs/technical-design.md and docs/security.md for the threat model and
 intentional family differences. Update those, the companion Skill, generated CLI
 reference and changelog with behavior changes. Use synthetic credentials and
-local mock servers in tests; do not post to a live channel for validation.
+local mock servers in tests; do not post to a live channel for validation. Generate
+new callback fixtures at runtime unless testing a published known-answer vector.
+Explicitly chmod private t.TempDir leaves to 0700; Go does not guarantee that mode.
 Keep the Skill's `version:` marker and loaded handshake synchronized. The marker
 is a body metadata comment because the standard Skill frontmatter validator
 rejects a top-level version field; the kit's existing version reader handles it.
