@@ -50,7 +50,7 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func configError() error {
-	return e.New(e.CategoryConfig, "RELAY_CONFIG", "Use a protected relay JSON configuration with a fixed HTTPS webhook (HTTP only for literal loopback), valid filters and bounded delivery limits.").WithNextSteps("wecom-channel-cli event relay --help", "Review deploy/relay.example.json and docs/watching.md.")
+	return e.New(e.CategoryConfig, "RELAY_CONFIG", "Use a protected relay JSON configuration with a fixed HTTPS webhook (HTTP only for literal loopback), valid filters and bounded delivery limits.").WithNextSteps("wecom-channel-cli relay run --help", "Review deploy/relay.example.json and docs/watching.md.")
 }
 
 func (c Config) Validate() error {

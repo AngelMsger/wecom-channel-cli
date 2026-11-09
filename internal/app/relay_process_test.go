@@ -128,7 +128,7 @@ func TestCLIProcessRelay(t *testing.T) {
 		}
 		return out.String(), stderr.String(), code
 	}
-	args := []string{"event", "relay", "--whole-channel", "--relay-config", configPath, "--state", statePath, "--duration", "200ms", "--max-batches", "1"}
+	args := []string{"relay", "run", "--whole-channel", "--config", configPath, "--state", statePath, "--duration", "200ms", "--max-batches", "1"}
 	preview := append(append([]string{}, args...), "--dry-run")
 	out, stderr, code := runRelay([]string{"WECOM_CHANNEL_CLI_READ_ONLY=true"}, preview...)
 	if code != 0 || !strings.Contains(out, `"dry_run": true`) {
@@ -167,7 +167,7 @@ func TestCLIProcessRelay(t *testing.T) {
 	if len(batch.Threads) != 1 || len(batch.Threads[0].Events) != 2 || batch.Threads[0].Events[0].Trust != "untrusted" {
 		t.Fatal("lost grouping/trust")
 	}
-	out, stderr, code = runRelay(nil, "event", "relay-status", "--state", statePath)
+	out, stderr, code = runRelay(nil, "relay", "status", "--state", statePath)
 	if code != 0 || !strings.Contains(out, `"acknowledged_events": 2`) || !strings.Contains(out, `"queued_events": 0`) {
 		t.Fatal(code, out, stderr)
 	}

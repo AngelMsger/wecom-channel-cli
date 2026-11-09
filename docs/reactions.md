@@ -32,7 +32,7 @@ bodies, download URLs, cookies or raw upstream fields.
 The source envelope retains the channel/post IDs and, for a reply target,
 `source.reply_id`, so merged output streams cannot confuse the two target kinds.
 
-Discover targets with `post list`, `reply list`, `search result` or a verified
+Discover targets with `post list`, `reply list`, `search get` or a verified
 event. In mention-only mode, pass the matching `--event EVENT_ID` when reading
 reactions; otherwise agent reads require `read_all`. No actor-selection flag can
 impersonate another member or remove their reactions.
@@ -104,10 +104,10 @@ the private socket, outside the agent's tool authority:
 wecom-channel-cli --use-context engineering \
   --socket /run/wecom-channel/engineering-admin/admin.sock proposal get --id PROPOSAL_ID
 wecom-channel-cli --use-context engineering \
-  --socket /run/wecom-channel/engineering-admin/admin.sock approval approve \
+  --socket /run/wecom-channel/engineering-admin/admin.sock proposal approve \
   --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes --dry-run
 wecom-channel-cli --use-context engineering \
-  --socket /run/wecom-channel/engineering-admin/admin.sock approval approve \
+  --socket /run/wecom-channel/engineering-admin/admin.sock proposal approve \
   --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes
 ```
 

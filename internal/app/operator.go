@@ -74,8 +74,8 @@ func ExampleConfig() config.Config {
 	return c
 }
 
-func (s *appState) configCommands() *cobra.Command {
-	g := &cobra.Command{Use: "config", Short: "Inspect operator policy offline"}
+func (s *appState) policyCommands() *cobra.Command {
+	g := &cobra.Command{Use: "policy", Short: "Generate or validate the broker's operator-owned authorization policy offline"}
 	var path string
 	var bot, channel string
 	example := &cobra.Command{Use: "example", Short: "Print an operator policy template; discover channel IDs with channel list first", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
@@ -106,7 +106,15 @@ func (s *appState) configCommands() *cobra.Command {
 	}}
 	c.Flags().StringVar(&path, "file", "", "Operator policy file")
 	g.AddCommand(c)
+	return g
+}
+
+func (s *appState) configCommands() *cobra.Command {
+	g := &cobra.Command{Use: "config", Short: "Manage local client contexts; authorization belongs to operator policy"}
 	s.addContextCommands(g)
+	for _, cmd := range s.policyCommands().Commands() {
+		g.AddCommand(compatibilityCommand(cmd, "policy "+cmd.Name()))
+	}
 	return g
 }
 
@@ -122,10 +130,12 @@ func (s *appState) authCommands() *cobra.Command {
 			"channel_discovery":    "Run channel list --bot-id BOT_ID before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
 			"official_cli_reuse":   map[string]any{"supported": false, "reason": "The official CLI uses get_cli_config and a gateway Bearer token. Channel get_token credentials are a separate contract; encrypted private stores are not an integration API."},
 			"documentation":        "https://developer.work.weixin.qq.com/document/path/101910",
-			"next_steps":           []string{"wecom-channel-cli channel list --bot-id BOT_ID", "wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
+			"next_steps":           []string{"wecom-channel-cli channel list --bot-id BOT_ID", "wecom-channel-cli policy example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
 		})
 	}})
-	g.AddCommand(&cobra.Command{Use: "status", Short: "Read broker readiness (does not verify WeCom authentication)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, broker.Request{Operation: "health"}) }})
+	status := s.doctorCommand()
+	status.Use = "status"
+	g.AddCommand(compatibilityCommand(status, "doctor"))
 	g.AddCommand(&cobra.Command{Use: "check", Short: "Operator-only: verify authentication with a bounded channel-list request", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.call(cmd, broker.Request{Operation: "auth.check"})
 	}})

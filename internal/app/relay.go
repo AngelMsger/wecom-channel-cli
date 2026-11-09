@@ -12,15 +12,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func (s *appState) relayCommands() *cobra.Command {
+	g := &cobra.Command{Use: "relay", Short: "Run and inspect durable event delivery to a configured host adapter"}
+	g.AddCommand(s.relayCommand(), s.relayStatusCommand())
+	return g
+}
+
 func (s *appState) relayCommand() *cobra.Command {
 	scan := broker.ScanRequest{Limit: 100}
 	var configPath, statePath string
 	var duration, interval time.Duration
 	var maxBatches int
 	var dry, retryFailed bool
-	cmd := &cobra.Command{Use: "relay", Short: "Collect observations durably and deliver acknowledged webhook batches without a model", Args: cobra.NoArgs,
+	cmd := &cobra.Command{Use: "run", Short: "Run a bounded collector and deliver acknowledged batches without a model", Args: cobra.NoArgs,
 		Long:    "Run this opt-in consumer as a separate trusted service, outside the model worker.\nIt reads the existing agent socket and a private operator-provisioned relay config.\nThe broker never receives a webhook URL or credential. Empty scans send nothing.\nBatches retain the untrusted envelope and contain metadata only. The receiver must\ndeduplicate Idempotency-Key and return {\"ack\":\"BATCH_ID\"} after processing or\ndurable handoff. Retries are explicitly bounded by config retry_limit (default 0).\nGaps, permission errors, binding changes and invalid acknowledgments stop delivery.\nUse a supervisor to renew bounded sessions; see docs/watching.md for deployment.",
-		Example: "  wecom-channel-cli --use-context engineering event relay --whole-channel --relay-config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h\n  wecom-channel-cli event relay-status --state /var/lib/wecom-relay/state.json",
+		Example: "  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h\n  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json",
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if duration <= 0 || duration > 24*time.Hour || interval < time.Second || interval > time.Minute || maxBatches < 1 || maxBatches > 100000 || statePath == "" {
@@ -36,7 +42,7 @@ func (s *appState) relayCommand() *cobra.Command {
 			return err
 		}
 		if !dry {
-			if err = s.guard("event relay"); err != nil {
+			if err = s.guard("relay run"); err != nil {
 				return err
 			}
 		}
@@ -128,7 +134,7 @@ func (s *appState) relayCommand() *cobra.Command {
 	f.StringArrayVar(&scan.Posts, "post", nil, "Observe this post and its replies; repeat for up to 32 IDs")
 	f.BoolVar(&scan.AllowPartial, "allow-partial", false, "Explicitly accept allowlisted-human callback coverage")
 	f.Int64Var(&scan.After, "after-sequence", 0, "Replay after this sequence only when creating new relay state")
-	f.StringVar(&configPath, "relay-config", "", "Private operator-provisioned JSON with fixed destination, filters and retry bounds")
+	f.StringVar(&configPath, "config", "", "Private operator-provisioned JSON with fixed destination, filters and retry bounds")
 	f.StringVar(&statePath, "state", "", "Durable queue in an existing private service-owned directory (required)")
 	f.DurationVar(&duration, "duration", 5*time.Minute, "Maximum session duration, up to 24h; queued work survives exit")
 	f.DurationVar(&interval, "interval", 2*time.Second, "Minimum scan interval, 1s–1m; operator polling rates still apply")
@@ -304,7 +310,7 @@ func relayStatus(st relay.State) map[string]any {
 
 func (s *appState) relayStatusCommand() *cobra.Command {
 	var path string
-	cmd := &cobra.Command{Use: "relay-status", Short: "Read local queue counts and timestamps without a broker, webhook or model call", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := &cobra.Command{Use: "status", Short: "Read local delivery counts and timestamps; this does not probe process liveness", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		st, exists, err := relay.Read(path)
 		if err != nil {
 			return err

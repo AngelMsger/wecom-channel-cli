@@ -5,6 +5,13 @@ The initial deliverable is a bounded broker-backed CLI, not an agent runtime.
 
 ## Components
 
+The CLI's canonical resource/action tree and published compatibility paths are
+defined in [command responsibilities](command-design.md). Those routes do not
+change wire operation names or listener-bound authority. Client configuration,
+operator policy, proposals, observation streams and relay services have distinct
+state owners. Compatibility commands use the same factories and emit structured
+stderr migration notices; they are excluded from generated discovery surfaces.
+
 ```mermaid
 flowchart LR
   W[WeCom] -->|Signed encrypted callback| B[Credential-holding broker]
@@ -86,7 +93,7 @@ access; failed or denied broker calls never fall back. Explicit socket/context
 flags conflict with `--bot-id`. Broker-mode dry-run resolves public connection
 coordinates offline and never calls the broker. Credential mode uses the same
 operator credential/OS boundary as broker startup. The operator selects an
-ID from the result, uses `config example --bot-id ... --channel ...` to fill the
+ID from the result, uses `policy example --bot-id ... --channel ...` to fill the
 policy template, and provisions the deployment before configuring the client.
 Missing channel IDs in client setup point back to discovery. Existing client
 contexts and existing broker-based discovery retain their behavior.
@@ -176,7 +183,7 @@ without an active watch. See [watching](watching.md) for coverage and limits.
 
 ## Durable consumer relay
 
-`event relay` implements a consumer outside the broker and model worker through
+`relay run` implements a consumer outside the broker and model worker through
 `internal/relay`. It uses existing `event.scan` requests; no broker endpoint,
 authorization policy or remote WeCom write is added. Fixed destination config
 and receiver credentials stay in that service. The shared transport performs one

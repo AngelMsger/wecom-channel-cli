@@ -83,7 +83,7 @@ func (s *appState) channelListCommand(newClient func(string, string) (apiclient.
 			if len(page.Items) == 0 && !page.HasMore {
 				message = "No channels on this page. If no earlier page contained the target, verify this bot has joined that channel and has channel API access, then discover again. Do not invent a channel ID."
 			}
-			output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": map[string]any{"discovery": message, "next_steps": []string{"wecom-channel-cli config example --help", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help"}}})
+			output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": map[string]any{"discovery": message, "next_steps": []string{"wecom-channel-cli policy example --help", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help"}}})
 			return nil
 		},
 	}

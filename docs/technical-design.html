@@ -1,7 +1,13 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Technical design — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html">Command responsibilities</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html" aria-current="page">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="technical-design">Technical design</h1>
 <p>Scope: one new connector repository. No existing CLI or kit behavior is changed.
 The initial deliverable is a bounded broker-backed CLI, not an agent runtime.</p>
 <h2 id="components">Components</h2>
+<p>The CLI's canonical resource/action tree and published compatibility paths are
+defined in <a href="command-design.html">command responsibilities</a>. Those routes do not
+change wire operation names or listener-bound authority. Client configuration,
+operator policy, proposals, observation streams and relay services have distinct
+state owners. Compatibility commands use the same factories and emit structured
+stderr migration notices; they are excluded from generated discovery surfaces.</p>
 <pre><code class="language-mermaid">flowchart LR
   W[WeCom] --&gt;|Signed encrypted callback| B[Credential-holding broker]
   B --&gt;|Bounded HTTPS polling reads| W
@@ -72,7 +78,7 @@ access; failed or denied broker calls never fall back. Explicit socket/context
 flags conflict with <code>--bot-id</code>. Broker-mode dry-run resolves public connection
 coordinates offline and never calls the broker. Credential mode uses the same
 operator credential/OS boundary as broker startup. The operator selects an
-ID from the result, uses <code>config example --bot-id ... --channel ...</code> to fill the
+ID from the result, uses <code>policy example --bot-id ... --channel ...</code> to fill the
 policy template, and provisions the deployment before configuring the client.
 Missing channel IDs in client setup point back to discovery. Existing client
 contexts and existing broker-based discovery retain their behavior.</p>
@@ -146,7 +152,7 @@ A returned recall flag is evidence, but absence is not. Intermediate changes,
 reactions and membership events are not reconstructed. No background job runs
 without an active watch. See <a href="watching.html">watching</a> for coverage and limits.</p>
 <h2 id="durable-consumer-relay">Durable consumer relay</h2>
-<p><code>event relay</code> implements a consumer outside the broker and model worker through
+<p><code>relay run</code> implements a consumer outside the broker and model worker through
 <code>internal/relay</code>. It uses existing <code>event.scan</code> requests; no broker endpoint,
 authorization policy or remote WeCom write is added. Fixed destination config
 and receiver credentials stay in that service. The shared transport performs one

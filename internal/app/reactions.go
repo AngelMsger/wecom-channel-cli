@@ -18,7 +18,7 @@ func (s *appState) reactionCommands() *cobra.Command {
 		Long: "Read one post or reply's emoji_list through the content API. A matching\n--event permits mention-scoped reads; otherwise the agent needs read_all.\nEach item includes bot_reacted for this broker's bot. No message body is returned.",
 		RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, r) }}
 	list.Flags().StringVar(&r.Query.Channel, "channel", "", "Channel ID from channel list or an authenticated event")
-	list.Flags().StringVar(&r.Query.Post, "post", "", "Exact post ID from post list, search result or event get")
+	list.Flags().StringVar(&r.Query.Post, "post", "", "Exact post ID from post list, search get or event get")
 	list.Flags().StringVar(&r.Query.Reply, "reply", "", "Optional reply ID; omit to inspect the post itself")
 	list.Flags().StringVar(&r.ID, "event", "", "Matching authenticated mention event for a mention-only read")
 	group.AddCommand(list)

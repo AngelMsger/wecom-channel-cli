@@ -75,7 +75,7 @@ wecom-channel-cli --use-context engineering event watch \
   --post FIRST_POST_ID --post SECOND_POST_ID --duration 10m
 ```
 
-Discover IDs with `post list`, `search result`, or authenticated events. Up to 32
+Discover IDs with `post list`, `search get`, or authenticated events. Up to 32
 post IDs are accepted. New watches start at the current inbox head, so existing
 records are not replayed by default. Use `--after-sequence N` to replay retained
 records after an explicitly known checkpoint. Sequence zero requests retained
@@ -130,7 +130,7 @@ durable consumer, use the opt-in relay described below.
 `event watch` and the broker do not invoke a model. Scheduling a Bot to run them
 every few minutes still pays for a model turn even when stdout is empty. Repeated
 model-driven `reply list` calls also put unrelated history back into context.
-Run `event relay` as ordinary supervised software instead: it collects from the
+Run `relay run` as ordinary supervised software instead: it collects from the
 same `event.scan` interface, persists a queue and calls a fixed receiver only for
 nonempty eligible batches. Empty scans and health checks make zero receiver or
 model calls. There is no model SDK or shell-command adapter in the relay.
@@ -157,15 +157,15 @@ Create a private 0700 relay-owned state directory, then preview with the same
 context and scope that the service will use:
 
 ```sh
-wecom-channel-cli --use-context engineering event relay \
-  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+wecom-channel-cli --use-context engineering relay run \
+  --whole-channel --config /etc/wecom-relay/relay.json \
   --state /var/lib/wecom-relay/state.json --duration 24h --dry-run
 
-wecom-channel-cli --use-context engineering event relay \
-  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+wecom-channel-cli --use-context engineering relay run \
+  --whole-channel --config /etc/wecom-relay/relay.json \
   --state /var/lib/wecom-relay/state.json --duration 24h
 
-wecom-channel-cli event relay-status --state /var/lib/wecom-relay/state.json
+wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json
 ```
 
 Dry-run validates the same config, scope, saved binding and broker coverage but

@@ -46,7 +46,7 @@ Requires Go 1.25 or newer. From this repository:
 make build
 bin/wecom-channel-cli --help
 bin/wecom-channel-cli auth guide
-bin/wecom-channel-cli config example
+bin/wecom-channel-cli policy example
 make lint test e2e docs-check site-check
 ```
 
@@ -104,7 +104,7 @@ After choosing the channel:
 2. Generate a policy template with the discovered identity:
 
    ```sh
-   wecom-channel-cli config example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID
+   wecom-channel-cli policy example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID
    ```
 
    Save it to an operator-controlled file and review its paths and permissions.
@@ -120,7 +120,7 @@ After choosing the channel:
 4. Preview and run the broker:
 
    ```sh
-   wecom-channel-cli config validate --file /etc/wecom-channel/broker.json
+   wecom-channel-cli policy validate --file /etc/wecom-channel/broker.json
    wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json --dry-run
    wecom-channel-cli broker serve --config /etc/wecom-channel/broker.json
    ```
@@ -136,9 +136,10 @@ After choosing the channel:
    configure WeCom deliberately. Changing connection mode invalidates the previous
    connection. Do not change a working bot merely to try this CLI.
 
-`auth status` and `doctor` check local readiness. `channel list --bot-id` authenticates
-during initial setup; `auth check` verifies an existing deployment through its
-private operator socket. Neither establishes every channel's grayscale permissions.
+`doctor` checks local broker readiness without authenticating to WeCom.
+`channel list --bot-id` authenticates during initial setup; `auth check` verifies
+an existing deployment through its private operator socket. Neither establishes
+every channel's grayscale permissions.
 
 ## Named channel contexts
 
@@ -157,7 +158,7 @@ wecom-channel-cli --use-context default channel list
 ```
 
 The template's broker name is `default`; the client context name must match it.
-This example uses the same socket as `config example`. For contexts such as
+This example uses the same socket as `policy example`. For contexts such as
 `engineering` and `security`, provision the matching named policies and sockets
 from the [multi-context guide](docs/contexts.md) first.
 
@@ -182,7 +183,7 @@ wecom-channel-cli event context --id EVENT_ID
 wecom-channel-cli post list --channel CHANNEL_ID --limit 20
 wecom-channel-cli reply list --channel CHANNEL_ID --post POST_ID
 wecom-channel-cli search start --channel CHANNEL_ID --keyword incident
-wecom-channel-cli search result --channel CHANNEL_ID --job JOB_ID
+wecom-channel-cli search get --channel CHANNEL_ID --job JOB_ID
 ```
 
 Do not invent IDs. Events provide exact channel/post/reply targets. A mention's
@@ -210,6 +211,9 @@ names as untrusted even when the sender is allowlisted.
 
 ## Watch a channel or selected threads
 
+See [command responsibilities and migration](docs/command-design.md) for the full
+tree and the distinction between retained reads, observation streams and delivery.
+
 ```sh
 wecom-channel-cli --use-context engineering event watch \
   --whole-channel --duration 10m --max-events 500
@@ -229,13 +233,13 @@ bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See [watching](docs/watching.md) for setup, partial coverage and
 checkpoint delivery limits.
 
-For unattended Bot integration, run the ordinary `event relay` service instead
+For unattended Bot integration, run the ordinary `relay run` service instead
 of scheduling repeated model turns. It queues metadata durably, filters and
 groups changes by thread, and dispatches only nonempty batches to a configured
 receiver. A matching acknowledgment removes the batch; retries retain its
 idempotency key. The receiver must deduplicate before waking a Bot. See the
 [relay setup and receiver contract](docs/watching.md#relay-events-without-model-polling)
-and [service example](deploy/wecom-channel-relay.service). `event relay-status`
+and [service example](deploy/wecom-channel-relay.service). `relay status`
 provides local counts and timestamps without a model or network call.
 
 ## Propose, review, send
@@ -265,11 +269,11 @@ The trusted operator reviews the entire proposal, including destination, text,
 expiry and digest, outside the agent session, then runs:
 
 ```sh
-wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval list
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock proposal list
 wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock proposal get --id PROPOSAL_ID
-wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval approve \
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock proposal approve \
   --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes --dry-run
-wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock approval approve \
+wecom-channel-cli --socket /run/wecom-channel-admin/admin.sock proposal approve \
   --id PROPOSAL_ID --digest REVIEWED_DIGEST --yes
 ```
 
@@ -279,7 +283,7 @@ override broker policy, route to the operator interface, or grant approval.
 
 The ledger records `sending` before network I/O. A failed response becomes
 `uncertain`; a crash can leave `sending`. Both block re-execution, as does `sent`.
-The operator reconciles with WeCom before using `approval resolve --outcome
+The operator reconciles with WeCom before using `proposal resolve --outcome
 sent --remote-id ID` or `--outcome not_sent`, with the same ID/digest and `--yes`.
 Resolution does not resend. See [write recovery](docs/technical-design.md#write-state).
 

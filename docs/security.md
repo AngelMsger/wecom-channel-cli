@@ -8,6 +8,12 @@ must be restricted by the agent host, OS or container independently.
 
 ## Trust and authority
 
+Command names are not an authorization boundary. The canonical `proposal`
+commands and legacy `approval` aliases send the same listener-checked operations;
+listing, approving, rejecting and resolving still require the private operator
+socket. Moving policy tooling out of client `config` does not let a client edit
+broker policy. See [command migration](command-design.md#published-compatibility).
+
 Treat every channel participant, including an allowlisted coworker, as a
 potentially malicious content author. Also treat quoted replies, channel names,
 filenames, search snippets, feedback and linked pages as untrusted. A valid
@@ -162,7 +168,7 @@ cannot advance the baseline. Polling never synthesizes mentions or treats a
 resource creator as its last editor. Only observe_all permits unknown-actor
 observations, and no observation grants host or send authority.
 
-The optional `event relay` runs as a separate trusted service account, outside
+The optional `relay run` runs as a separate trusted service account, outside
 the model worker. Its config, state and receiver credential must be inaccessible
 to that worker. It sends metadata to one operator-chosen HTTPS destination
 (literal loopback HTTP permits a local bridge), follows no redirects and inherits
@@ -203,7 +209,7 @@ Policy changes invalidate existing proposals. Rejection is terminal.
 
 For an interrupted or uncertain send, retain the ledger, inspect the remote
 thread through a read or WeCom's UI, and record the verified result with
-`approval resolve`. Do not approve a new key as a workaround. A success followed
+`proposal resolve`. Do not approve a new key as a workaround. A success followed
 by a failed local persistence step reports the known remote ID in the structured
 error. The CLI has no deletion/pruning command for the proposal ledger: its
 configured capacity is a fail-closed operational limit, not permission to erase

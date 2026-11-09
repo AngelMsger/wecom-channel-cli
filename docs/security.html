@@ -1,10 +1,15 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Security model — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html" aria-current="page">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="security-boundary-and-deployment">Security boundary and deployment</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Security model — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html">Command responsibilities</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html" aria-current="page">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="security-boundary-and-deployment">Security boundary and deployment</h1>
 <p>The enforceable boundary is <strong>an isolated broker plus a sandboxed agent</strong>.
 A warning or system prompt alone cannot prevent a model with a shell from
 deleting files or reading credentials. This program does not intercept another
 agent's shell, filesystem, browser, network or MCP tools. Those capabilities
 must be restricted by the agent host, OS or container independently.</p>
 <h2 id="trust-and-authority">Trust and authority</h2>
+<p>Command names are not an authorization boundary. The canonical <code>proposal</code>
+commands and legacy <code>approval</code> aliases send the same listener-checked operations;
+listing, approving, rejecting and resolving still require the private operator
+socket. Moving policy tooling out of client <code>config</code> does not let a client edit
+broker policy. See <a href="command-design.html#published-compatibility">command migration</a>.</p>
 <p>Treat every channel participant, including an allowlisted coworker, as a
 potentially malicious content author. Also treat quoted replies, channel names,
 filenames, search snippets, feedback and linked pages as untrusted. A valid
@@ -257,7 +262,7 @@ and per-context remote request budget bound this work. A partial or failed snaps
 cannot advance the baseline. Polling never synthesizes mentions or treats a
 resource creator as its last editor. Only observe_all permits unknown-actor
 observations, and no observation grants host or send authority.</p>
-<p>The optional <code>event relay</code> runs as a separate trusted service account, outside
+<p>The optional <code>relay run</code> runs as a separate trusted service account, outside
 the model worker. Its config, state and receiver credential must be inaccessible
 to that worker. It sends metadata to one operator-chosen HTTPS destination
 (literal loopback HTTP permits a local bridge), follows no redirects and inherits
@@ -292,7 +297,7 @@ proposals expire after one hour by default (configurable down to 60 seconds).
 Policy changes invalidate existing proposals. Rejection is terminal.</p>
 <p>For an interrupted or uncertain send, retain the ledger, inspect the remote
 thread through a read or WeCom's UI, and record the verified result with
-<code>approval resolve</code>. Do not approve a new key as a workaround. A success followed
+<code>proposal resolve</code>. Do not approve a new key as a workaround. A success followed
 by a failed local persistence step reports the known remote ID in the structured
 error. The CLI has no deletion/pruning command for the proposal ledger: its
 configured capacity is a fail-closed operational limit, not permission to erase

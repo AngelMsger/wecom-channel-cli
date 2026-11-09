@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Channel contexts — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html" aria-current="page">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="channel-security-contexts">Channel security contexts</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Channel contexts — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html">Command responsibilities</a><a href="contexts.html" aria-current="page">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="channel-security-contexts">Channel security contexts</h1>
 <p>Each context binds one bot/channel identity to its own agent socket, operator
 socket, policy, event inbox, proposal ledger and checkpoints. The client uses
 named contexts through the same <code>agent-cli-kit/config</code> engine as the other CLIs.
@@ -20,7 +20,7 @@ restricted to its configured channel. Discovery never grants permission or edits
 directory with <code>--config-dir</code> or <code>WECOM_CHANNEL_CONFIG</code>. No credential is stored
 in this file. Setup is offline and does not alter the broker's policy.
 The client context name must match the broker policy's <code>name</code>. A single-context
-<code>config example</code> uses <code>default</code> and <code>/run/wecom-channel-agent/agent.sock</code>; use
+<code>policy example</code> uses <code>default</code> and <code>/run/wecom-channel-agent/agent.sock</code>; use
 those values for that deployment. The engineering/security examples below assume
 the matching version 2 deployment described later on this page.</p>
 <pre><code class="language-sh">wecom-channel-cli config set-context engineering \
@@ -84,7 +84,7 @@ has exactly one channel and distinct socket directories and durable state.</p>
 }
 </code></pre>
 <p>Add another object with another name/channel and distinct paths. Up to 32 contexts
-are accepted. Other policy limits inherit the safe defaults from <code>config example</code>.
+are accepted. Other policy limits inherit the safe defaults from <code>policy example</code>.
 Bot identity and callback address cannot differ between contexts in one deployment;
 use another deployment for another bot. Duplicate channels, names or socket/state
 paths fail validation. State is bound to bot, context and channel; moving a ledger
@@ -123,7 +123,7 @@ selects the same context and overrides only the socket to its private counterpar
   --post POST_ID --event EVENT_ID --key REQUEST_KEY --stdin &lt; draft.txt
 
 wecom-channel-cli --use-context engineering \
-  --socket /run/wecom-channel/engineering-admin/admin.sock approval list
+  --socket /run/wecom-channel/engineering-admin/admin.sock proposal list
 </code></pre>
 <p>Context metadata is always returned in <code>source.context</code> on broker records. A
 proposal from another context is absent from this ledger; an identical idempotency

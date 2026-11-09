@@ -1,0 +1,254 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command responsibilities — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html" aria-current="page">Command responsibilities</a><a href="contexts.html">Channel contexts</a><a href="watching.html">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="command-responsibilities-and-migration">Command responsibilities and migration</h1>
+<p>The public grammar is <code>wecom-channel-cli &lt;resource&gt; &lt;action&gt;</code>. A command's
+resource, state owner, output and side effects determine its place in the tree.
+Operator authority comes from the private socket and policy, never from a noun,
+flag, alias or the fact that a command appears in help.</p>
+<h2 id="canonical-tree">Canonical tree</h2>
+<pre><code class="language-text">wecom-channel-cli
+  channel   list
+  member    list
+  post      list | get | propose
+  reply     list | get | propose
+  reaction  types | list | propose
+  search    start | get
+  event     list | get | context | watch
+  relay     run | status
+  proposal  list | get | approve | reject | resolve
+  policy    example | validate
+  broker    serve
+  config    path | get-contexts | set-context | use-context | delete-context
+  auth      guide | check
+  skill     show | path | status | install
+  doctor
+  version
+</code></pre>
+<p>This inventory omits Cobra's built-in help/completion. The
+<a href="cli/index.html">generated reference</a> is authoritative for flags and examples.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Primitive and result</th>
+<th>Authority / state owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>channel list</code>, <code>member list</code></td>
+<td>Discover channels/members in one bounded page</td>
+<td>Broker policy; explicit <code>channel list --bot-id</code> is credential-based operator bootstrap</td>
+</tr>
+<tr>
+<td><code>post/reply list</code></td>
+<td>Retrieve a bounded page of current content</td>
+<td>Broker read scope</td>
+</tr>
+<tr>
+<td><code>post/reply get</code></td>
+<td>Retrieve current content for an exact known ID</td>
+<td>Broker read scope</td>
+</tr>
+<tr>
+<td><code>reaction types</code></td>
+<td>Discover the offline native emoji enum</td>
+<td>No network or credentials</td>
+</tr>
+<tr>
+<td><code>reaction list</code></td>
+<td>Inspect current reaction membership on one target</td>
+<td>General or exact-mention read scope</td>
+</tr>
+<tr>
+<td><code>post/reply/reaction propose</code></td>
+<td>Build and persist one immutable intent; no remote action</td>
+<td>Agent socket can propose; action-specific fields stay with the resource</td>
+</tr>
+<tr>
+<td><code>proposal get</code></td>
+<td>Inspect the intent and current execution/reconciliation state</td>
+<td>Agent or operator socket within allowed scope</td>
+</tr>
+<tr>
+<td><code>proposal list/approve/reject/resolve</code></td>
+<td>Enumerate retained proposals, execute an approved pending intent, reject, or record a verified uncertain outcome</td>
+<td>Private operator socket; resolve never resends</td>
+</tr>
+<tr>
+<td><code>search start</code></td>
+<td>Initiate a server-side search and return its job identity</td>
+<td>Observation through broker; not a host/agent job</td>
+</tr>
+<tr>
+<td><code>search get --job</code></td>
+<td>Read one bounded page of that search's results</td>
+<td>Same broker context as the search</td>
+</tr>
+<tr>
+<td><code>event list/get</code></td>
+<td>Read retained observation/mention metadata once</td>
+<td>Broker ledger; these commands do not listen</td>
+</tr>
+<tr>
+<td><code>event context</code></td>
+<td>Read the post and exact reply authorized by a fresh human mention</td>
+<td>Mention-specific permission, unlike general content browsing</td>
+</tr>
+<tr>
+<td><code>event watch</code></td>
+<td>Stream bounded observations to NDJSON</td>
+<td>Consumer checkpoint records successful output, not processing</td>
+</tr>
+<tr>
+<td><code>relay run</code></td>
+<td>Collect, queue, filter, batch and deliver to one configured host adapter</td>
+<td>Separate trusted service; durable queue and explicit acknowledgment</td>
+</tr>
+<tr>
+<td><code>relay status</code></td>
+<td>Read local queue counts/timestamps</td>
+<td>No network; not a process-liveness probe or Bot-completion claim</td>
+</tr>
+<tr>
+<td><code>policy example/validate</code></td>
+<td>Generate or validate broker authorization policy offline</td>
+<td>Operator-owned configuration; neither command installs it</td>
+</tr>
+<tr>
+<td><code>broker serve</code></td>
+<td>Run the credential-holding service from that policy</td>
+<td>Isolated broker identity</td>
+</tr>
+<tr>
+<td><code>config ...</code></td>
+<td>Manage local connection coordinates and selected context</td>
+<td>Client configuration; never changes broker permissions</td>
+</tr>
+<tr>
+<td><code>auth guide</code></td>
+<td>Explain credential ownership and bootstrap</td>
+<td>Offline</td>
+</tr>
+<tr>
+<td><code>auth check</code></td>
+<td>Perform a bounded upstream authentication check</td>
+<td>Private operator socket; remote I/O</td>
+</tr>
+<tr>
+<td><code>doctor</code></td>
+<td>Check local broker readiness and read-only policy</td>
+<td>Does not verify upstream authentication</td>
+</tr>
+<tr>
+<td><code>skill ...</code>, <code>version</code></td>
+<td>Inspect/install agent guidance and report build identity</td>
+<td>Local software metadata; installation is an explicit local write</td>
+</tr>
+</tbody>
+</table>
+<h2 id="choosing-an-observation-primitive">Choosing an observation primitive</h2>
+<p>Use <code>event list/get</code> for a one-time inspection of retained events, <code>event watch</code>
+for a bounded foreground stream, and <code>relay run</code> for unattended acknowledged
+delivery. A relay is a stateful service with its own queue and lifecycle, so its
+status belongs under <code>relay</code>, not under <code>event</code>. There is one broker scan path
+behind watch and relay; neither adds a second upstream observation engine.</p>
+<p><code>event context</code> deliberately stays separate from <code>post/reply get</code>: it expresses
+the narrower permission granted by a fresh authenticated human mention. It is
+not an alternative to <code>config</code> contexts and does not fetch arbitrary history.
+Likewise, <code>propose</code> creates an intent while <code>approve</code> executes it; combining them
+into a generic send command would conceal the independent operator boundary.</p>
+<p>The three resource-specific proposal commands remain because text, replies and
+native reactions have different target and validation rules. Their resulting
+resource has one lifecycle under <code>proposal</code>. There is no separately stored
+approval resource to list. Native <code>reaction types</code> and the family's conventional
+<code>config *-context</code> verbs are intentional vocabulary, not reasons to add synonyms.</p>
+<h2 id="audit-findings-and-fixes">Audit findings and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Previous ambiguity</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>event relay</code> and compound <code>event relay-status</code> mixed event reads with a service lifecycle</td>
+<td><code>relay run/status</code>; <code>run --config</code> names the service config</td>
+</tr>
+<tr>
+<td><code>config</code> mixed client connection state and operator authorization policy</td>
+<td><code>config</code> owns client contexts; <code>policy example/validate</code> owns offline policy tooling</td>
+</tr>
+<tr>
+<td><code>proposal get</code> versus <code>approval list</code> split a single stored resource</td>
+<td>All proposal lifecycle actions are discoverable under <code>proposal</code>; private-socket gates remain</td>
+</tr>
+<tr>
+<td><code>auth status</code> returned exactly the same readiness response as <code>doctor</code></td>
+<td>One canonical readiness command, <code>doctor</code>; <code>auth check</code> explicitly tests upstream credentials</td>
+</tr>
+<tr>
+<td><code>search result</code> used a result noun as a retrieval action</td>
+<td><code>search get --job</code>, with pagination retained</td>
+</tr>
+<tr>
+<td>Generic help described exact reads, job initiation and mention context as the same page read</td>
+<td>Operation-specific summaries, precise discovery paths and accurate per-command limits</td>
+</tr>
+<tr>
+<td>Explicit <code>--limit 0</code> silently became the API default</td>
+<td>Usage error before broker access; content pages accept 1–50, search result pages 1–20, retained events/proposals 1–100</td>
+</tr>
+</tbody>
+</table>
+<p>The rewrite changes CLI routing, documentation and local input validation, not
+the broker protocol. Existing <code>approval.*</code> and <code>search.result</code> operation names
+remain wire compatibility details. Both CLI routes use the same command factories
+and therefore the same request builders, socket checks, dry runs and write gates.</p>
+<h2 id="published-compatibility">Published compatibility</h2>
+<table>
+<thead>
+<tr>
+<th>Published path</th>
+<th>Canonical path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config example</code>, <code>config validate</code></td>
+<td><code>policy example</code>, <code>policy validate</code></td>
+</tr>
+<tr>
+<td><code>approval list/approve/reject/resolve</code></td>
+<td><code>proposal list/approve/reject/resolve</code></td>
+</tr>
+<tr>
+<td><code>auth status</code></td>
+<td><code>doctor</code></td>
+</tr>
+<tr>
+<td><code>search result</code></td>
+<td><code>search get</code></td>
+</tr>
+</tbody>
+</table>
+<p>Published paths remain callable with their existing data and authorization
+semantics. They emit a structured stderr notice with <code>deprecated_command</code> and
+<code>replacement</code>, and are hidden from ordinary help, completion and generated
+reference. Consumers should already separate stderr notices from stdout data.
+There is no scheduled removal in this change; removal requires a documented
+compatibility release. New examples and Skills use only canonical paths.</p>
+<p>The earlier relay paths existed only in this unreleased change. They are replaced
+directly: use <code>relay run --config FILE --state FILE</code> and <code>relay status --state FILE</code>.
+Its queue and webhook schema remain version 1, so a locally tested queue can
+resume through the new command without discarding state.</p>
+<h2 id="family-applicability">Family applicability</h2>
+<p>The seven maintained siblings and the kit were compared. All use the shared
+resource/action, config-context, error and output conventions. Jenkins log follow
+and OpenObserve tail are streams; Confluence watch changes a remote notification
+subscription; Calendar sync maintains a mirror; Bitbucket activity, Jira worklogs
+and Prometheus queries are bounded reads. These are different primitives and are
+not renamed to pretend they implement durable host delivery. The fx adapters do
+not call the channel-specific paths changed here. Shared host-integration design
+and migration guidance live in the workspace's
+<a href="https://github.com/AngelMsger/agent-clis-workspace/blob/main/docs/event-driven-agent-integration.md">event-driven agent integration guide</a>.</p>
+</article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>

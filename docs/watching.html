@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Watching channels — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="contexts.html">Channel contexts</a><a href="watching.html" aria-current="page">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="watching-channels-and-threads">Watching channels and threads</h1>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Watching channels — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html">Command responsibilities</a><a href="contexts.html">Channel contexts</a><a href="watching.html" aria-current="page">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="watching-channels-and-threads">Watching channels and threads</h1>
 <p><code>event watch</code> streams <strong>post/reply observations</strong> as NDJSON through one interface.
 Choose a whole channel context or one or more post IDs (a post and its replies
 form a thread). Without a callback listener, the default <code>auto</code> backend polls the
@@ -61,7 +61,7 @@ wecom-channel-cli --use-context engineering event watch \
 wecom-channel-cli --use-context engineering event watch \
   --post FIRST_POST_ID --post SECOND_POST_ID --duration 10m
 </code></pre>
-<p>Discover IDs with <code>post list</code>, <code>search result</code>, or authenticated events. Up to 32
+<p>Discover IDs with <code>post list</code>, <code>search get</code>, or authenticated events. Up to 32
 post IDs are accepted. New watches start at the current inbox head, so existing
 records are not replayed by default. Use <code>--after-sequence N</code> to replay retained
 records after an explicitly known checkpoint. Sequence zero requests retained
@@ -106,7 +106,7 @@ durable consumer, use the opt-in relay described below.</p>
 <p><code>event watch</code> and the broker do not invoke a model. Scheduling a Bot to run them
 every few minutes still pays for a model turn even when stdout is empty. Repeated
 model-driven <code>reply list</code> calls also put unrelated history back into context.
-Run <code>event relay</code> as ordinary supervised software instead: it collects from the
+Run <code>relay run</code> as ordinary supervised software instead: it collects from the
 same <code>event.scan</code> interface, persists a queue and calls a fixed receiver only for
 nonempty eligible batches. Empty scans and health checks make zero receiver or
 model calls. There is no model SDK or shell-command adapter in the relay.</p>
@@ -127,15 +127,15 @@ The HTTP client follows no redirects, uses no ambient proxy and does not log
 headers, bodies, or URL-bearing errors.</p>
 <p>Create a private 0700 relay-owned state directory, then preview with the same
 context and scope that the service will use:</p>
-<pre><code class="language-sh">wecom-channel-cli --use-context engineering event relay \
-  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering relay run \
+  --whole-channel --config /etc/wecom-relay/relay.json \
   --state /var/lib/wecom-relay/state.json --duration 24h --dry-run
 
-wecom-channel-cli --use-context engineering event relay \
-  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+wecom-channel-cli --use-context engineering relay run \
+  --whole-channel --config /etc/wecom-relay/relay.json \
   --state /var/lib/wecom-relay/state.json --duration 24h
 
-wecom-channel-cli event relay-status --state /var/lib/wecom-relay/state.json
+wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json
 </code></pre>
 <p>Dry-run validates the same config, scope, saved binding and broker coverage but
 does not read the token environment, call WeCom/the receiver, lock or write files.

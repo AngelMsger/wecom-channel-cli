@@ -3,6 +3,14 @@
 This repository implements the WeCom channel connector. Follow the parent
 workspace standards and read CONTRIBUTING.md before editing.
 
+Keep one canonical command per primitive; see docs/command-design.md. Client
+contexts belong to config, operator authorization documents to policy, proposal
+lifecycle to proposal, observation streams to event watch, and durable delivery
+to relay run/status. Published aliases stay hidden and share the canonical
+command factory, with structured migration notices on stderr. Never infer socket
+authority from a command name. Keep generated docs/completion free of deprecated
+routes and test both paths against the same broker authorization checks.
+
 The credential-holding broker is a security boundary. The agent socket is an
 untrusted interface; the operator socket is a separate authority. Never add a
 flag, request field, environment override, or endpoint that lets the agent
@@ -61,7 +69,7 @@ Never infer deletion from absence, attribute edits to the original creator, or
 mint mention authority from polling. Retain transport/change-basis metadata, a
 quiet initial baseline, shared-scope deduplication and operator-controlled rates.
 
-`event relay` is an explicitly provisioned consumer outside the credential broker
+`relay run` is an explicitly provisioned consumer outside the credential broker
 and model worker. Keep destination configuration and bearer tokens local to that
 service; never send them over the agent socket. Queue metadata and collection
 progress in one atomic commit, seal immutable batches before attempting delivery,
