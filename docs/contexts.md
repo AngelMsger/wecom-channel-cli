@@ -26,7 +26,7 @@ The default file is `~/.angelmsger/wecom-channel/config.yaml`. Override its
 directory with `--config-dir` or `WECOM_CHANNEL_CONFIG`. No credential is stored
 in this file. Setup is offline and does not alter the broker's policy.
 The client context name must match the broker policy's `name`. A single-context
-`config example` uses `default` and `/run/wecom-channel-agent/agent.sock`; use
+`policy example` uses `default` and `/run/wecom-channel-agent/agent.sock`; use
 those values for that deployment. The engineering/security examples below assume
 the matching version 2 deployment described later on this page.
 
@@ -101,7 +101,7 @@ has exactly one channel and distinct socket directories and durable state.
 ```
 
 Add another object with another name/channel and distinct paths. Up to 32 contexts
-are accepted. Other policy limits inherit the safe defaults from `config example`.
+are accepted. Other policy limits inherit the safe defaults from `policy example`.
 Bot identity and callback address cannot differ between contexts in one deployment;
 use another deployment for another bot. Duplicate channels, names or socket/state
 paths fail validation. State is bound to bot, context and channel; moving a ledger
@@ -151,7 +151,7 @@ wecom-channel-cli --use-context engineering reply propose \
   --post POST_ID --event EVENT_ID --key REQUEST_KEY --stdin < draft.txt
 
 wecom-channel-cli --use-context engineering \
-  --socket /run/wecom-channel/engineering-admin/admin.sock approval list
+  --socket /run/wecom-channel/engineering-admin/admin.sock proposal list
 ```
 
 Context metadata is always returned in `source.context` on broker records. A

@@ -14,7 +14,7 @@ wecom-channel-cli skill install
 
 For initial operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally and run
 `wecom-channel-cli channel list --bot-id BOT_ID` before configuring a channel.
-Choose `data.topic_id`, generate policy with `config example --bot-id BOT_ID
+Choose `data.topic_id`, generate policy with `policy example --bot-id BOT_ID
 --channel CHANNEL_ID`, then provision the broker and matching client context.
 Normal `channel list` uses the configured broker socket.
 

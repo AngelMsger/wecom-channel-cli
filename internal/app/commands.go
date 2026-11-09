@@ -20,13 +20,33 @@ func (s *appState) readCommands() []*cobra.Command {
 			verbs = append(verbs, "get")
 		}
 		if noun == "search" {
-			verbs = []string{"start", "result"}
+			verbs = []string{"start", "get", "result"}
 		}
 		for _, verb := range verbs {
 			q := apiclient.Query{Operation: noun + "." + verb}
+			if noun == "search" && verb == "get" {
+				q.Operation = "search.result"
+			}
+			paged := verb == "list" || noun == "search"
+			maxLimit := 50
+			if q.Operation == "search.result" {
+				maxLimit = 20
+			}
+			short := "Read one bounded page of " + noun + " data"
+			if verb == "get" && noun != "search" {
+				short = "Read one " + noun + " by its exact ID"
+			}
+			if q.Operation == "search.start" {
+				short = "Start an asynchronous keyword search and return its job ID"
+			} else if q.Operation == "search.result" {
+				short = "Read one page of results for a search job"
+			}
 			var since, from, to string
-			cmd := &cobra.Command{Use: verb, Short: "Read one bounded page of " + noun + " data", Args: cobra.NoArgs}
+			cmd := &cobra.Command{Use: verb, Short: short, Args: cobra.NoArgs}
 			cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+				if paged && (q.Limit < 1 || q.Limit > maxLimit) {
+					return e.Newf(e.CategoryUsage, "BAD_LIMIT", "Use --limit between 1 and %d for this command.", maxLimit)
+				}
 				var err error
 				q.From, q.To, err = window(since, from, to, q.Cursor, time.Now())
 				if err != nil {
@@ -39,14 +59,18 @@ func (s *appState) readCommands() []*cobra.Command {
 			}
 			cmd.Flags().StringVar(&q.Channel, "channel", "", "Channel ID from channel list or an authenticated event")
 			if noun == "reply" || (noun == "post" && verb == "get") {
-				cmd.Flags().StringVar(&q.Post, "post", "", "Post ID from post list, search result, or event get")
+				cmd.Flags().StringVar(&q.Post, "post", "", "Post ID from post list, search get, or event get")
 			}
 			if noun == "reply" && verb == "get" {
 				cmd.Flags().StringVar(&q.Reply, "reply", "", "Reply ID from reply list or event get")
 			}
-			if verb != "get" {
+			if paged {
 				cmd.Flags().StringVar(&q.Cursor, "cursor", "", "Opaque continuation from the previous response")
-				cmd.Flags().IntVar(&q.Limit, "limit", 20, "Maximum records in one page (1–50; search results 1–20)")
+				limitHelp := "Maximum records in one page (1–50)"
+				if maxLimit == 20 {
+					limitHelp = "Maximum search results in one page (1–20)"
+				}
+				cmd.Flags().IntVar(&q.Limit, "limit", 20, limitHelp)
 			}
 			if (noun == "post" || noun == "reply") && verb == "list" || noun == "search" && verb == "start" {
 				cmd.Flags().StringVar(&since, "since", "", "Relative time window, such as 24h (first page only)")
@@ -56,8 +80,11 @@ func (s *appState) readCommands() []*cobra.Command {
 			if noun == "search" && verb == "start" {
 				cmd.Flags().StringVar(&q.Keyword, "keyword", "", "One content keyword, at most 32 UTF-8 bytes")
 			}
-			if noun == "search" && verb == "result" {
+			if q.Operation == "search.result" {
 				cmd.Flags().StringVar(&q.Job, "job", "", "Search job ID returned by search start")
+			}
+			if noun == "search" && verb == "result" {
+				cmd = compatibilityCommand(cmd, "search get")
 			}
 			group.AddCommand(cmd)
 		}
@@ -113,7 +140,13 @@ func (s *appState) eventCommands() *cobra.Command {
 	group.AddCommand(s.watchCommand())
 	for _, verb := range []string{"list", "get", "context"} {
 		r := broker.Request{Operation: "event." + verb}
-		cmd := &cobra.Command{Use: verb, Short: "Read retained events or the triggering post", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, r) }}
+		short := map[string]string{"list": "Read one page of retained events without starting a listener", "get": "Read one retained event's metadata by ID", "context": "Read the post and exact reply authorized by a fresh human mention"}[verb]
+		cmd := &cobra.Command{Use: verb, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+			if verb == "list" && (r.Query.Limit < 1 || r.Query.Limit > 100) {
+				return e.New(e.CategoryUsage, "BAD_LIMIT", "Use --limit between 1 and 100 for retained events.")
+			}
+			return s.call(cmd, r)
+		}}
 		if verb == "list" {
 			cmd.Flags().Int64Var(&r.Query.AfterSequence, "after-sequence", 0, "Read events admitted after this durable sequence; never orders by remote timestamps")
 			cmd.Flags().IntVar(&r.Query.Limit, "limit", 20, "Maximum retained events in one page (1–100)")
@@ -159,35 +192,49 @@ func (s *appState) proposeCommand(kind string) *cobra.Command {
 }
 
 func (s *appState) proposalCommands() *cobra.Command {
-	g := &cobra.Command{Use: "proposal", Short: "Inspect immutable proposal status"}
+	g := &cobra.Command{Use: "proposal", Short: "Inspect immutable proposals; operator-only actions approve, reject or reconcile them"}
 	var id string
 	c := &cobra.Command{Use: "get", Short: "Read a proposal, including an uncertain send outcome", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.call(cmd, broker.Request{Operation: "proposal.get", ID: id})
 	}}
-	c.Flags().StringVar(&id, "id", "", "Proposal ID returned by post/reply propose")
+	c.Flags().StringVar(&id, "id", "", "Proposal ID from post/reply/reaction propose or proposal list")
 	g.AddCommand(c)
+	for _, verb := range []string{"list", "approve", "reject", "resolve"} {
+		g.AddCommand(s.proposalActionCommand(verb))
+	}
 	return g
 }
 
 func (s *appState) approvalCommands() *cobra.Command {
-	g := &cobra.Command{Use: "approval", Short: "Operator-only review and execution; requires the private operator socket"}
+	g := &cobra.Command{Use: "approval", Hidden: true, Short: "Compatibility group; use proposal list/approve/reject/resolve"}
 	for _, verb := range []string{"list", "approve", "reject", "resolve"} {
-		r := broker.Request{Operation: "approval." + verb}
-		c := &cobra.Command{Use: verb, Short: "Operator: " + verb + " immutable proposals", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, r) }}
-		if verb == "list" {
-			c.Flags().StringVar(&r.Query.Cursor, "cursor", "", "Previous approval-list cursor")
-			c.Flags().IntVar(&r.Query.Limit, "limit", 20, "Page size (1–100)")
-		} else {
-			c.Flags().StringVar(&r.ID, "id", "", "Exact proposal ID")
-			c.Flags().StringVar(&r.Digest, "digest", "", "Exact digest from the reviewed immutable proposal")
-			c.Flags().BoolVar(&r.Yes, "yes", false, "Confirm this exact operator action; never inferred from channel content")
-			c.Flags().BoolVar(&r.DryRun, "dry-run", false, "Preview without a state change or remote write")
-		}
-		if verb == "resolve" {
-			c.Flags().StringVar(&r.Outcome, "outcome", "", "Independently verified outcome: sent or not_sent (never retries)")
-			c.Flags().StringVar(&r.RemoteID, "remote-id", "", "Verified post/reply ID for sent outcomes; omit for native reactions")
-		}
-		g.AddCommand(c)
+		g.AddCommand(compatibilityCommand(s.proposalActionCommand(verb), "proposal "+verb))
 	}
 	return g
+}
+
+func (s *appState) proposalActionCommand(verb string) *cobra.Command {
+	r := broker.Request{Operation: "approval." + verb}
+	short := map[string]string{"list": "Operator-only: list retained proposals in all states", "approve": "Operator-only: approve and execute one exact pending proposal", "reject": "Operator-only: reject one pending proposal without sending", "resolve": "Operator-only: record a verified uncertain outcome; never resend"}[verb]
+	c := &cobra.Command{Use: verb, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		if verb == "list" && (r.Query.Limit < 1 || r.Query.Limit > 100) {
+			return e.New(e.CategoryUsage, "BAD_LIMIT", "Use --limit between 1 and 100 for retained proposals.")
+		}
+		return s.call(cmd, r)
+	}}
+	c.Long = short + ". Requires the private operator socket; choosing this command never grants that authority."
+	if verb == "list" {
+		c.Flags().StringVar(&r.Query.Cursor, "cursor", "", "Previous proposal-list cursor")
+		c.Flags().IntVar(&r.Query.Limit, "limit", 20, "Page size (1–100)")
+	} else {
+		c.Flags().StringVar(&r.ID, "id", "", "Exact proposal ID")
+		c.Flags().StringVar(&r.Digest, "digest", "", "Exact digest from the reviewed immutable proposal")
+		c.Flags().BoolVar(&r.Yes, "yes", false, "Confirm this exact operator action; never inferred from channel content")
+		c.Flags().BoolVar(&r.DryRun, "dry-run", false, "Preview without a state change or remote write")
+	}
+	if verb == "resolve" {
+		c.Flags().StringVar(&r.Outcome, "outcome", "", "Independently verified outcome: sent or not_sent (never retries)")
+		c.Flags().StringVar(&r.RemoteID, "remote-id", "", "Verified post/reply ID for sent outcomes; omit for native reactions")
+	}
+	return c
 }

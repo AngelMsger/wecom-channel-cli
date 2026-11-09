@@ -5,6 +5,13 @@ The initial deliverable is a bounded broker-backed CLI, not an agent runtime.
 
 ## Components
 
+The CLI's canonical resource/action tree and published compatibility paths are
+defined in [command responsibilities](command-design.md). Those routes do not
+change wire operation names or listener-bound authority. Client configuration,
+operator policy, proposals, observation streams and relay services have distinct
+state owners. Compatibility commands use the same factories and emit structured
+stderr migration notices; they are excluded from generated discovery surfaces.
+
 ```mermaid
 flowchart LR
   W[WeCom] -->|Signed encrypted callback| B[Credential-holding broker]
@@ -86,7 +93,7 @@ access; failed or denied broker calls never fall back. Explicit socket/context
 flags conflict with `--bot-id`. Broker-mode dry-run resolves public connection
 coordinates offline and never calls the broker. Credential mode uses the same
 operator credential/OS boundary as broker startup. The operator selects an
-ID from the result, uses `config example --bot-id ... --channel ...` to fill the
+ID from the result, uses `policy example --bot-id ... --channel ...` to fill the
 policy template, and provisions the deployment before configuring the client.
 Missing channel IDs in client setup point back to discovery. Existing client
 contexts and existing broker-based discovery retain their behavior.
@@ -173,6 +180,52 @@ They identify their transport and inference basis; their change actor is unknown
 A returned recall flag is evidence, but absence is not. Intermediate changes,
 reactions and membership events are not reconstructed. No background job runs
 without an active watch. See [watching](watching.md) for coverage and limits.
+
+## Durable consumer relay
+
+`relay run` implements a consumer outside the broker and model worker through
+`internal/relay`. It uses existing `event.scan` requests; no broker endpoint,
+authorization policy or remote WeCom write is added. Fixed destination config
+and receiver credentials stay in that service. The shared transport performs one
+POST attempt without redirects/proxies; durable retries belong to the consumer
+state machine. Existing `event watch` keeps its no-reconnect contract.
+
+The versioned private JSON state commits collected sequence and queued metadata
+atomically with file/directory fsync and an exclusive writer lock. It binds
+socket/scope/config through a consumer digest and policy/context/ledger through
+the watch binding. Uninitialized state persists startup retries before the first
+handshake without claiming coverage or permitting delivery. A 16 MiB file cap
+and bounded queue prevent unbounded growth;
+a full queue pauses collection without eviction. State validation checks trust
+metadata and queue counters. Persistence failures stop before another network
+operation, including ambiguous rename/fsync failures. `relay status` reads the
+atomic file without locking or remote requests and exposes counts/timestamps.
+
+Deterministic filters run before enqueueing; skipped progress commits with
+accepted events. Unknown polling actors cannot be replaced by resource creators.
+After a bounded window or batch size, events are grouped by post into an immutable
+batch. Its digest binds consumer identity, coverage and exact payload. New events
+never alter an attempted batch. Attempts and retry deadlines persist before HTTP;
+only a 2xx with the exact JSON `ack` dequeues it. Retry budgets survive restart
+and require explicit reset after repair. Permission, protocol, binding and gap
+errors stop; only known transient failures have opt-in bounded retries.
+
+Delivery is at least once. The receiver must durably deduplicate before launching
+a model job. Acknowledgment means processing completed or responsibility passed
+to the receiver's durable job queue; it does not prove an asynchronous Bot finished.
+The relay has no model client, content preview, history-fetch loop or shell runner.
+Empty/filtered scans make no webhook request. See the
+[receiver contract](watching.md#relay-events-without-model-polling) and Linux
+service reference for finite-session supervision and recovery.
+
+The sibling applicability table below remains unchanged: Jenkins/OpenObserve
+supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
+and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads
+are intentionally different. None provides acknowledged channel dispatch. This
+single-project change reuses kit errors/output/transport without shared API,
+dependency, fx adapter or sibling command changes. The pinned kit lacks the newer
+redirect-guidance helper described by the workspace standard; relay preserves
+this project's curated secret-free refusal without copying that helper locally.
 
 ## Write state
 

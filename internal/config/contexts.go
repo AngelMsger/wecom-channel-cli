@@ -40,7 +40,7 @@ func init() {
 			{Key: "channel_id", Env: []string{"WECOM_CHANNEL_ID"}, Service: true},
 		},
 		Paths:   kit.Paths{Dir: ".angelmsger/wecom-channel", File: "config.yaml"},
-		Words:   kit.Words{App: "wecom-channel-cli", ContextFlag: "--use-context", ContextEnv: "WECOM_CHANNEL_CONTEXT", NoHintEnv: "WECOM_CHANNEL_NO_CONTEXT_HINT", ListContexts: "config get-contexts", UseContext: "config use-context", SetContext: "config set-context", AuthGuide: "auth guide", AuthLogin: "auth status"},
+		Words:   kit.Words{App: "wecom-channel-cli", ContextFlag: "--use-context", ContextEnv: "WECOM_CHANNEL_CONTEXT", NoHintEnv: "WECOM_CHANNEL_NO_CONTEXT_HINT", ListContexts: "config get-contexts", UseContext: "config use-context", SetContext: "config set-context", AuthGuide: "auth guide", AuthLogin: "doctor"},
 		Schemes: []string{"broker"},
 		Validate: func(v kit.Values) error {
 			if v["channel_id"] == "" {

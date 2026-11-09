@@ -185,7 +185,7 @@ func TestDiscoverySetupRecovery(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "config.yaml")); !os.IsNotExist(err) {
 		t.Fatal("failed setup saved a context")
 	}
-	code, out, stderr = run(t, "config", "example", "--bot-id", "bot", "--channel", "discovered")
+	code, out, stderr = run(t, "policy", "example", "--bot-id", "bot", "--channel", "discovered")
 	var cfg config.Config
 	if code != 0 || json.Unmarshal([]byte(out), &cfg) != nil || cfg.Bot != "bot" || cfg.Channels[0].ID != "discovered" || !cfg.ReadOnly || cfg.Validate() != nil {
 		t.Fatal(code, out, stderr)

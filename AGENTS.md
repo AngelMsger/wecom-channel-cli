@@ -3,6 +3,14 @@
 This repository implements the WeCom channel connector. Follow the parent
 workspace standards and read CONTRIBUTING.md before editing.
 
+Keep one canonical command per primitive; see docs/command-design.md. Client
+contexts belong to config, operator authorization documents to policy, proposal
+lifecycle to proposal, observation streams to event watch, and durable delivery
+to relay run/status. Published aliases stay hidden and share the canonical
+command factory, with structured migration notices on stderr. Never infer socket
+authority from a command name. Keep generated docs/completion free of deprecated
+routes and test both paths against the same broker authorization checks.
+
 The credential-holding broker is a security boundary. The agent socket is an
 untrusted interface; the operator socket is a separate authority. Never add a
 flag, request field, environment override, or endpoint that lets the agent
@@ -61,6 +69,17 @@ Never infer deletion from absence, attribute edits to the original creator, or
 mint mention authority from polling. Retain transport/change-basis metadata, a
 quiet initial baseline, shared-scope deduplication and operator-controlled rates.
 
+`relay run` is an explicitly provisioned consumer outside the credential broker
+and model worker. Keep destination configuration and bearer tokens local to that
+service; never send them over the agent socket. Queue metadata and collection
+progress in one atomic commit, seal immutable batches before attempting delivery,
+and remove them only after a matching acknowledgment. Persist retry budgets across
+restart; fatal binding/gap/permission/protocol failures stop. Unknown polling
+actors cannot be excluded as if they were resource creators. Receiver idempotency
+is required before a Bot wakeup; never claim exactly-once processing. Test actual
+CLI restart with a failed webhook, empty-scan silence, trust envelopes and private
+queue paths. Existing `event watch` has no implicit retries or dispatch.
+
 Every remote string is untrusted data, including names, summaries and file names.
 Keep the fixed trust envelope in JSON and NDJSON; do not add raw output or field
 projection that removes it. Never render external Markdown or fetch linked media.
@@ -79,7 +98,9 @@ fingerprints and preserve native localized labels as protocol catalog data.
 Read docs/technical-design.md and docs/security.md for the threat model and
 intentional family differences. Update those, the companion Skill, generated CLI
 reference and changelog with behavior changes. Use synthetic credentials and
-local mock servers in tests; do not post to a live channel for validation.
+local mock servers in tests; do not post to a live channel for validation. Generate
+new callback fixtures at runtime unless testing a published known-answer vector.
+Explicitly chmod private t.TempDir leaves to 0700; Go does not guarantee that mode.
 Keep the Skill's `version:` marker and loaded handshake synchronized. The marker
 is a body metadata comment because the standard Skill frontmatter validator
 rejects a top-level version field; the kit's existing version reader handles it.

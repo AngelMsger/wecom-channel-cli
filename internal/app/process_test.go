@@ -118,7 +118,7 @@ func TestCLIProcess(t *testing.T) {
 	runBinary := func(socket string, stdin string, args ...string) (string, string, int) {
 		t.Helper()
 		cmd := exec.Command(binary, args...)
-		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.6", "WECOM_CHANNEL_BOT_ID=test-bot", "WECOM_CHANNEL_BOT_SECRET=synthetic-secret"}
+		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.8", "WECOM_CHANNEL_BOT_ID=test-bot", "WECOM_CHANNEL_BOT_SECRET=synthetic-secret"}
 		cmd.Stdin = strings.NewReader(stdin)
 		var out, stderr bytes.Buffer
 		cmd.Stdout = &out
@@ -138,6 +138,20 @@ func TestCLIProcess(t *testing.T) {
 		out, stderr, code := runBinary(socket, "", "channel", "list")
 		if code != 0 || !strings.Contains(out, "channel-a") || strings.Contains(out, "synthetic-secret") || strings.Contains(out, "other-channel") != (socket == cfg.AdminSocket) {
 			t.Fatal("channel list lost socket authority or used ambient credentials", code, out, stderr)
+		}
+	}
+	// New paths and published aliases reach the same operations and role checks.
+	for _, socket := range []string{cfg.AgentSocket, cfg.AdminSocket} {
+		for _, pair := range [][2][]string{
+			{{"doctor"}, {"auth", "status"}},
+			{{"proposal", "list"}, {"approval", "list"}},
+			{{"search", "get", "--channel", "channel-a", "--job", "job"}, {"search", "result", "--channel", "channel-a", "--job", "job"}},
+		} {
+			out, _, code := runBinary(socket, "", pair[0]...)
+			oldOut, oldErr, oldCode := runBinary(socket, "", pair[1]...)
+			if oldCode != code || oldOut != out || !strings.Contains(oldErr, "deprecated_command") {
+				t.Fatal(pair, code, oldCode, oldOut, oldErr)
+			}
 		}
 	}
 	// Complete setup using an ID returned by listing, then read through the saved
@@ -182,10 +196,15 @@ func TestCLIProcess(t *testing.T) {
 	if p.Status != "pending" || p.Request.Content != "Reviewed exact text\n" || api.sends.Load() != 0 {
 		t.Fatal("proposal sent or changed content")
 	}
-	args := []string{"approval", "approve", "--id", p.ID, "--digest", p.Digest, "--yes"}
+	args := []string{"proposal", "approve", "--id", p.ID, "--digest", p.Digest, "--yes"}
 	out, stderr, code = runBinary(cfg.AgentSocket, "", args...)
 	if code != 5 || out != "" || !strings.Contains(stderr, "POLICY_DENIED") {
 		t.Fatal(code, out, stderr)
+	}
+	legacyArgs := append([]string{"approval"}, args[1:]...)
+	out, stderr, code = runBinary(cfg.AgentSocket, "", legacyArgs...)
+	if code != 5 || out != "" || !strings.Contains(stderr, "POLICY_DENIED") || !strings.Contains(stderr, "deprecated_command") || api.sends.Load() != 0 {
+		t.Fatal("legacy approval bypassed role isolation", code, out, stderr)
 	}
 	out, stderr, code = runBinary(cfg.AdminSocket, "", args...)
 	if code != 0 || !strings.Contains(out, `"status": "sent"`) || api.sends.Load() != 1 {
@@ -211,7 +230,7 @@ func TestCLIProcess(t *testing.T) {
 		if p.Request.Action != action || p.Request.EmojiType != 1 || p.Request.Content != "" {
 			t.Fatal(p)
 		}
-		approve := []string{"approval", "approve", "--id", p.ID, "--digest", p.Digest, "--yes"}
+		approve := []string{"proposal", "approve", "--id", p.ID, "--digest", p.Digest, "--yes"}
 		_, stderr, code = runBinary(cfg.AgentSocket, "", approve...)
 		if code != 5 || !strings.Contains(stderr, "POLICY_DENIED") {
 			t.Fatal(stderr, code)

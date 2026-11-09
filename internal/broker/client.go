@@ -52,6 +52,7 @@ func Call(ctx context.Context, socket string, req Request) (Response, error) {
 		}
 		x := e.New(p.Error.Category, p.Error.Code, p.Error.Message).WithHint(p.Error.Hint).WithNextSteps(p.Error.NextSteps...).WithDetails(p.Error.Details)
 		x.Retryable = p.Error.Retryable
+		x.HTTPStatus = p.Error.HTTPStatus
 		return Response{}, x
 	}
 	var out Response

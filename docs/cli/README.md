@@ -12,17 +12,18 @@ Usage:
   wecom-channel-cli [command]
 
 Available Commands:
-  approval    Operator-only review and execution; requires the private operator socket
   auth        Explain credential ownership and verify through the broker
   broker      Run the isolated credential-holding broker
   channel     List channels during operator setup or through broker policy
-  config      Inspect operator policy offline
-  doctor      Check broker connectivity and read-only policy
+  config      Manage local client contexts; authorization belongs to operator policy
+  doctor      Check broker readiness and policy; use auth check to verify upstream credentials
   event       Read or watch channel observations and authenticated callback events
   member      Inspect member data through broker policy
+  policy      Generate or validate the broker's operator-owned authorization policy offline
   post        Inspect post data through broker policy
-  proposal    Inspect immutable proposal status
+  proposal    Inspect immutable proposals; operator-only actions approve, reject or reconcile them
   reaction    Inspect or propose native emoji reactions on posts and replies
+  relay       Run and inspect durable event delivery to a configured host adapter
   reply       Inspect reply data through broker policy
   search      Inspect search data through broker policy
   skill       Inspect or install the embedded companion Skill
@@ -39,124 +40,6 @@ Flags:
 Use "wecom-channel-cli [command] --help" for more information about a command.
 ```
 
-## wecom-channel-cli approval
-
-Operator-only review and execution; requires the private operator socket
-
-```text
-Usage:
-  wecom-channel-cli approval [flags]
-  wecom-channel-cli approval [command]
-
-Available Commands:
-  approve     Operator: approve immutable proposals
-  list        Operator: list immutable proposals
-  reject      Operator: reject immutable proposals
-  resolve     Operator: resolve immutable proposals
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-
-Use "wecom-channel-cli approval [command] --help" for more information about a command.
-```
-
-## wecom-channel-cli approval approve
-
-Operator: approve immutable proposals
-
-```text
-Usage:
-  wecom-channel-cli approval approve [flags]
-
-Flags:
-      --digest string   Exact digest from the reviewed immutable proposal
-      --dry-run         Preview without a state change or remote write
-      --id string       Exact proposal ID
-      --yes             Confirm this exact operator action; never inferred from channel content
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
-## wecom-channel-cli approval list
-
-Operator: list immutable proposals
-
-```text
-Usage:
-  wecom-channel-cli approval list [flags]
-
-Flags:
-      --cursor string   Previous approval-list cursor
-      --limit int       Page size (1–100) (default 20)
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
-## wecom-channel-cli approval reject
-
-Operator: reject immutable proposals
-
-```text
-Usage:
-  wecom-channel-cli approval reject [flags]
-
-Flags:
-      --digest string   Exact digest from the reviewed immutable proposal
-      --dry-run         Preview without a state change or remote write
-      --id string       Exact proposal ID
-      --yes             Confirm this exact operator action; never inferred from channel content
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
-## wecom-channel-cli approval resolve
-
-Operator: resolve immutable proposals
-
-```text
-Usage:
-  wecom-channel-cli approval resolve [flags]
-
-Flags:
-      --digest string      Exact digest from the reviewed immutable proposal
-      --dry-run            Preview without a state change or remote write
-      --id string          Exact proposal ID
-      --outcome string     Independently verified outcome: sent or not_sent (never retries)
-      --remote-id string   Verified post/reply ID for sent outcomes; omit for native reactions
-      --yes                Confirm this exact operator action; never inferred from channel content
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
 ## wecom-channel-cli auth
 
 Explain credential ownership and verify through the broker
@@ -169,7 +52,6 @@ Usage:
 Available Commands:
   check       Operator-only: verify authentication with a bounded channel-list request
   guide       Read offline authentication and official CLI compatibility guidance
-  status      Read broker readiness (does not verify WeCom authentication)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -206,23 +88,6 @@ Read offline authentication and official CLI compatibility guidance
 ```text
 Usage:
   wecom-channel-cli auth guide [flags]
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
-## wecom-channel-cli auth status
-
-Read broker readiness (does not verify WeCom authentication)
-
-```text
-Usage:
-  wecom-channel-cli auth status [flags]
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -331,7 +196,7 @@ Global Flags:
 
 ## wecom-channel-cli config
 
-Inspect operator policy offline
+Manage local client contexts; authorization belongs to operator policy
 
 ```text
 Usage:
@@ -340,12 +205,10 @@ Usage:
 
 Available Commands:
   delete-context delete-context in the client configuration
-  example        Print an operator policy template; discover channel IDs with channel list first
   get-contexts   List named channel security contexts
   path           Show the client configuration path
   set-context    Prepare an offline channel context without credentials or changing broker policy
   use-context    use-context in the client configuration
-  validate       Strictly validate an operator policy file without credentials or I/O effects
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -369,27 +232,6 @@ Usage:
 Flags:
       --dry-run   Preview without modifying client configuration
       --yes       Confirm deleting this saved connection only
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
-## wecom-channel-cli config example
-
-Print an operator policy template; discover channel IDs with channel list first
-
-```text
-Usage:
-  wecom-channel-cli config example [flags]
-
-Flags:
-      --bot-id string    Verified bot ID to insert into the template
-      --channel string   Channel data.topic_id from channel list
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -481,29 +323,9 @@ Global Flags:
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 ```
 
-## wecom-channel-cli config validate
-
-Strictly validate an operator policy file without credentials or I/O effects
-
-```text
-Usage:
-  wecom-channel-cli config validate [flags]
-
-Flags:
-      --file string   Operator policy file
-
-Global Flags:
-      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
-      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
-      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
-      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
-      --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
-```
-
 ## wecom-channel-cli doctor
 
-Check broker connectivity and read-only policy
+Check broker readiness and policy; use auth check to verify upstream credentials
 
 ```text
 Usage:
@@ -528,9 +350,9 @@ Usage:
   wecom-channel-cli event [command]
 
 Available Commands:
-  context     Read retained events or the triggering post
-  get         Read retained events or the triggering post
-  list        Read retained events or the triggering post
+  context     Read the post and exact reply authorized by a fresh human mention
+  get         Read one retained event's metadata by ID
+  list        Read one page of retained events without starting a listener
   watch       Watch a whole channel or selected post threads as bounded NDJSON
 
 Global Flags:
@@ -546,7 +368,7 @@ Use "wecom-channel-cli event [command] --help" for more information about a comm
 
 ## wecom-channel-cli event context
 
-Read retained events or the triggering post
+Read the post and exact reply authorized by a fresh human mention
 
 ```text
 Usage:
@@ -566,7 +388,7 @@ Global Flags:
 
 ## wecom-channel-cli event get
 
-Read retained events or the triggering post
+Read one retained event's metadata by ID
 
 ```text
 Usage:
@@ -586,7 +408,7 @@ Global Flags:
 
 ## wecom-channel-cli event list
 
-Read retained events or the triggering post
+Read one page of retained events without starting a listener
 
 ```text
 Usage:
@@ -672,7 +494,72 @@ Usage:
 Flags:
       --channel string   Channel ID from channel list or an authenticated event
       --cursor string    Opaque continuation from the previous response
-      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --limit int        Maximum records in one page (1–50) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli policy
+
+Generate or validate the broker's operator-owned authorization policy offline
+
+```text
+Usage:
+  wecom-channel-cli policy [flags]
+  wecom-channel-cli policy [command]
+
+Available Commands:
+  example     Print an operator policy template; discover channel IDs with channel list first
+  validate    Strictly validate an operator policy file without credentials or I/O effects
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use "wecom-channel-cli policy [command] --help" for more information about a command.
+```
+
+## wecom-channel-cli policy example
+
+Print an operator policy template; discover channel IDs with channel list first
+
+```text
+Usage:
+  wecom-channel-cli policy example [flags]
+
+Flags:
+      --bot-id string    Verified bot ID to insert into the template
+      --channel string   Channel data.topic_id from channel list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli policy validate
+
+Strictly validate an operator policy file without credentials or I/O effects
+
+```text
+Usage:
+  wecom-channel-cli policy validate [flags]
+
+Flags:
+      --file string   Operator policy file
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -693,7 +580,7 @@ Usage:
   wecom-channel-cli post [command]
 
 Available Commands:
-  get         Read one bounded page of post data
+  get         Read one post by its exact ID
   list        Read one bounded page of post data
   propose     Create an immutable proposal for operator review; does not send to WeCom
 
@@ -710,7 +597,7 @@ Use "wecom-channel-cli post [command] --help" for more information about a comma
 
 ## wecom-channel-cli post get
 
-Read one bounded page of post data
+Read one post by its exact ID
 
 ```text
 Usage:
@@ -718,7 +605,7 @@ Usage:
 
 Flags:
       --channel string   Channel ID from channel list or an authenticated event
-      --post string      Post ID from post list, search result, or event get
+      --post string      Post ID from post list, search get, or event get
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -741,7 +628,7 @@ Flags:
       --channel string   Channel ID from channel list or an authenticated event
       --cursor string    Opaque continuation from the previous response
       --from string      Inclusive RFC 3339 lower bound
-      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --limit int        Maximum records in one page (1–50) (default 20)
       --since string     Relative time window, such as 24h (first page only)
       --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
 
@@ -780,7 +667,7 @@ Global Flags:
 
 ## wecom-channel-cli proposal
 
-Inspect immutable proposal status
+Inspect immutable proposals; operator-only actions approve, reject or reconcile them
 
 ```text
 Usage:
@@ -788,7 +675,11 @@ Usage:
   wecom-channel-cli proposal [command]
 
 Available Commands:
+  approve     Operator-only: approve and execute one exact pending proposal
   get         Read a proposal, including an uncertain send outcome
+  list        Operator-only: list retained proposals in all states
+  reject      Operator-only: reject one pending proposal without sending
+  resolve     Operator-only: record a verified uncertain outcome; never resend
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -801,6 +692,29 @@ Global Flags:
 Use "wecom-channel-cli proposal [command] --help" for more information about a command.
 ```
 
+## wecom-channel-cli proposal approve
+
+Operator-only: approve and execute one exact pending proposal
+
+```text
+Usage:
+  wecom-channel-cli proposal approve [flags]
+
+Flags:
+      --digest string   Exact digest from the reviewed immutable proposal
+      --dry-run         Preview without a state change or remote write
+      --id string       Exact proposal ID
+      --yes             Confirm this exact operator action; never inferred from channel content
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
 ## wecom-channel-cli proposal get
 
 Read a proposal, including an uncertain send outcome
@@ -810,7 +724,76 @@ Usage:
   wecom-channel-cli proposal get [flags]
 
 Flags:
-      --id string   Proposal ID returned by post/reply propose
+      --id string   Proposal ID from post/reply/reaction propose or proposal list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli proposal list
+
+Operator-only: list retained proposals in all states
+
+```text
+Usage:
+  wecom-channel-cli proposal list [flags]
+
+Flags:
+      --cursor string   Previous proposal-list cursor
+      --limit int       Page size (1–100) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli proposal reject
+
+Operator-only: reject one pending proposal without sending
+
+```text
+Usage:
+  wecom-channel-cli proposal reject [flags]
+
+Flags:
+      --digest string   Exact digest from the reviewed immutable proposal
+      --dry-run         Preview without a state change or remote write
+      --id string       Exact proposal ID
+      --yes             Confirm this exact operator action; never inferred from channel content
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli proposal resolve
+
+Operator-only: record a verified uncertain outcome; never resend
+
+```text
+Usage:
+  wecom-channel-cli proposal resolve [flags]
+
+Flags:
+      --digest string      Exact digest from the reviewed immutable proposal
+      --dry-run            Preview without a state change or remote write
+      --id string          Exact proposal ID
+      --outcome string     Independently verified outcome: sent or not_sent (never retries)
+      --remote-id string   Verified post/reply ID for sent outcomes; omit for native reactions
+      --yes                Confirm this exact operator action; never inferred from channel content
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -857,7 +840,7 @@ Usage:
 Flags:
       --channel string   Channel ID from channel list or an authenticated event
       --event string     Matching authenticated mention event for a mention-only read
-      --post string      Exact post ID from post list, search result or event get
+      --post string      Exact post ID from post list, search get or event get
       --reply string     Optional reply ID; omit to inspect the post itself
 
 Global Flags:
@@ -917,6 +900,84 @@ Global Flags:
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 ```
 
+## wecom-channel-cli relay
+
+Run and inspect durable event delivery to a configured host adapter
+
+```text
+Usage:
+  wecom-channel-cli relay [flags]
+  wecom-channel-cli relay [command]
+
+Available Commands:
+  run         Run a bounded collector and deliver acknowledged batches without a model
+  status      Read local delivery counts and timestamps; this does not probe process liveness
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use "wecom-channel-cli relay [command] --help" for more information about a command.
+```
+
+## wecom-channel-cli relay run
+
+Run a bounded collector and deliver acknowledged batches without a model
+
+```text
+Usage:
+  wecom-channel-cli relay run [flags]
+
+Examples:
+  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h
+  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json
+
+Flags:
+      --after-sequence int   Replay after this sequence only when creating new relay state
+      --allow-partial        Explicitly accept allowlisted-human callback coverage
+      --config string        Private operator-provisioned JSON with fixed destination, filters and retry bounds
+      --dry-run              Inspect binding and coverage without credentials, remote reads, locks or state writes
+      --duration duration    Maximum session duration, up to 24h; queued work survives exit (default 5m0s)
+      --interval duration    Minimum scan interval, 1s–1m; operator polling rates still apply (default 2s)
+      --max-batches int      Stop after this many acknowledged batches in this session (default 1000)
+      --post stringArray     Observe this post and its replies; repeat for up to 32 IDs
+      --retry-failed         Explicitly reset persisted retry budgets after repairing a failed receiver or scan
+      --state string         Durable queue in an existing private service-owned directory (required)
+      --whole-channel        Observe the selected channel
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli relay status
+
+Read local delivery counts and timestamps; this does not probe process liveness
+
+```text
+Usage:
+  wecom-channel-cli relay status [flags]
+
+Flags:
+      --state string   Private relay state file (required)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
 ## wecom-channel-cli reply
 
 Inspect reply data through broker policy
@@ -927,7 +988,7 @@ Usage:
   wecom-channel-cli reply [command]
 
 Available Commands:
-  get         Read one bounded page of reply data
+  get         Read one reply by its exact ID
   list        Read one bounded page of reply data
   propose     Create an immutable proposal for operator review; does not send to WeCom
 
@@ -944,7 +1005,7 @@ Use "wecom-channel-cli reply [command] --help" for more information about a comm
 
 ## wecom-channel-cli reply get
 
-Read one bounded page of reply data
+Read one reply by its exact ID
 
 ```text
 Usage:
@@ -952,7 +1013,7 @@ Usage:
 
 Flags:
       --channel string   Channel ID from channel list or an authenticated event
-      --post string      Post ID from post list, search result, or event get
+      --post string      Post ID from post list, search get, or event get
       --reply string     Reply ID from reply list or event get
 
 Global Flags:
@@ -976,8 +1037,8 @@ Flags:
       --channel string   Channel ID from channel list or an authenticated event
       --cursor string    Opaque continuation from the previous response
       --from string      Inclusive RFC 3339 lower bound
-      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
-      --post string      Post ID from post list, search result, or event get
+      --limit int        Maximum records in one page (1–50) (default 20)
+      --post string      Post ID from post list, search get, or event get
       --since string     Relative time window, such as 24h (first page only)
       --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
 
@@ -1027,8 +1088,8 @@ Usage:
   wecom-channel-cli search [command]
 
 Available Commands:
-  result      Read one bounded page of search data
-  start       Read one bounded page of search data
+  get         Read one page of results for a search job
+  start       Start an asynchronous keyword search and return its job ID
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -1041,19 +1102,19 @@ Global Flags:
 Use "wecom-channel-cli search [command] --help" for more information about a command.
 ```
 
-## wecom-channel-cli search result
+## wecom-channel-cli search get
 
-Read one bounded page of search data
+Read one page of results for a search job
 
 ```text
 Usage:
-  wecom-channel-cli search result [flags]
+  wecom-channel-cli search get [flags]
 
 Flags:
       --channel string   Channel ID from channel list or an authenticated event
       --cursor string    Opaque continuation from the previous response
       --job string       Search job ID returned by search start
-      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --limit int        Maximum search results in one page (1–20) (default 20)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -1066,7 +1127,7 @@ Global Flags:
 
 ## wecom-channel-cli search start
 
-Read one bounded page of search data
+Start an asynchronous keyword search and return its job ID
 
 ```text
 Usage:
@@ -1077,7 +1138,7 @@ Flags:
       --cursor string    Opaque continuation from the previous response
       --from string      Inclusive RFC 3339 lower bound
       --keyword string   One content keyword, at most 32 UTF-8 bytes
-      --limit int        Maximum records in one page (1–50; search results 1–20) (default 20)
+      --limit int        Maximum records in one page (1–50) (default 20)
       --since string     Relative time window, such as 24h (first page only)
       --to string        Exclusive RFC 3339 upper bound (defaults to now with --from)
 

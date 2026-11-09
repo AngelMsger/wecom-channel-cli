@@ -29,7 +29,7 @@ type appState struct {
 func NewRootCmd() *cobra.Command {
 	s := &appState{}
 	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
-	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nFirst-time setup: auth guide -> channel list --bot-id -> config example -> broker serve -> config set-context."
+	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nFirst-time setup: auth guide -> channel list --bot-id -> policy example -> broker serve -> config set-context.\nRead retained events with event list/get, stream observations with event watch,\nor run durable unattended delivery with relay run."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")
 	root.PersistentFlags().StringVar(&s.configDir, "config-dir", "", "Client context directory (or WECOM_CHANNEL_CONFIG)")
 	root.PersistentFlags().StringVar(&s.useContext, "use-context", "", "Select a channel security context (or WECOM_CHANNEL_CONTEXT)")
@@ -50,11 +50,11 @@ func NewRootCmd() *cobra.Command {
 	})
 	root.AddCommand(s.readCommands()...)
 	root.AddCommand(s.reactionCommands())
-	root.AddCommand(s.eventCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.configCommands(), s.authCommands(), s.skillCommands())
+	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(), s.skillCommands())
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Print build metadata", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.emit(cmd, map[string]any{"name": constants.AppName, "version": constants.Version, "commit": constants.Commit, "built_at": constants.BuildTime})
 	}})
-	root.AddCommand(&cobra.Command{Use: "doctor", Short: "Check broker connectivity and read-only policy", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return s.call(cmd, broker.Request{Operation: "health"}) }})
+	root.AddCommand(s.doctorCommand())
 	var groups func(*cobra.Command)
 	groups = func(c *cobra.Command) {
 		for _, x := range c.Commands() {
@@ -71,6 +71,12 @@ func NewRootCmd() *cobra.Command {
 	}
 	groups(root)
 	return root
+}
+
+func (s *appState) doctorCommand() *cobra.Command {
+	return &cobra.Command{Use: "doctor", Short: "Check broker readiness and policy; use auth check to verify upstream credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return s.call(cmd, broker.Request{Operation: "health"})
+	}}
 }
 
 func Execute(args []string, in io.Reader, out, errout io.Writer) int {

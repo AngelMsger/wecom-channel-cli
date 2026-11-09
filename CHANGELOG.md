@@ -2,7 +2,34 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in `relay run` and `relay status`: ordinary supervised
+  collection, a bounded durable metadata queue, deterministic kind/change/bot
+  filters, thread-grouped webhook batches, explicit acknowledgments and persisted
+  retry budgets. Empty or filtered scans never request the receiver. Immutable
+  batch IDs survive retries and process restart; receivers must deduplicate
+  before launching jobs. Delivery is at least once, not exactly once.
+- Add private relay configuration, a Linux service reference, receiver/migration
+  documentation and companion Skill 0.1.8. Broker credentials and approval
+  authority remain separate; polling actors remain unknown, and existing
+  `event watch` semantics are unchanged. No live Grok adapter is assumed.
+
 ### Changed
+
+- Consolidate the command tree around resource ownership: `relay run/status`,
+  `policy example/validate`, the complete `proposal` lifecycle, `search get`, and
+  `doctor` for broker readiness. Published `config example/validate`, `approval`,
+  `search result` and `auth status` remain hidden compatibility routes with
+  structured migration notices. Broker operations and authority are unchanged.
+- Correct per-command help and page limits, reject explicit zero/out-of-range
+  read limits before broker access, and document primitive selection and migration.
+  Companion Skill 0.1.8 uses the canonical paths; relay's unreleased CLI spelling
+  changes without changing its queue or webhook schema.
+
+- Preserve upstream HTTP status across broker errors so the relay can distinguish
+  transient 408/429/5xx responses from permanent HTTP failures without retrying
+  capacity, permission or protocol errors.
 
 - Use agent-cli-kit v0.6.0. The CLI session's `READONLY_BLOCKED` (from
   `WECOM_CHANNEL_CLI_READ_ONLY`) now has the family's shared wording: the

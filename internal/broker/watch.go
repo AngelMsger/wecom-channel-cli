@@ -55,7 +55,7 @@ func NormalizeScan(r ScanRequest) (ScanRequest, error) {
 	r.Posts = slices.Compact(r.Posts)
 	for _, id := range r.Posts {
 		if !apiclient.Identifier(id, 128) {
-			return r, e.New(e.CategoryUsage, "WATCH_POST", "Use post IDs discovered by post list, search result or an authenticated event.")
+			return r, e.New(e.CategoryUsage, "WATCH_POST", "Use post IDs discovered by post list, search get or an authenticated event.")
 		}
 	}
 	return r, nil

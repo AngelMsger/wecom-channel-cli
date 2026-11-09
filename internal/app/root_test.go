@@ -18,13 +18,13 @@ func run(t *testing.T, args ...string) (int, string, string) {
 }
 
 func TestOfflineCLIContracts(t *testing.T) {
-	for _, args := range [][]string{{"auth", "guide"}, {"version"}, {"config", "example"}, {"skill", "status", "--dir", t.TempDir()}} {
+	for _, args := range [][]string{{"auth", "guide"}, {"version"}, {"policy", "example"}, {"skill", "status", "--dir", t.TempDir()}} {
 		code, out, err := run(t, args...)
 		if code != 0 || !json.Valid([]byte(out)) || err != "" {
 			t.Fatalf("%v: %d %s %s", args, code, out, err)
 		}
 	}
-	for _, args := range [][]string{{"nonsense"}, {"post", "nonsense"}, {"event", "nonsense"}, {"post", "list", "unexpected"}, {"post", "list", "--format", "table"}, {"approval", "approve", "--admin"}, {"post", "propose", "--text", "x", "--stdin"}} {
+	for _, args := range [][]string{{"nonsense"}, {"post", "nonsense"}, {"event", "nonsense"}, {"post", "list", "unexpected"}, {"post", "list", "--format", "table"}, {"proposal", "approve", "--admin"}, {"post", "propose", "--text", "x", "--stdin"}} {
 		code, out, err := run(t, args...)
 		if code == 0 || out != "" || !json.Valid([]byte(err)) {
 			t.Fatalf("%v: %d %s %s", args, code, out, err)
