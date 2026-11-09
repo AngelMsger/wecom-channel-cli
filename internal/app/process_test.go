@@ -118,7 +118,7 @@ func TestCLIProcess(t *testing.T) {
 	runBinary := func(socket string, stdin string, args ...string) (string, string, int) {
 		t.Helper()
 		cmd := exec.Command(binary, args...)
-		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.6", "WECOM_CHANNEL_BOT_ID=test-bot", "WECOM_CHANNEL_BOT_SECRET=synthetic-secret"}
+		cmd.Env = []string{"WECOM_CHANNEL_SOCKET=" + socket, "WECOM_CHANNEL_SKILL_LOADED=0.1.7", "WECOM_CHANNEL_BOT_ID=test-bot", "WECOM_CHANNEL_BOT_SECRET=synthetic-secret"}
 		cmd.Stdin = strings.NewReader(stdin)
 		var out, stderr bytes.Buffer
 		cmd.Stdout = &out

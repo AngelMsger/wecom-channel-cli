@@ -1,0 +1,45 @@
+[Unit]
+Description=WeCom channel observation relay (no model polling)
+Wants=network-online.target
+After=network-online.target wecom-channel-broker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=wecom-relay
+Group=wecom-channel-agents
+EnvironmentFile=/etc/wecom-relay/secrets.env
+ExecStart=/usr/local/bin/wecom-channel-cli --socket /run/wecom-channel-agent/agent.sock event relay --whole-channel --relay-config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h
+StateDirectory=wecom-relay
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+SystemCallArchitectures=native
+LimitCORE=0
+MemoryMax=256M
+TasksMax=64
+TimeoutStopSec=70
+# Renew normal bounded sessions and restart crashes. Structured CLI failures
+# require operator repair; restarting must never reset their retry budget.
+Restart=always
+RestartPreventExitStatus=1 2 3 4 5 6 7 8 9 10 11
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

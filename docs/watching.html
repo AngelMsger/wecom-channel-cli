@@ -100,7 +100,202 @@ stdout contains only complete untrusted event records. Preserve both streams.</p
 acknowledgments</strong>. A crash between output and persistence can replay records;
 a downstream consumer that fails after accepting output can lose its own work.
 Deduplicate by event ID and manage acknowledgments in the consumer if processing
-requires a stronger guarantee. This is not an exactly-once queue.</p>
+requires a stronger guarantee. This is not an exactly-once queue. For an integrated
+durable consumer, use the opt-in relay described below.</p>
+<h2 id="relay-events-without-model-polling">Relay events without model polling</h2>
+<p><code>event watch</code> and the broker do not invoke a model. Scheduling a Bot to run them
+every few minutes still pays for a model turn even when stdout is empty. Repeated
+model-driven <code>reply list</code> calls also put unrelated history back into context.
+Run <code>event relay</code> as ordinary supervised software instead: it collects from the
+same <code>event.scan</code> interface, persists a queue and calls a fixed receiver only for
+nonempty eligible batches. Empty scans and health checks make zero receiver or
+model calls. There is no model SDK or shell-command adapter in the relay.</p>
+<p>The existing <code>event watch</code> contract is unchanged. Relay configuration and state
+belong to a separate trusted service account, <strong>not the model worker</strong>. The relay
+needs only its channel's agent socket and a receiver credential; never give it
+the WeCom Secret, broker state, or operator socket. No destination or credential
+is sent through the broker API.</p>
+<h3 id="provision-and-preview">Provision and preview</h3>
+<p>Copy <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/relay.example.json">relay.example.json</a> to a protected service
+directory, set its fixed receiver URL, and install it with mode 0600, owned by
+root or the relay account. Every ancestor must be root/service-owned and not
+writable by others. HTTPS is required except for a literal loopback IP. URLs
+cannot contain userinfo, query strings or fragments. Put the optional bearer
+token in the environment variable named by <code>token_env</code>; an empty <code>token_env</code>
+omits authentication. Neither credentials nor destination URLs appear in status.
+The HTTP client follows no redirects, uses no ambient proxy and does not log
+headers, bodies, or URL-bearing errors.</p>
+<p>Create a private 0700 relay-owned state directory, then preview with the same
+context and scope that the service will use:</p>
+<pre><code class="language-sh">wecom-channel-cli --use-context engineering event relay \
+  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+  --state /var/lib/wecom-relay/state.json --duration 24h --dry-run
+
+wecom-channel-cli --use-context engineering event relay \
+  --whole-channel --relay-config /etc/wecom-relay/relay.json \
+  --state /var/lib/wecom-relay/state.json --duration 24h
+
+wecom-channel-cli event relay-status --state /var/lib/wecom-relay/state.json
+</code></pre>
+<p>Dry-run validates the same config, scope, saved binding and broker coverage but
+does not read the token environment, call WeCom/the receiver, lock or write files.
+Normal relay execution is gated by <code>WECOM_CHANNEL_CLI_READ_ONLY</code>; broker read-only
+mode still permits observation. A new relay starts with a quiet baseline unless
+<code>--after-sequence</code> explicitly requests retained history. Existing watch checkpoints
+cannot serve as relay state: output success cannot reconstruct processing success.
+For migration, stop the old consumer and deliberately select a known safe sequence;
+downstream deduplication must cover any overlapping events.</p>
+<p><a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-relay.service">wecom-channel-relay.service</a> is a Linux
+supervision example. Provision <code>wecom-relay</code> separately from the worker, give it
+the agent socket group, and match the unit's socket path to the actual broker.
+Use a root-owned 0600 environment file and relay-readable 0600 config. The unit
+renews bounded sessions and restarts signal crashes, but stops on structured CLI
+errors. Wire service failure and queue-age monitoring to an ordinary operator
+monitor, not a periodic model prompt. The unit is a deployment reference, not a
+claim of a tested production installation or Grok-host compatibility.</p>
+<p><code>relay-status</code> reads only the atomic local snapshot, even while the service runs.
+It exposes queued/collected/filtered/acknowledged counts, inflight ID and attempts,
+coverage, and last-scan/last-ack timestamps (Unix milliseconds). <code>initialized</code>
+is false until the first successful broker handshake; startup retry budgets are
+already durable in that state. Status cannot prove
+process liveness; compare timestamps with the configured scan interval and use
+the supervisor for exit/liveness checks. Normal relay stdout is empty; structured
+startup, retry, acknowledgment, stop and failure notices go to stderr.</p>
+<h3 id="filters-and-batching">Filters and batching</h3>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>Default / range</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kinds</code></td>
+<td>Both post/reply observation kinds</td>
+<td>Admit only the named event kinds</td>
+</tr>
+<tr>
+<td><code>changes</code></td>
+<td><code>[1,2,3]</code></td>
+<td>Admit create/update/recall-or-delete observations</td>
+</tr>
+<tr>
+<td><code>exclude_self</code></td>
+<td><code>true</code></td>
+<td>Exclude a callback whose authenticated bot actor equals this bot</td>
+</tr>
+<tr>
+<td><code>exclude_bots</code></td>
+<td><code>[]</code>, up to 100 exact bot IDs</td>
+<td>Exclude known bot actors; discover IDs from callback events</td>
+</tr>
+<tr>
+<td><code>batch_window_seconds</code></td>
+<td>5 / 1–300</td>
+<td>Maximum collection window from the oldest pending event</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>50 / 1–100</td>
+<td>Maximum events per webhook request; full batches can dispatch early</td>
+</tr>
+<tr>
+<td><code>queue_limit</code></td>
+<td>1000 / batch size–10000</td>
+<td>Pending plus inflight event bound</td>
+</tr>
+<tr>
+<td><code>timeout_seconds</code></td>
+<td>30 / 1–30</td>
+<td>Webhook attempt deadline</td>
+</tr>
+<tr>
+<td><code>retry_limit</code></td>
+<td>0 / 0–20</td>
+<td>Explicit additional attempts after a transient failure; example opts into 5</td>
+</tr>
+<tr>
+<td><code>retry_base_seconds</code></td>
+<td>5 / 1–300</td>
+<td>Exponential retry delay, capped at five minutes</td>
+</tr>
+</tbody>
+</table>
+<p>The scan interval respects broker polling policy. A window groups events already
+collected; it cannot increase upstream polling resolution. Payloads group events
+by post, keeping all relevant IDs/sequences so a receiver can read each affected
+thread once. They do not overwrite intermediate observations or merge an already
+attempted batch. A full queue pauses collection while delivery drains it; no
+overflow eviction advances the cursor. An outage longer than broker retention
+may still create a detectable gap in events not yet collected.</p>
+<p>Filters run before dispatch and their skipped sequences are durably recorded.
+Unknown polling actors <strong>always survive actor exclusions</strong>; a post creator is
+not evidence of who edited it. If a consumer needs human-only triggers, it must
+use verified callback actor metadata or explicitly account for unknown actors.
+Filters reduce notifications and never declare content safe or authorize actions.</p>
+<h3 id="receiver-protocol-and-acknowledgment">Receiver protocol and acknowledgment</h3>
+<p>Each POST has <code>Content-Type: application/json</code> and <code>Idempotency-Key: BATCH_ID</code>.
+Its version 1 body contains <code>id</code>, <code>identity</code>, <code>coverage</code>, and <code>threads</code>, each with
+<code>post_id</code> and <code>events</code>. Events retain the full fixed <code>trust</code>, <code>warning</code>, <code>source</code>
+and metadata <code>data</code> envelope. There are no message bodies, text previews, media
+links or automatically fetched thread history. Use <code>post get</code>/<code>reply get</code> only
+for affected IDs when the task needs their content. Keep the original envelope
+when supplying observations to a model; arrival is not an instruction to send.</p>
+<p>The receiver must respond with a 2xx and the exact JSON object:</p>
+<pre><code class="language-json">{&quot;ack&quot;:&quot;BATCH_ID&quot;}
+</code></pre>
+<p>A bare 200/204, mismatched ID, duplicate JSON key, malformed or oversized response
+does not acknowledge anything. Return the acknowledgment only after either:</p>
+<ol>
+<li>processing has succeeded and its completion is durably deduplicated; or</li>
+<li>the receiver has atomically deduplicated and enqueued the batch in its own
+durable worker queue, taking responsibility for processing and retries.</li>
+</ol>
+<p>For asynchronous Bot jobs, the second pattern avoids keeping HTTP requests open.
+The adapter must insert the batch ID and work item in one transaction, enforce
+a unique batch ID, and return the same acknowledgment for a duplicate <strong>without
+launching another Bot job</strong>. Deduplicate event IDs as well when deliberately
+overlapping consumers or migrating scopes. In this mode the relay reports
+<em>acknowledged handoff</em>, not proof that the Bot completed. Receiver-side processing
+acknowledgments and idempotent job handling remain necessary. Keep deduplication
+records for the entire possible queue/replay lifetime; the relay does not expire
+pending work automatically. This endpoint contract must be verified against the
+actual Grok host; an arbitrary webhook that starts a Bot is not sufficient.</p>
+<p>Collection and queue entries commit atomically before dispatch. A sealed batch
+and attempt are persisted before HTTP; only a matching acknowledgment removes
+it. A crash or lost response can replay the identical ID and payload. <strong>Delivery
+is at least once, not exactly once.</strong> No receiver request is made for an empty
+or wholly filtered scan. Duplicate wakeup prevention depends on the receiver's
+durable idempotency, not on pretending that HTTP timeouts prove failure.</p>
+<h3 id="retry-and-recovery">Retry and recovery</h3>
+<p>Retries are opt-in (<code>retry_limit</code> defaults to zero), bounded, and visible on stderr.
+They apply to known connectivity failures, HTTP 408/429/5xx and known rate limits.
+They do not apply to permissions/authentication, redirects, malformed acknowledgments,
+protocol errors, snapshot capacity/budget limits, missing history or changed bindings.
+The existing <code>watch</code> still stops without reconnecting. Relay scan and delivery
+budgets are independent; an upstream transient failure can coexist with draining
+already validated queued work. Startup always revalidates the live ledger before
+dispatching persisted work, so a broker outage can delay that validation.</p>
+<p>Attempt counts and next-attempt times survive process restart, including before
+the first successful broker handshake. After exhaustion,
+repair the receiver/broker and explicitly restart the same invocation with
+<code>--retry-failed</code>; this resets retry budgets while preserving queued IDs/payloads.
+Do not put that flag in a supervisor restart loop. Scope/socket/policy/ledger,
+destination, filters and delivery configuration are bound to the state. Changing
+them cannot silently redirect, refilter or reinterpret pending work. Restore the
+original configuration to drain it, or reconcile it before deliberately creating
+a separate consumer. Never delete state or reuse <code>--after-sequence</code> as automatic
+gap recovery.</p>
+<h3 id="acceptance-evidence">Acceptance evidence</h3>
+<p>Local synthetic tests cover empty/filtered scans making zero requests, grouping
+same-thread observations, failed persistence preventing dispatch, explicit ack
+validation, immutable retry payloads across process restart, bounded retry/cancel,
+binding/gap failures and private-file/lock protection. <code>make e2e</code> runs the actual
+CLI against mock broker and webhook services. Existing polling tests continue to
+cover old-thread replies and snapshot completeness. These tests establish CLI
+behavior; they do not measure model billing or verify a live Grok integration.</p>
 <h2 id="preview-and-permissions">Preview and permissions</h2>
 <pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
   --whole-channel --checkpoint .watch/channel.json --dry-run

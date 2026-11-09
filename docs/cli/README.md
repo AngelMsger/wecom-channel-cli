@@ -528,10 +528,12 @@ Usage:
   wecom-channel-cli event [command]
 
 Available Commands:
-  context     Read retained events or the triggering post
-  get         Read retained events or the triggering post
-  list        Read retained events or the triggering post
-  watch       Watch a whole channel or selected post threads as bounded NDJSON
+  context      Read retained events or the triggering post
+  get          Read retained events or the triggering post
+  list         Read retained events or the triggering post
+  relay        Collect observations durably and deliver acknowledged webhook batches without a model
+  relay-status Read local queue counts and timestamps without a broker, webhook or model call
+  watch        Watch a whole channel or selected post threads as bounded NDJSON
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -596,6 +598,60 @@ Flags:
       --after-sequence int   Read events admitted after this durable sequence; never orders by remote timestamps
       --cursor string        Cursor from event list
       --limit int            Maximum retained events in one page (1–100) (default 20)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli event relay
+
+Collect observations durably and deliver acknowledged webhook batches without a model
+
+```text
+Usage:
+  wecom-channel-cli event relay [flags]
+
+Examples:
+  wecom-channel-cli --use-context engineering event relay --whole-channel --relay-config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h
+  wecom-channel-cli event relay-status --state /var/lib/wecom-relay/state.json
+
+Flags:
+      --after-sequence int    Replay after this sequence only when creating new relay state
+      --allow-partial         Explicitly accept allowlisted-human callback coverage
+      --dry-run               Inspect binding and coverage without credentials, remote reads, locks or state writes
+      --duration duration     Maximum session duration, up to 24h; queued work survives exit (default 5m0s)
+      --interval duration     Minimum scan interval, 1s–1m; operator polling rates still apply (default 2s)
+      --max-batches int       Stop after this many acknowledged batches in this session (default 1000)
+      --post stringArray      Observe this post and its replies; repeat for up to 32 IDs
+      --relay-config string   Private operator-provisioned JSON with fixed destination, filters and retry bounds
+      --retry-failed          Explicitly reset persisted retry budgets after repairing a failed receiver or scan
+      --state string          Durable queue in an existing private service-owned directory (required)
+      --whole-channel         Observe the selected channel
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli event relay-status
+
+Read local queue counts and timestamps without a broker, webhook or model call
+
+```text
+Usage:
+  wecom-channel-cli event relay-status [flags]
+
+Flags:
+      --state string   Private relay state file (required)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval

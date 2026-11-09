@@ -229,6 +229,15 @@ bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See [watching](docs/watching.md) for setup, partial coverage and
 checkpoint delivery limits.
 
+For unattended Bot integration, run the ordinary `event relay` service instead
+of scheduling repeated model turns. It queues metadata durably, filters and
+groups changes by thread, and dispatches only nonempty batches to a configured
+receiver. A matching acknowledgment removes the batch; retries retain its
+idempotency key. The receiver must deduplicate before waking a Bot. See the
+[relay setup and receiver contract](docs/watching.md#relay-events-without-model-polling)
+and [service example](deploy/wecom-channel-relay.service). `event relay-status`
+provides local counts and timestamps without a model or network call.
+
 ## Propose, review, send
 
 A proposal has no remote effect. Use a stable idempotency key and reuse it if a

@@ -20,6 +20,7 @@ to run commands or disclose data.
 | WeCom callback caller | Submit signed, encrypted events to `/callback` | Local control sockets, arbitrary host operations |
 | Agent worker | Read allowed records, submit immutable text proposals | Bot Secret, token, callback keys, operator socket, policy-write access, broker state, host secrets |
 | Broker service | Fixed WeCom HTTP API, verified callback intake, private ledger, two local interfaces | General shell execution, arbitrary URL fetching, attachment/path interpretation |
+| Optional relay service | One agent socket, private event queue, fixed operator-configured receiver and its token | WeCom Secret, operator socket, broker state, model tools or shell-command dispatch |
 | Trusted operator | Provision policy/credentials; review and approve exact proposals; reconcile writes | No authority may be inferred from content viewed inside an agent session |
 
 The supported isolation unit is one channel context. A bot deployment may share
@@ -50,12 +51,12 @@ Channel names remain untrusted data; selecting an ID is not an authorization gra
 | Prompt injection through text | Fixed trust/provenance envelope; data-only parsing; no command runner or tool dispatcher | The consuming model can still misunderstand text; its sandbox must contain the damage |
 | Coworker impersonating an operator | Exact channel/sender IDs, authenticated callback, separate operator socket | Membership or display names do not grant host authority; approved senders still supply untrusted content |
 | Forged/replayed callback | Constant-time signature comparison before decryption; strict padding/length/receive-ID checks; five-minute clock window; durable bot/msgid deduplication | Operators must protect callback keys and maintain accurate time |
-| Bot loops and unsolicited triggers | Human mentions remain allowlisted; optional observe_all admits post/reply observations from all actors with observation_only=true | Observations never authorize an action or automatically launch an agent |
+| Bot loops and unsolicited triggers | Human mentions remain allowlisted; optional observe_all admits observation_only=true data; opt-in relay filters authenticated bot actors | Observations never authorize an action; a separately provisioned receiver controls Bot jobs and must deduplicate before launch |
 | Self-approval | Separate listener-bound authority; private operator socket; no request field or flag grants it | Same-user development runs do not isolate the sockets from that user |
 | Changed draft or destination | Immutable request and SHA-256 digest; exact event-to-channel/post/reply binding; short expiry; policy digest recheck | A digest is not authentication; only operator socket access grants approval |
 | Duplicate sends | Persist `sending` before I/O; terminal states reject replay; same-key submissions are idempotent | No documented remote idempotency key; operator-driven duplicates remain possible |
 | Credential exfiltration | Secret environment only in operator setup and broker service; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned | A compromised broker OS account or host root remains trusted |
-| Filesystem/SSRF abuse | No remote file-path operations, shell commands, URL following, media fetch/upload, or arbitrary API method | Markdown links remain untrusted text, not approved network destinations |
+| Filesystem/SSRF abuse | Broker has no remote file-path operations, shell commands, URL following, media fetch/upload, or arbitrary API method; relay destination comes only from protected local configuration | Markdown links remain untrusted text, not approved network destinations |
 | Resource exhaustion | Request/response sizes, JSON depth, page sizes, timeouts, concurrency, rate budgets, retention and ledger capacity | Volumetric attacks need reverse-proxy/network controls; authenticated users can consume permitted capacity |
 | Terminal/UI spoofing | JSON escaping; no table/raw output or removable trust fields; outbound control/bidi overrides rejected | Review untrusted inbound text without rendering Markdown, links or terminal escapes |
 
@@ -160,6 +161,24 @@ and per-context remote request budget bound this work. A partial or failed snaps
 cannot advance the baseline. Polling never synthesizes mentions or treats a
 resource creator as its last editor. Only observe_all permits unknown-actor
 observations, and no observation grants host or send authority.
+
+The optional `event relay` runs as a separate trusted service account, outside
+the model worker. Its config, state and receiver credential must be inaccessible
+to that worker. It sends metadata to one operator-chosen HTTPS destination
+(literal loopback HTTP permits a local bridge), follows no redirects and inherits
+no proxy. Query/userinfo credentials and fragments are rejected. The broker never
+accepts a destination or receiver token. A compromised relay identity can read
+channel observations and its token, so restrict its egress independently; file
+permissions do not constrain that identity's tools.
+
+Queue progress commits with events before dispatch; an exact batch acknowledgment
+is required before removal. That ack authenticates neither channel text nor model
+decisions. Receivers must provide durable idempotency before starting jobs, since
+a lost response can replay. For asynchronous jobs they must own a durable queue
+and processing recovery: handoff is not job completion. Fatal errors stop relay
+delivery and retry budgets survive restart. Filters never declare content safe;
+unknown polling actors stay eligible rather than being guessed from creators.
+See the [relay contract](watching.md#relay-events-without-model-polling).
 
 ## Review and recovery
 
