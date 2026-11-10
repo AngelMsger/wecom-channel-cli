@@ -236,12 +236,21 @@ func TestConfigValidationAndUnknownActors(t *testing.T) {
 		}
 	}
 	c = DefaultConfig()
+	c.ExcludeSelf = false // Compatibility field cannot turn off mandatory exclusion.
 	c.ExcludeBots = []string{"other"}
 	for _, kind := range []string{"bot", "user", "unknown"} {
 		v := callback.Event{Bot: "self", Sender: "self", SenderKind: kind, Kind: "topic_event", Change: 2}
 		if c.Accept(v) != (kind != "bot") {
 			t.Fatal("guessed actor", kind)
 		}
+	}
+	v := callback.Event{Bot: "self", Transport: "poll", SenderKind: "unknown", Kind: "topic_event", Change: 2, ResourceCreatorKind: "bot", ResourceCreator: "self"}
+	if c.Accept(v) {
+		t.Fatal("self-authored polling resource passed exclusion")
+	}
+	v.ResourceCreator = "other"
+	if !c.Accept(v) {
+		t.Fatal("resource author was substituted for unknown change actor")
 	}
 	c.Changes = []int{1}
 	if c.Accept(callback.Event{Kind: "topic_event", Change: 2}) {

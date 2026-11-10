@@ -96,7 +96,8 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		Whole    bool
 		Posts    []string
 		Partial  bool
-	}{identity, apiclient.Digest(b.Config), r.WholeChannel, r.Posts, r.AllowPartial})
+		Filter   string
+	}{identity, apiclient.Digest(b.Config), r.WholeChannel, r.Posts, r.AllowPartial, "exclude-self-v1"})
 	if r.Binding != "" && r.Binding != binding {
 		return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
 	}
@@ -109,14 +110,15 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		}
 		_, high, events = b.Store.Inbox()
 	}
-	actors := "all_users_and_bots"
+	actors := "all_users_and_other_bots"
 	if !ch.ObserveAll {
 		actors = "allowlisted_humans"
 	}
-	coverage := WatchCoverage{Backend: backend, Actors: actors, Kinds: []string{"topic_event", "topic_reply_event"}, RetentionHours: b.Config.RetentionHours, Note: "Configured callback coverage, not proof of complete WeCom delivery. Events are observation-only; content requires an explicit read."}
+	coverage := WatchCoverage{Backend: backend, Actors: actors, Kinds: []string{"topic_event", "topic_reply_event"}, RetentionHours: b.Config.RetentionHours, Note: "Configured callback coverage excluding this bot's authenticated events, including other clients using the same bot ID; not proof of complete WeCom delivery. Events are observation-only; content requires an explicit read."}
 	if backend == "poll" {
 		coverage.PollIntervalSeconds, coverage.PollMaxRequests, coverage.PollMaxRecords = b.Config.PollIntervalSeconds, b.Config.PollMaxRequests, b.Config.PollMaxRecords
-		coverage.Note = "Snapshot observations, not a complete event history: first snapshot is a baseline; edits may coalesce; absence is not deletion; recall requires a returned flag; change actors are unknown. Content is read for comparison but only fingerprints and event metadata persist. Polling runs only while a watch requests scans."
+		coverage.Actors = "unknown"
+		coverage.Note = "Snapshot observations of resources authored by other users/bots; this bot's posts/replies are excluded, but other authors' replies to its posts remain eligible. Missing or ambiguous creators stop the snapshot. Change actors remain unknown. First snapshot is a baseline; edits may coalesce; absence is not deletion; recall requires a returned flag. Only fingerprints and event metadata persist. Polling runs only while a watch requests scans."
 	}
 	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: coverage}
 	if r.FromNow {
@@ -132,13 +134,13 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		if v.Sequence <= r.After {
 			continue
 		}
-		if v.Sequence != expected || !b.visibleEvent(v) {
+		if v.Sequence != expected || !b.retainedEvent(v) {
 			return p, watchGap()
 		}
 		expected++
 		scanned++
 		p.After = v.Sequence
-		if (v.Kind == "topic_event" || v.Kind == "topic_reply_event") && (r.WholeChannel || slices.Contains(r.Posts, v.Post)) {
+		if !v.IsSelf() && (v.Kind == "topic_event" || v.Kind == "topic_reply_event") && (r.WholeChannel || slices.Contains(r.Posts, v.Post)) {
 			v.ObservationOnly = true
 			if v.Transport == "" {
 				v.Transport = "callback"

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-11-10
+
 ### Added
 
 - Add opt-in `relay run` and `relay status`: ordinary supervised
@@ -12,10 +14,20 @@
   before launching jobs. Delivery is at least once, not exactly once.
 - Add private relay configuration, a Linux service reference, receiver/migration
   documentation and companion Skill 0.1.8. Broker credentials and approval
-  authority remain separate; polling actors remain unknown, and existing
-  `event watch` semantics are unchanged. No live Grok adapter is assumed.
+  authority remain separate and polling actors remain unknown. No live Grok
+  adapter is assumed.
 
 ### Changed
+
+- Exclude this bot's authenticated callback events and self-authored polling
+  posts/replies from event reads, watches and relay delivery, including messages
+  sent by another client using the same bot ID. Continue observing other authors'
+  replies to this bot's posts. Polling validates creator aliases, fails atomically
+  on missing/conflicting authors and keeps change actors unknown. Self fingerprints
+  persist without events. Filtering is mandatory even with legacy relay
+  `exclude_self: false`. Existing watch/relay bindings require explicit migration;
+  old polling history without author evidence cannot be replayed. Companion
+  Skill 0.1.9 documents the contract.
 
 - Consolidate the command tree around resource ownership: `relay run/status`,
   `policy example/validate`, the complete `proposal` lifecycle, `search get`, and

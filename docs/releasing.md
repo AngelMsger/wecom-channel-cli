@@ -135,12 +135,13 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
-## Version 0.2.0
+## Version 0.3.0
 
-Version 0.2.0 embeds companion Skill 0.1.6 and adds credential-based initial setup
-to the existing `channel list` command. See [release notes](release-notes.md) and
-the [changelog](../CHANGELOG.md) for the complete changes since 0.1.0. Its tag uses
-the family artifact set and npm OIDC workflow described above.
+Version 0.3.0 embeds companion Skill 0.1.9, adds durable relay delivery and
+canonical proposal/policy commands, and excludes self-bot observations across
+callbacks and polling. Existing watch/relay bindings require explicit migration;
+see [release notes](release-notes.md) and [self exclusion](watching.md#self-exclusion).
+Its tag uses the family artifact set and npm OIDC workflow described above.
 
 ## First-release evidence
 

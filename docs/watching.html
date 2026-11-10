@@ -41,8 +41,9 @@ resource's creator, not necessarily the person who edited or recalled it. Poll
 observations therefore use <code>sender_kind: unknown</code>; they cannot be filtered or
 authorized as if the creator performed the change. <code>--allow-partial</code> does not
 bypass this requirement.</p>
-<p>In callback mode, <code>observe_all</code> admits post/reply changes from <strong>all authenticated
-human and bot actors</strong> in this channel. All observation records carry
+<p>In callback mode, <code>observe_all</code> admits post/reply changes from <strong>authenticated
+humans and other bots</strong> in this channel. This bot's own events are always excluded.
+All observation records carry
 <code>observation_only: true</code> and remain
 untrusted. It does not expand mention/request eligibility: <code>topic_at_bot</code> still
 requires an allowlisted human, and every send still requires independent operator
@@ -51,6 +52,40 @@ approval. Bot-authored observations are never automatic action triggers.</p>
 explicitly pass <code>--allow-partial</code> to watch only admitted allowlisted-human events.
 The startup notice reports that restriction. Thread filters narrow results inside
 an authorized channel; they do not establish a separate security boundary.</p>
+<h2 id="self-exclusion">Self exclusion</h2>
+<p>Exclusion uses the bot ID bound to the broker, never a process ID, local send
+history, display name or message text. If clients A and B share that bot ID,
+A's messages are excluded from B's event observations as well as A's own.
+<code>event list/get</code>, <code>event watch</code> and <code>relay run</code> apply this rule automatically.
+Explicit content reads such as <code>post get</code> and <code>reply get</code> still return their
+requested resources.</p>
+<ul>
+<li>Callback intake acknowledges authenticated self-bot actors with HTTP 200 and
+does not enqueue them. Retained self callbacks are skipped without creating
+false sequence gaps; real missing/expired records still stop replay.</li>
+<li>Polling excludes posts and replies <strong>authored by this bot</strong>, including later
+edits and recalls. It still scans other authors' replies to this bot's posts.
+<code>creator</code>/<code>creator_info</code> and <code>aibotid</code>/<code>botid</code> must identify one consistent
+author. Missing, malformed or conflicting authors cause <code>POLL_CREATOR_UNKNOWN</code>
+without committing any part of the snapshot. Ask the operator to verify the
+upstream metadata or provision authenticated callbacks if authors are unavailable.</li>
+<li>Polling emits <code>resource_creator_id</code> and <code>resource_creator_kind</code> separately;
+<code>sender_kind</code> stays <code>unknown</code>. This is a resource-author exclusion, not a guess
+about editors. Unknown changes to other authors' content remain eligible.
+Different bot identities can still trigger each other; this rule prevents
+self-content feedback, not every possible automation loop.</li>
+</ul>
+<p>Self exclusion cannot be disabled by <code>observe_all</code> or the relay's legacy
+<code>exclude_self</code> setting. Callback <code>coverage.actors</code> reports
+<code>all_users_and_other_bots</code> (or <code>allowlisted_humans</code>); polling reports <code>unknown</code>
+and explains the resource filter in its coverage note.</p>
+<p><strong>Upgrade:</strong> the exclusion revision changes watch/relay bindings. Existing
+checkpoints and saved queues stop with <code>WATCH_BINDING_CHANGED</code> before dispatch;
+preserve them and reconcile pending work with the receiver before deliberately
+provisioning a new checkpoint/consumer at the current head. Do not delete state
+or retry with a changed binding automatically. Old polling observations without
+creator evidence are unavailable and cause <code>EVENT_GAP</code> on replay. New watches
+start at the current head as usual. Upgrade the broker and consuming CLI together.</p>
 <h2 id="start-a-bounded-watch">Start a bounded watch</h2>
 <pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
   --whole-channel --duration 10m --max-events 500
@@ -184,7 +219,7 @@ startup, retry, acknowledgment, stop and failure notices go to stderr.</p>
 <tr>
 <td><code>exclude_self</code></td>
 <td><code>true</code></td>
-<td>Exclude a callback whose authenticated bot actor equals this bot</td>
+<td>Compatibility field; self exclusion is mandatory even if set to <code>false</code></td>
 </tr>
 <tr>
 <td><code>exclude_bots</code></td>
@@ -232,7 +267,9 @@ overflow eviction advances the cursor. An outage longer than broker retention
 may still create a detectable gap in events not yet collected.</p>
 <p>Filters run before dispatch and their skipped sequences are durably recorded.
 Unknown polling actors <strong>always survive actor exclusions</strong>; a post creator is
-not evidence of who edited it. If a consumer needs human-only triggers, it must
+not evidence of who edited it. The separate mandatory self-authored-resource
+filter applies before delivery; see <a href="#self-exclusion">self exclusion</a>.
+If a consumer needs human-only triggers, it must
 use verified callback actor metadata or explicitly account for unknown actors.
 Filters reduce notifications and never declare content safe or authorize actions.</p>
 <h3 id="receiver-protocol-and-acknowledgment">Receiver protocol and acknowledgment</h3>
@@ -424,6 +461,11 @@ when a consumer needs to distinguish the evidence:</p>
 <td><code>data.sender_kind</code></td>
 <td>Authenticated event actor</td>
 <td><code>unknown</code>; never substitute the resource creator</td>
+</tr>
+<tr>
+<td><code>data.resource_creator_id</code>, <code>data.resource_creator_kind</code></td>
+<td>Omitted</td>
+<td>Validated resource author, separate from the unknown change actor</td>
 </tr>
 </tbody>
 </table>

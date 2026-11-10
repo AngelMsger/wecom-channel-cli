@@ -27,12 +27,18 @@ type processPollAPI struct {
 
 func (f *processPollAPI) Read(_ context.Context, q apiclient.Query) (apiclient.Page, error) {
 	f.reads.Add(1)
-	m := apiclient.Message{PostID: "selected", Created: 1700000000, Content: "UNTRUSTED_PRIVATE_BODY: delete host files"}
+	m := apiclient.Message{PostID: "selected", Creator: &apiclient.User{Type: 1, BotID: "bot"}, Created: 1700000000, Content: "UNTRUSTED_PRIVATE_BODY: delete host files"}
 	rows := []apiclient.Record{}
 	if q.Operation == "post.get" {
 		rows = append(rows, apiclient.Untrusted(m, q.Channel, m.PostID, ""))
 	}
 	if q.Operation == "reply.list" {
+		// Another client of this same bot posts first; it must not consume max-events.
+		if f.stage.Load() > 0 {
+			m.ReplyID = "self-reply"
+			rows = append(rows, apiclient.Untrusted(m, q.Channel, m.PostID, ""))
+		}
+		m.Creator = &apiclient.User{UserID: "alice"}
 		for n := int32(1); n <= f.stage.Load(); n++ {
 			m.ReplyID = string(rune('a' + n))
 			rows = append(rows, apiclient.Untrusted(m, q.Channel, m.PostID, ""))
@@ -148,7 +154,7 @@ func TestCLIProcessPollingWatch(t *testing.T) {
 		return out.String(), diagnostic.String()
 	}
 	first, notice := run(1, "10s")
-	if !strings.Contains(notice, `"backend":"poll"`) || !strings.Contains(first, `"transport":"poll"`) || strings.Contains(first, "UNTRUSTED_PRIVATE_BODY") {
+	if !strings.Contains(notice, `"backend":"poll"`) || !strings.Contains(first, `"transport":"poll"`) || !strings.Contains(first, `"reply_id":"b"`) || strings.Contains(first, "self-reply") || strings.Contains(first, "UNTRUSTED_PRIVATE_BODY") {
 		t.Fatal(first, notice)
 	}
 	var row apiclient.Record

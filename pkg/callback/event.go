@@ -9,25 +9,34 @@ import (
 )
 
 type Event struct {
-	Transport        string `json:"transport,omitempty"`
-	ChangeBasis      string `json:"change_basis,omitempty"`
-	ResourceCreated  int64  `json:"resource_created_at,omitempty"`
-	ResourceModified int64  `json:"resource_modified_at,omitempty"`
-	ObservationOnly  bool   `json:"observation_only"`
-	ID               string `json:"id"`
-	Sequence         int64  `json:"sequence"`
-	MessageID        string `json:"-"`
-	Bot              string `json:"bot_id"`
-	Channel          string `json:"channel_id"`
-	Sender           string `json:"sender_id"`
-	SenderKind       string `json:"sender_kind"`
-	Kind             string `json:"kind"`
-	Post             string `json:"post_id,omitempty"`
-	Reply            string `json:"reply_id,omitempty"`
-	Created          int64  `json:"created_at"`
-	Received         int64  `json:"received_at"`
-	Change           int    `json:"change,omitempty"`
-	Feedback         string `json:"feedback,omitempty"`
+	Transport           string `json:"transport,omitempty"`
+	ChangeBasis         string `json:"change_basis,omitempty"`
+	ResourceCreated     int64  `json:"resource_created_at,omitempty"`
+	ResourceModified    int64  `json:"resource_modified_at,omitempty"`
+	ResourceCreator     string `json:"resource_creator_id,omitempty"`
+	ResourceCreatorKind string `json:"resource_creator_kind,omitempty"`
+	ObservationOnly     bool   `json:"observation_only"`
+	ID                  string `json:"id"`
+	Sequence            int64  `json:"sequence"`
+	MessageID           string `json:"-"`
+	Bot                 string `json:"bot_id"`
+	Channel             string `json:"channel_id"`
+	Sender              string `json:"sender_id"`
+	SenderKind          string `json:"sender_kind"`
+	Kind                string `json:"kind"`
+	Post                string `json:"post_id,omitempty"`
+	Reply               string `json:"reply_id,omitempty"`
+	Created             int64  `json:"created_at"`
+	Received            int64  `json:"received_at"`
+	Change              int    `json:"change,omitempty"`
+	Feedback            string `json:"feedback,omitempty"`
+}
+
+// IsSelf distinguishes authenticated callback actors from polled resource authors.
+// A resource author is never evidence of who edited or recalled that resource.
+func (v Event) IsSelf() bool {
+	return v.Bot != "" && ((v.SenderKind == "bot" && v.Sender == v.Bot) ||
+		(v.Transport == "poll" && v.ResourceCreatorKind == "bot" && v.ResourceCreator == v.Bot))
 }
 
 func Parse(data []byte, bot string, now time.Time) (Event, error) {

@@ -169,7 +169,7 @@ func (b *Broker) callbackRouter(routes map[string]*Broker) http.Handler {
 				return
 			}
 		}
-		if !target.Config.AllowsEvent(v.Channel, v.Sender, v.Kind, v.SenderKind) {
+		if v.IsSelf() || !target.Config.AllowsEvent(v.Channel, v.Sender, v.Kind, v.SenderKind) {
 			w.WriteHeader(200)
 			return
 		}

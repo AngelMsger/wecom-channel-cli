@@ -8,12 +8,12 @@ An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.
 
-**Status: [0.2.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.2.0), tested offline against synthetic services and
+**Status: [0.3.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.3.0), tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
-Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.2.0).
+Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.3.0).
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
@@ -27,7 +27,7 @@ Read the [security and deployment guide](docs/security.md) before connecting a b
 With Node.js 20 or newer, run this in a trusted operator setup session:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.2.0
+npm install -g @angelmsger/wecom-channel-cli@0.3.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 ```

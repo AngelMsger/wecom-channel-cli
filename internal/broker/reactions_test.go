@@ -119,7 +119,7 @@ func TestReactionMentionScopeAndExpiryAtApproval(t *testing.T) {
 	if api.sends != 0 {
 		t.Fatal("expired mention sent")
 	}
-	if err := b.Store.AddEvent(callback.Event{ID: "poll", Bot: "bot", Channel: "channel-a", Post: "post-a", Kind: "topic_event", Transport: "poll", ObservationOnly: true, Received: b.Now().Unix(), Created: b.Now().Unix()}, b.Now(), 48*time.Hour, 100); err != nil {
+	if err := b.Store.AddEvent(callback.Event{ID: "poll", Bot: "bot", Channel: "channel-a", Post: "post-a", Kind: "topic_event", Transport: "poll", ResourceCreator: "alice", ResourceCreatorKind: "user", ObservationOnly: true, Received: b.Now().Unix(), Created: b.Now().Unix()}, b.Now(), 48*time.Hour, 100); err != nil {
 		t.Fatal(err)
 	}
 	b.Config.Channels[0].ObserveAll = true

@@ -58,8 +58,15 @@ rerun and skips an npm version already present. Test release commands against
 local substitutes; never publish a version merely to test the workflow.
 
 Watching is observation, not authorization: observe_all may admit post/reply
-changes from bots and humans, but cannot widen human mention eligibility. Watches
-require finite bounds, strict context/policy/filter/ledger binding, no hidden
+changes from bots and humans, but cannot widen human mention eligibility. Always
+exclude authenticated self-bot callbacks and self-authored polled resources
+by the configured bot ID, including sends from another client of that identity.
+Keep polling resource authors separate from unknown change actors; validate both
+creator aliases and stop incomplete snapshots when authors cannot be identified.
+Still scan other authors' replies to self-authored posts. Persist self fingerprints
+without events, and bind exclusion revisions to watch/relay checkpoints.
+Retained self records are intentional skips; missing or expired records remain gaps.
+Watches require finite bounds, strict context/policy/filter/ledger binding, no hidden
 reconnect, no checkpoint advancement past missing or failed-output records, and
 explicit partial coverage. Test real CLI streaming/resume as well as broker scans.
 Without callback intake, auto watches use demand-driven HTTP polling. Commit a

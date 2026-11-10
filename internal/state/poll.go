@@ -65,6 +65,9 @@ func (s *Store) CommitPoll(policy, scope string, whole bool, posts []string, obs
 				return e.New(e.CategoryRateLimit, "POLL_CAPACITY", "The persistent polling index reached poll_max_records; narrow the scope or ask the operator to review capacity. No partial snapshot was committed.")
 			}
 			p.Resources[observation.Key] = PollResource{Digest: observation.Digest}
+			if observation.Event.IsSelf() {
+				continue // Keep comparison progress, but never enqueue our own content.
+			}
 			covered := initialized
 			for _, other := range p.Scopes {
 				covered = covered || other.Whole || slices.Contains(other.Posts, observation.Event.Post)

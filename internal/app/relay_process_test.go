@@ -181,7 +181,7 @@ func TestCLIProcessRelay(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `"acknowledged_events": 2`) || !strings.Contains(out, `"queued_events": 0`) {
 		t.Fatal(code, out, stderr)
 	}
-	// A self-authored callback advances collection without waking the receiver.
+	// A retained self callback is skipped by the broker before reaching the relay.
 	add("self", "bot", "bot")
 	args[len(args)-3] = "150ms"
 	out, stderr, code = runRelay(nil, args...)
@@ -189,7 +189,7 @@ func TestCLIProcessRelay(t *testing.T) {
 		t.Fatal(code, out, stderr)
 	}
 	queued, _, err = relay.Read(statePath)
-	if err != nil || queued.After != 3 || queued.Filtered != 1 || queued.Depth() != 0 {
+	if err != nil || queued.After != 3 || queued.Filtered != 0 || queued.Depth() != 0 {
 		t.Fatal(queued, err)
 	}
 	mu.Lock()

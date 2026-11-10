@@ -6,12 +6,12 @@
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.</p>
-<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.2.0">0.2.0 is published</a>, tested offline against synthetic services and
+<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.3.0">0.3.0 is published</a>, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.</strong> Linux and macOS are supported.
-Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.2.0">GitHub release</a>.</p>
+Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.3.0">GitHub release</a>.</p>
 <p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
@@ -20,7 +20,7 @@ and operator have separate OS identities and the agent's tools are sandboxed.
 Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
 <h2 id="install">Install</h2>
 <p>With Node.js 20 or newer, run this in a trusted operator setup session:</p>
-<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.2.0
+<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.3.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 </code></pre>

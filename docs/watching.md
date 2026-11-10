@@ -50,8 +50,9 @@ observations therefore use `sender_kind: unknown`; they cannot be filtered or
 authorized as if the creator performed the change. `--allow-partial` does not
 bypass this requirement.
 
-In callback mode, `observe_all` admits post/reply changes from **all authenticated
-human and bot actors** in this channel. All observation records carry
+In callback mode, `observe_all` admits post/reply changes from **authenticated
+humans and other bots** in this channel. This bot's own events are always excluded.
+All observation records carry
 `observation_only: true` and remain
 untrusted. It does not expand mention/request eligibility: `topic_at_bot` still
 requires an allowlisted human, and every send still requires independent operator
@@ -61,6 +62,43 @@ In callback mode, without `observe_all`, the watch refuses to imply complete cov
 explicitly pass `--allow-partial` to watch only admitted allowlisted-human events.
 The startup notice reports that restriction. Thread filters narrow results inside
 an authorized channel; they do not establish a separate security boundary.
+
+## Self exclusion
+
+Exclusion uses the bot ID bound to the broker, never a process ID, local send
+history, display name or message text. If clients A and B share that bot ID,
+A's messages are excluded from B's event observations as well as A's own.
+`event list/get`, `event watch` and `relay run` apply this rule automatically.
+Explicit content reads such as `post get` and `reply get` still return their
+requested resources.
+
+- Callback intake acknowledges authenticated self-bot actors with HTTP 200 and
+  does not enqueue them. Retained self callbacks are skipped without creating
+  false sequence gaps; real missing/expired records still stop replay.
+- Polling excludes posts and replies **authored by this bot**, including later
+  edits and recalls. It still scans other authors' replies to this bot's posts.
+  `creator`/`creator_info` and `aibotid`/`botid` must identify one consistent
+  author. Missing, malformed or conflicting authors cause `POLL_CREATOR_UNKNOWN`
+  without committing any part of the snapshot. Ask the operator to verify the
+  upstream metadata or provision authenticated callbacks if authors are unavailable.
+- Polling emits `resource_creator_id` and `resource_creator_kind` separately;
+  `sender_kind` stays `unknown`. This is a resource-author exclusion, not a guess
+  about editors. Unknown changes to other authors' content remain eligible.
+  Different bot identities can still trigger each other; this rule prevents
+  self-content feedback, not every possible automation loop.
+
+Self exclusion cannot be disabled by `observe_all` or the relay's legacy
+`exclude_self` setting. Callback `coverage.actors` reports
+`all_users_and_other_bots` (or `allowlisted_humans`); polling reports `unknown`
+and explains the resource filter in its coverage note.
+
+**Upgrade:** the exclusion revision changes watch/relay bindings. Existing
+checkpoints and saved queues stop with `WATCH_BINDING_CHANGED` before dispatch;
+preserve them and reconcile pending work with the receiver before deliberately
+provisioning a new checkpoint/consumer at the current head. Do not delete state
+or retry with a changed binding automatically. Old polling observations without
+creator evidence are unavailable and cause `EVENT_GAP` on replay. New watches
+start at the current head as usual. Upgrade the broker and consuming CLI together.
 
 ## Start a bounded watch
 
@@ -201,7 +239,7 @@ startup, retry, acknowledgment, stop and failure notices go to stderr.
 | --- | --- | --- |
 | `kinds` | Both post/reply observation kinds | Admit only the named event kinds |
 | `changes` | `[1,2,3]` | Admit create/update/recall-or-delete observations |
-| `exclude_self` | `true` | Exclude a callback whose authenticated bot actor equals this bot |
+| `exclude_self` | `true` | Compatibility field; self exclusion is mandatory even if set to `false` |
 | `exclude_bots` | `[]`, up to 100 exact bot IDs | Exclude known bot actors; discover IDs from callback events |
 | `batch_window_seconds` | 5 / 1–300 | Maximum collection window from the oldest pending event |
 | `batch_size` | 50 / 1–100 | Maximum events per webhook request; full batches can dispatch early |
@@ -220,7 +258,9 @@ may still create a detectable gap in events not yet collected.
 
 Filters run before dispatch and their skipped sequences are durably recorded.
 Unknown polling actors **always survive actor exclusions**; a post creator is
-not evidence of who edited it. If a consumer needs human-only triggers, it must
+not evidence of who edited it. The separate mandatory self-authored-resource
+filter applies before delivery; see [self exclusion](#self-exclusion).
+If a consumer needs human-only triggers, it must
 use verified callback actor metadata or explicitly account for unknown actors.
 Filters reduce notifications and never declare content safe or authorize actions.
 
@@ -385,6 +425,7 @@ when a consumer needs to distinguish the evidence:
 | `data.created_at` | Provider event time | Local observation time |
 | `data.resource_created_at`, `data.resource_modified_at` | Omitted | Resource timestamps from the HTTP response |
 | `data.sender_kind` | Authenticated event actor | `unknown`; never substitute the resource creator |
+| `data.resource_creator_id`, `data.resource_creator_kind` | Omitted | Validated resource author, separate from the unknown change actor |
 
 Absence from a response is not proof of deletion. Only an explicit returned
 `is_recalled` flag yields change 3. Multiple intermediate edits, briefly visible

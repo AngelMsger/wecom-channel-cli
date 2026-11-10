@@ -138,6 +138,13 @@ records, while missing/expired/inaccessible sequences fail before delivery.
 Checkpoints bind a durable random ledger ID, context/bot/channel, policy and
 normalized filters. A reset or rebinding cannot silently reuse a sequence.
 
+Self exclusion is mandatory across event reads, watches and relays. Authenticated
+callback actors equal to the configured bot ID are acknowledged without admission,
+regardless of which client sent the message. Retained self events are filtered
+while scan progress advances; absent, expired or unauthorized records still fail
+as gaps. The watch binding includes the exclusion revision, so old checkpoints
+and queued relay batches stop before delivery until explicitly reconciled.
+
 The client resolves its socket once, emits NDJSON through the kit, and saves only
 successful output progress. Limits are 5m/1000 events by default, up to 24h/100000;
 the interval is 1s–1m, default 2s. The total context bounds all requests and waits.
@@ -177,6 +184,13 @@ fsync after rename retains the committed in-memory state, as for existing events
 
 Polling records are observation-only and never become mention authorization.
 They identify their transport and inference basis; their change actor is unknown.
+Polling separately normalizes `creator`/`creator_info` and `aibotid`/`botid`
+into resource creator metadata. Missing, malformed or conflicting creators fail
+the entire snapshot with `POLL_CREATOR_UNKNOWN`. Self-authored resource fingerprints
+advance atomically without creating events, including edits and recalls; their
+reply lists are still scanned for other authors. This resource filter does not
+attribute edits to creators. Older polling events lacking creator evidence cannot
+be replayed; see the explicit migration in [watching](watching.md#self-exclusion).
 A returned recall flag is evidence, but absence is not. Intermediate changes,
 reactions and membership events are not reconstructed. No background job runs
 without an active watch. See [watching](watching.md) for coverage and limits.
