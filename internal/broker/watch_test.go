@@ -34,7 +34,7 @@ func TestWatchScopesAndFilteredProgress(t *testing.T) {
 	if err != nil || len(p.Items) != 2 || p.After != 3 {
 		t.Fatal(p, err)
 	}
-	if p.Coverage.Actors != "all_users_and_bots" || !p.Items[0].Data.(callback.Event).ObservationOnly {
+	if p.Coverage.Actors != "all_users_and_other_bots" || !p.Items[0].Data.(callback.Event).ObservationOnly {
 		t.Fatal("observation authority")
 	}
 	r.After = p.After

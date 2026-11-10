@@ -22,7 +22,7 @@ type Config struct {
 	TokenEnv           string   `json:"token_env,omitempty"`
 	Kinds              []string `json:"kinds"`
 	Changes            []int    `json:"changes"`
-	ExcludeSelf        bool     `json:"exclude_self"`
+	ExcludeSelf        bool     `json:"exclude_self"` // Compatibility field; self exclusion is mandatory.
 	ExcludeBots        []string `json:"exclude_bots,omitempty"`
 	BatchWindowSeconds int      `json:"batch_window_seconds"`
 	BatchSize          int      `json:"batch_size"`
@@ -89,9 +89,9 @@ func (c Config) Validate() error {
 }
 
 func (c Config) Accept(v callback.Event) bool {
-	if !slices.Contains(c.Kinds, v.Kind) || !slices.Contains(c.Changes, v.Change) {
+	if v.IsSelf() || !slices.Contains(c.Kinds, v.Kind) || !slices.Contains(c.Changes, v.Change) {
 		return false
 	}
 	// A snapshot's creator is not the actor of an edit. Unknown actors survive.
-	return v.SenderKind != "bot" || !((c.ExcludeSelf && v.Sender == v.Bot) || slices.Contains(c.ExcludeBots, v.Sender))
+	return v.SenderKind != "bot" || !slices.Contains(c.ExcludeBots, v.Sender)
 }

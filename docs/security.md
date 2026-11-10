@@ -57,7 +57,7 @@ Channel names remain untrusted data; selecting an ID is not an authorization gra
 | Prompt injection through text | Fixed trust/provenance envelope; data-only parsing; no command runner or tool dispatcher | The consuming model can still misunderstand text; its sandbox must contain the damage |
 | Coworker impersonating an operator | Exact channel/sender IDs, authenticated callback, separate operator socket | Membership or display names do not grant host authority; approved senders still supply untrusted content |
 | Forged/replayed callback | Constant-time signature comparison before decryption; strict padding/length/receive-ID checks; five-minute clock window; durable bot/msgid deduplication | Operators must protect callback keys and maintain accurate time |
-| Bot loops and unsolicited triggers | Human mentions remain allowlisted; optional observe_all admits observation_only=true data; opt-in relay filters authenticated bot actors | Observations never authorize an action; a separately provisioned receiver controls Bot jobs and must deduplicate before launch |
+| Bot loops and unsolicited triggers | Mandatory exclusion by bot ID for self callback actors and self-authored polling resources; missing/conflicting polling creators stop the snapshot; human mentions remain allowlisted | Other authors' content stays eligible; polling cannot identify editors of their content. Observations never authorize an action; receivers must deduplicate before launch |
 | Self-approval | Separate listener-bound authority; private operator socket; no request field or flag grants it | Same-user development runs do not isolate the sockets from that user |
 | Changed draft or destination | Immutable request and SHA-256 digest; exact event-to-channel/post/reply binding; short expiry; policy digest recheck | A digest is not authentication; only operator socket access grants approval |
 | Duplicate sends | Persist `sending` before I/O; terminal states reject replay; same-key submissions are idempotent | No documented remote idempotency key; operator-driven duplicates remain possible |
@@ -155,6 +155,14 @@ disables that compatibility path.
 Channel-wide observation is an explicit operator policy: `observe_all` requires
 `read_all` and does not widen the human mention allowlist. The broker can admit
 bot-authored post/reply changes as data without treating them as requests.
+Self-bot callbacks and self-authored polling resources are always excluded,
+including messages sent through another client of the same bot. Other authors'
+replies to its posts remain eligible. `observe_all` and relay `exclude_self: false`
+cannot override this exclusion. Polling authors are recorded separately from
+unknown change actors; missing or conflicting author identities fail atomically.
+Changes by unknown actors to other authors' content remain eligible. This does
+not prevent loops between different bot identities or turn observations into
+authorization. See [self exclusion and migration](watching.md#self-exclusion).
 `event watch` supports a whole-channel scope or selected post IDs, a total
 deadline and count bound, and private resumable checkpoints. It fails on detected
 history gaps and scope/ledger/policy changes. Filters reduce delivery, not authority.

@@ -98,7 +98,18 @@ func (b *Broker) event(id string) (callback.Event, error) {
 }
 
 func (b *Broker) visibleEvent(v callback.Event) bool {
+	return !v.IsSelf() && b.retainedEvent(v)
+}
+
+// Retained self events are deliberate exclusions, not gaps in the ledger.
+func (b *Broker) retainedEvent(v callback.Event) bool {
+	if v.Bot != b.Config.Bot {
+		return false
+	}
 	if v.Transport == "poll" {
+		if !apiclient.Identifier(v.ResourceCreator, 256) || (v.ResourceCreatorKind != "user" && v.ResourceCreatorKind != "bot") {
+			return false // Older observations cannot prove that their author is not self.
+		}
 		ch, ok := b.Config.Channel(v.Channel)
 		return ok && ch.ReadAll && ch.ObserveAll && v.ObservationOnly && (v.Kind == "topic_event" || v.Kind == "topic_reply_event") && v.Received >= b.Now().Add(-time.Duration(b.Config.RetentionHours)*time.Hour).Unix() && b.Config.AllowsEvent(v.Channel, "", v.Kind, "user")
 	}
@@ -140,13 +151,20 @@ func (b *Broker) Handle(ctx context.Context, r Request, admin bool) (Response, e
 		if q.AfterSequence > snapshot.NextEventSequence {
 			return Response{}, e.New(e.CategoryConflict, "SEQUENCE_AHEAD", "This checkpoint is ahead of the broker ledger; verify the bot and state directory.")
 		}
+		expected := q.AfterSequence + 1
+		gap := false
 		for _, v := range state.Events(snapshot) {
-			if !b.visibleEvent(v) || v.Sequence <= q.AfterSequence {
+			if v.Sequence <= q.AfterSequence {
+				continue
+			}
+			gap = gap || v.Sequence != expected || !b.retainedEvent(v)
+			expected = v.Sequence + 1
+			if !b.visibleEvent(v) {
 				continue
 			}
 			records = append(records, apiclient.Untrusted(v, v.Channel, v.Post, v.ID))
 		}
-		if q.AfterSequence > 0 && snapshot.NextEventSequence > q.AfterSequence && (len(records) == 0 || records[0].Data.(callback.Event).Sequence > q.AfterSequence+1) {
+		if q.AfterSequence > 0 && (gap || expected != snapshot.NextEventSequence+1) {
 			return Response{}, e.New(e.CategoryConflict, "EVENT_GAP", "Events after this checkpoint are no longer retained or allowed by current policy.").WithHint("Review retention and policy changes before deliberately starting a fresh listing.")
 		}
 		p, err := localPage(records, q)

@@ -42,7 +42,7 @@ func (*pollAPI) Send(context.Context, apiclient.WriteRequest) (apiclient.SendRes
 	panic("polling attempted a remote write")
 }
 func polled(post, reply, content string, recalled bool) apiclient.Record {
-	return apiclient.Untrusted(apiclient.Message{PostID: post, ReplyID: reply, Created: 1700000000, Modified: 1700000001, Content: content, Recalled: recalled, AttachmentsOmitted: true}, "channel-a", post, "")
+	return apiclient.Untrusted(apiclient.Message{PostID: post, ReplyID: reply, Creator: &apiclient.User{UserID: "alice"}, Created: 1700000000, Modified: 1700000001, Content: content, Recalled: recalled, AttachmentsOmitted: true}, "channel-a", post, "")
 }
 func pollFixture(t *testing.T) (*Broker, *pollAPI) {
 	b := watchFixture(t)

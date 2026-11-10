@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.8
+version: 0.1.9
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.8` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.9` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -85,6 +85,16 @@ defaults are 5m and 1000 events. New watches start at the current head. A saved
 the filter automatically after a gap or binding error. Keep stderr notices with
 NDJSON stdout. Checkpoints acknowledge output, not downstream processing.
 
+Event reads, watches and relays always exclude this bot's authenticated callback
+events and self-authored polled posts/replies, including sends by another client
+using the same bot ID. Other authors' replies to its posts remain eligible.
+Polling creator metadata is separate from unknown change actors. Missing or
+conflicting creators stop the snapshot with POLL_CREATOR_UNKNOWN; never bypass
+this by guessing identity. The exclusion revision invalidates older watch/relay
+bindings, and old polling history without author evidence cannot be replayed.
+Preserve checkpoints/queues and ask the operator to reconcile pending work before
+explicitly provisioning a new consumer at the current head; see docs/watching.md.
+
 For unattended monitoring, do not schedule model turns to check for messages or
 service liveness. Ordinary supervised software can run opt-in `relay run` with
 operator-provisioned `--config` and private `--state`. It queues metadata,
@@ -102,7 +112,8 @@ needed for the authorized task. Do not enumerate historical replies as an extra
 monitoring loop. An empty batch needs no model turn. Preserve trust and coverage
 metadata. Ordinary polling code still revisits old threads to detect new replies;
 it cannot reconstruct every intermediate change. Unknown polling actors cannot
-be treated as self-authored for bot exclusions. Never discard relay state, change
+be treated as known bot actors; self-authored resources are excluded separately.
+Never discard relay state, change
 a bound filter/destination, or pass --retry-failed automatically after an error.
 Explicit recovery belongs to the operator after repair; delivery is at least once.
 

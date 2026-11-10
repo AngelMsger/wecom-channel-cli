@@ -94,6 +94,11 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time)
 		v := callback.Event{Transport: "poll", ObservationOnly: true, Bot: b.Config.Bot, Channel: channel,
 			Post: m.PostID, Reply: m.ReplyID, Kind: kind, SenderKind: "unknown",
 			Created: now.Unix(), Received: now.Unix(), ResourceCreated: m.Created, ResourceModified: m.Modified}
+		creator, creatorKind, err := pollCreator(m)
+		if err != nil {
+			return m, err
+		}
+		v.ResourceCreator, v.ResourceCreatorKind = creator, creatorKind
 		if m.Recalled {
 			v.Change, v.ChangeBasis = 3, "recall_flag"
 		}
@@ -180,6 +185,45 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time)
 		out = append(out, observations[key])
 	}
 	return out, nil
+}
+
+// Normalize both documented creator shapes without treating authors as change actors.
+func pollCreator(m apiclient.Message) (string, string, error) {
+	var id, kind string
+	invalid := func() (string, string, error) {
+		return "", "", e.New(e.CategoryParse, "POLL_CREATOR_UNKNOWN", "Polling cannot safely exclude this bot: a resource creator is missing, invalid or conflicting. No partial snapshot was committed.").WithHint("Ask the operator to verify creator metadata in the upstream post/reply API; use authenticated callbacks if the API cannot supply it.")
+	}
+	for _, creator := range []*apiclient.User{m.Creator, m.CreatorInfo} {
+		if creator == nil {
+			continue
+		}
+		var candidate, candidateKind string
+		switch creator.Type {
+		case 0:
+			if creator.BotID != "" || creator.LegacyBotID != "" {
+				return invalid()
+			}
+			candidate, candidateKind = creator.UserID, "user"
+		case 1:
+			if creator.UserID != "" || (creator.BotID != "" && creator.LegacyBotID != "" && creator.BotID != creator.LegacyBotID) {
+				return invalid()
+			}
+			candidate, candidateKind = creator.BotID, "bot"
+			if candidate == "" {
+				candidate = creator.LegacyBotID
+			}
+		default:
+			return invalid()
+		}
+		if !apiclient.Identifier(candidate, 256) || (id != "" && (id != candidate || kind != candidateKind)) {
+			return invalid()
+		}
+		id, kind = candidate, candidateKind
+	}
+	if id == "" {
+		return invalid()
+	}
+	return id, kind, nil
 }
 
 func pollResponse() error {
