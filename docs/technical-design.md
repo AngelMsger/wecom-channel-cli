@@ -430,3 +430,8 @@ are needed.
 Before release, repeat with `GOWORK=off`, run the race detector and cross-build,
 then complete an explicitly authorized live tenant and isolated-worker check.
 Generated docs come from the same Cobra tree and can be checked without Git.
+
+Terminal relay delivery failures also persist their error code in the inflight
+record. A process restart cannot retry a permission, redirect or invalid-ACK
+failure merely because attempts remain. Explicit `--retry-failed` after repair
+clears that latch; uncertain HTTP acceptance still requires evidence first.

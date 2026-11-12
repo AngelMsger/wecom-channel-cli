@@ -130,7 +130,7 @@ func (s *appState) relayCommand() *cobra.Command {
 			st.ScanFailures, st.NextScan = 0, 0
 			if st.Inflight != nil {
 				st.Inflight.Attempts, st.Inflight.NextAttempt = 0, 0
-				st.Inflight.Status, st.Inflight.HTTPStatus = "", 0
+				st.Inflight.Status, st.Inflight.HTTPStatus, st.Inflight.Failure = "", 0, ""
 			}
 			if err = save(st); err != nil {
 				return err
@@ -192,6 +192,9 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 		if st.Inflight.Status == "unknown" {
 			return fail(relay.UnknownOutcome())
 		}
+	}
+	if st.Inflight != nil && st.Inflight.Failure != "" {
+		return fail(e.New(e.CategoryConflict, st.Inflight.Failure, "The saved delivery stopped on a terminal error. Repair the receiver and explicitly reset retries before resuming."))
 	}
 	for {
 		if ctx.Err() != nil {
@@ -294,6 +297,9 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					}
 					continue
 				}
+				if !relay.Retryable(err) {
+					st.Inflight.Failure = e.Safe(err).Code
+				}
 				if cfg.Mode() == relay.HTTPAccepted {
 					st.Inflight.Status = "unknown"
 					if x := e.Safe(err); x.Code == "RELAY_REJECTED" || x.Code == "RELAY_REDIRECT" {
@@ -367,6 +373,7 @@ func relayStatus(st relay.State) map[string]any {
 	if st.Inflight != nil {
 		v["inflight_id"], v["delivery_attempts"], v["next_attempt_at"] = st.Inflight.Batch.ID, st.Inflight.Attempts, st.Inflight.NextAttempt
 		v["delivery_status"], v["http_status"] = st.Inflight.Status, st.Inflight.HTTPStatus
+		v["terminal_error"] = st.Inflight.Failure
 	}
 	return v
 }

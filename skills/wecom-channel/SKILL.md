@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.10
+version: 0.1.11
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.10` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.11` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -133,7 +133,8 @@ it cannot reconstruct every intermediate change. Unknown polling actors cannot
 be treated as known bot actors; self-authored resources are excluded separately.
 Never discard relay state, change
 a bound filter/destination, or pass --retry-failed automatically after an error.
-Explicit recovery belongs to the operator after repair. Neither delivery mode
+Terminal delivery errors remain latched across process restarts. Explicit recovery
+belongs to the operator after repair; retry reset cannot clear an unknown outcome. Neither delivery mode
 promises exactly-once wakeups or processing.
 
 The operator enables read_all and post/reply observations. With no callback

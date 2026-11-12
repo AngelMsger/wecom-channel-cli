@@ -330,3 +330,33 @@ func TestRelayAcceptedPersistenceFailureAndPacing(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRelayTerminalDeliveryFailureSurvivesRestart(t *testing.T) {
+	for _, mode := range []string{relay.ExplicitAck, relay.HTTPAccepted} {
+		st, p, cfg := relayFixture()
+		cfg.DeliveryMode = mode
+		cfg.RetryLimit = 5
+		if mode == relay.HTTPAccepted {
+			st.DeliveryMode = mode
+		}
+		var saved relay.State
+		calls := 0
+		send := func(context.Context, relay.Batch) error {
+			calls++
+			return e.New(e.CategoryServer, "RELAY_REJECTED", "denied").WithHTTPStatus(401)
+		}
+		save := func(s relay.State) error { saved = copyRelayState(t, s); return saved.Validate() }
+		err := pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1, func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil }, send, save, func(string, relay.State, string) {})
+		if e.Safe(err).Code != "RELAY_REJECTED" || saved.Inflight.Failure != "RELAY_REJECTED" {
+			t.Fatal(err, saved)
+		}
+		saved.Inflight.NextAttempt = 0
+		err = pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, saved, time.Second, 1, func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+			t.Fatal("fatal restart contacted broker")
+			return p, nil
+		}, send, save, func(string, relay.State, string) {})
+		if e.Safe(err).Code != "RELAY_REJECTED" || calls != 1 {
+			t.Fatal(err, calls)
+		}
+	}
+}

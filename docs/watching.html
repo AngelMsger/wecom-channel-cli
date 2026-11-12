@@ -338,6 +338,10 @@ them cannot silently redirect, refilter or reinterpret pending work. Restore the
 original configuration to drain it, or reconcile it before deliberately creating
 a separate consumer. Never delete state or reuse <code>--after-sequence</code> as automatic
 gap recovery.</p>
+<p>Terminal delivery failures (including authentication, redirects and invalid ACKs)
+remain latched in <code>terminal_error</code> across restarts. Repair the receiver before
+using <code>--retry-failed</code>; this clears the latch and budget, but cannot clear an
+unknown HTTP acceptance without <code>relay resolve</code>. Existing state remains readable.</p>
 <h3 id="direct-grok-routine-webhook">Direct Grok routine webhook</h3>
 <p>The official <a href="https://cursor.com/help/grok-bot/routines.md">routine documentation</a>
 was reviewed on 2026-11-12; see <a href="research.html#grok-bot-routine-webhook-review--2026-11-12">research notes</a>.

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Persist terminal webhook failures across process restarts in both delivery modes.
+  Repair the receiver and explicitly use `--retry-failed`; an unknown HTTP outcome
+  still requires evidence-based reconciliation before retrying. Update the companion
+  Skill and loaded handshake to 0.1.11.
+
 ## [0.4.0] — 2026-11-12
 
 ### Added

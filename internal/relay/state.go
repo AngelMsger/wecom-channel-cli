@@ -47,6 +47,7 @@ type Delivery struct {
 	LastAttempt int64  `json:"last_attempt_at,omitempty"`
 	HTTPStatus  int    `json:"http_status,omitempty"`
 	Evidence    string `json:"evidence,omitempty"`
+	Failure     string `json:"terminal_error,omitempty"`
 }
 
 type Receipt struct {
