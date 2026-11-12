@@ -1,6 +1,7 @@
 [Unit]
-Description=WeCom channel relay into local inbox (%i)
-After=wecom-channel-broker.service
+Description=WeCom channel observation relay for %i (no model polling)
+Wants=network-online.target
+After=network-online.target wecom-channel-broker.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -8,9 +9,9 @@ StartLimitBurst=5
 Type=simple
 User=wecom-relay
 Group=wecom-channel-agents
-# Provision named client contexts here; each context selects its own agent socket.
-ExecStart=/usr/local/bin/wecom-channel-cli --config-dir /etc/wecom-relay/contexts --use-context %i relay run --whole-channel --state /var/lib/wecom-relay/%i/state.json --duration 24h
-StateDirectory=wecom-relay/%i
+EnvironmentFile=/etc/wecom-relay/secrets.env
+ExecStart=/usr/local/bin/wecom-channel-cli --socket /run/wecom-channel/%i/agent.sock relay run --whole-channel --config /etc/wecom-relay/%i.json --state /var/lib/wecom-relay-%i/state.json --duration 24h
+StateDirectory=wecom-relay-%i
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true
@@ -27,14 +28,15 @@ ProtectKernelLogs=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictNamespaces=true
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=true
 SystemCallArchitectures=native
 LimitCORE=0
 MemoryMax=256M
 TasksMax=64
 TimeoutStopSec=70
-# Renew bounded sessions and restart crashes; structured failures need repair.
+# Renew normal bounded sessions and restart crashes. Structured CLI failures
+# require operator repair; restarting must never reset their retry budget.
 Restart=always
 RestartPreventExitStatus=1 2 3 4 5 6 7 8 9 10 11
 RestartSec=10

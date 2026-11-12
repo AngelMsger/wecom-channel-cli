@@ -185,36 +185,32 @@ accepts a destination or receiver token. A compromised relay identity can read
 channel observations and its token, so restrict its egress independently; file
 permissions do not constrain that identity's tools.
 
-Queue progress commits with events before dispatch; an exact batch acknowledgment
-is required before removal. That ack authenticates neither channel text nor model
-decisions. Receivers must provide durable idempotency before starting jobs, since
-a lost response can replay. For asynchronous jobs they must own a durable queue
-and processing recovery: handoff is not job completion. Fatal errors stop relay
-delivery and retry budgets survive restart. Filters never declare content safe;
-unknown polling actors stay eligible rather than being guessed from creators.
-See the [relay contract](watching.md#relay-events-without-model-polling).
+Durable queue progress commits with events before dispatch. In `explicit_ack`
+mode, an exact batch acknowledgment is required before removal and receivers must
+provide durable idempotency before starting jobs. The opt-in `http_accepted` mode
+follows the reviewed Grok routine contract: HTTP 200 means accepted/started,
+never completed. No remote idempotency guarantee is assumed. Sending is persisted
+before POST; ambiguous outcomes and interrupted sending stop until a trusted
+operator records verified host evidence with `relay resolve`. Even bounded blind
+retries can cause repeated paid AI runs, so they are not used for unknown outcomes.
 
-The default destination is the built-in local SQLite inbox, outside the broker
-and model worker. Each database binds one context/bot/channel/ledger; mixed
-identities and conflicting deduplication payloads fail closed. File and sidecar
-ownership, private modes, symlinks/hard links and all ancestors are checked before
-SQLite opens. Atomic receipt stores metadata and its intact trust envelope, not
-message bodies. A missing or older inbox cannot silently replace acknowledged
-relay progress. Protect persistent volumes and backups as service state; this is
-not an encrypted or tamper-proof database against the service owner or root.
+Worker-owned claim/processing files are distinct from protected sender state.
+Local `relay claim/consume` never read sender configuration, change broker policy,
+launch a job or send content. Locks and persistent event/batch deduplication grant
+work once per retained ledger; no claim expires automatically after worker failure.
+A compromised worker can falsify its own processing report, so these records are
+not privileged attestations. They do not establish exactly-once external effects
+or undo AI usage from an already duplicated wakeup. Sender receipts retain original
+untrusted metadata for reconciliation. Status must not expose worker claim tokens.
 
-Optional `inbox serve` binds only literal loopback addresses and requires a
-protected environment bearer token. It has bounded requests/timeouts and one
-receipt endpoint; no status, claim or host-execution HTTP route exists. Failed
-storage never produces an acknowledgment. Keep the port and token inaccessible
-to untrusted workers; loopback alone is not authentication. Logs contain no
-headers, bodies or token values. Local SQLite delivery needs no receiver token.
-
-Only a trusted host adapter/operator may use inbox claim/resolve. A claim persists
-before host I/O and cannot expire into an automatic retry; uncertain dispatch
-requires reconciliation. Submitted is acceptance, not completion. Resolve records
-explicit evidence but does not verify it remotely. These commands grant no broker
-write authority, never execute channel instructions, and never send a Bot request.
+`--ephemeral` explicitly discards sender delivery/retry/uncertainty state on exit,
+with a quiet baseline on restart. It is not durable delivery and does not disable
+broker persistence. Bounded capacity stops without silent eviction. Changing
+scope or dropping deduplication histories requires explicit reconciliation; never
+reset files to bypass a conflict. Filters do not declare content safe, and unknown
+polling actors cannot be guessed from creators. Independent channel-send approval
+and send idempotency controls remain required. See the
+[relay contract](watching.md#direct-grok-routine-webhook).
 
 ## Review and recovery
 

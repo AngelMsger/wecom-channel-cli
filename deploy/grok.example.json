@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "delivery_mode": "http_accepted",
+  "webhook_url": "https://example.invalid/replace-with-routine-webhook",
+  "token_env": "GROK_ROUTINE_SENDER_KEY",
+  "kinds": ["topic_event", "topic_reply_event"],
+  "changes": [1, 2, 3],
+  "exclude_self": true,
+  "batch_window_seconds": 30,
+  "batch_size": 50,
+  "queue_limit": 1000,
+  "timeout_seconds": 30,
+  "retry_limit": 0,
+  "retry_base_seconds": 5,
+  "min_delivery_interval_seconds": 60
+}

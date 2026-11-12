@@ -152,3 +152,44 @@ or proposal pages. Agent channel discovery is bound to exactly one channel per c
 - No remote idempotency key is documented for sending posts/replies. Local
   at-most-once attempt tracking prevents automatic replay in one retained
   broker ledger; it does not establish remote exactly-once delivery.
+
+
+## Grok Bot routine webhook review — 2026-11-12
+
+Reviewed the official [Cursor routine documentation](https://cursor.com/help/grok-bot/routines.md),
+[xAI skills, routines and automations](https://docs.x.ai/grok-bot/skills-routines-and-automations),
+and [Cursor work/computer guide](https://cursor.com/docs/grok-bot/work.md).
+The routine's Webhook panel supplies its URL and sender key. POST JSON with
+`Authorization: Bearer <sender key>`; the JSON accompanies the routine instructions.
+**HTTP 200 means accepted and a run started, not completed.** The documentation
+says other responses mean no run started. It does not document a custom batch ACK,
+`Idempotency-Key` deduplication, or a completion callback. Do not confuse routine
+webhooks with Grok inference hooks, which are a different API.
+
+The reviewed limits are 200 runs/hour per routine and 300/hour per account;
+other jobs share these allowances. A routine test starts real work and consumes
+usage. An idle routine consumes no usage. These are provider limits, not SLAs;
+verify the current account limits before deployment.
+
+The account's Bots share a cloud computer. `/workspace` is the documented home
+for durable project files, but updates/recovery can rebuild the environment and
+lose recent state. Persistent filesystem access is not a guarantee that a manually
+started background process survives. Use the host's supported supervisor and
+private persistent paths, and back up state outside a replaceable runtime.
+Screens are not credential isolation. Use the host's protected secret facility
+for sender keys; never include them in routine instructions or webhook payloads.
+
+Decision: retain `explicit_ack` for idempotent receivers and add opt-in
+`http_accepted` for this exact host contract. Preserve metadata payloads and
+existing atomic JSON state; no SQLite dependency or ACK-only HTTP receiver is
+needed. A transport error cannot establish non-acceptance, so mark it `unknown`
+and stop. Bounded retries alone cannot prevent repeated paid wakeups. An operator
+must establish the outcome from host run history before retrying an unknown batch.
+Worker claims can suppress duplicate business processing, not prior AI startup.
+
+This review could not retrieve the WeCom pages linked above. The channel
+long-connection statement remains the earlier dated WeCom review, not a newly
+verified availability claim. Existing authenticated callback intake is the push
+backend; configured deployments otherwise use bounded polling and diff. This
+change adds no unverified channel WebSocket protocol. Local mocks validate the
+CLI contract; no production Grok routine was invoked for this review.

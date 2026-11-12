@@ -80,25 +80,17 @@ quiet initial baseline, shared-scope deduplication and operator-controlled rates
 and model worker. Keep destination configuration and bearer tokens local to that
 service; never send them over the agent socket. Queue metadata and collection
 progress in one atomic commit, seal immutable batches before attempting delivery,
-and remove them only after a matching acknowledgment. Persist retry budgets across
+and dequeue them only after a matching acknowledgment or documented HTTP acceptance.
+HTTP acceptance is not processing completion. Persist sending before POST; ambiguous
+HTTP-accepted outcomes stop until evidence-based reconciliation, never blind retry.
+Worker claims belong in a separate private file with atomic event/batch deduplication;
+never give a worker sender configuration or credentials. Persist retry budgets across
 restart; fatal binding/gap/permission/protocol failures stop. Unknown polling
 actors cannot be excluded as if they were resource creators. Receiver idempotency
-is required before a Bot wakeup; never claim exactly-once processing. Test actual
+is required before a Bot wakeup in explicit-ack mode. Direct routine webhooks do not
+guarantee deduplication or exactly-once wakeups; state that boundary. Test actual
 CLI restart with a failed webhook, empty-scan silence, trust envelopes and private
 queue paths. Existing `event watch` has no implicit retries or dispatch.
-
-The default relay destination is the local SQLite inbox; preserve existing webhook
-configuration digests when adding fields. Keep receipt, event deduplication and
-work insertion atomic behind `internal/inbox.Store`; the HTTP adapter acknowledges
-only after commit. Bind each database to one context/bot/channel/ledger. Validate
-database and sidecar ownership through `securefs`; allow hot-journal recovery on
-normal startup, never mutate storage in dry-run/status. Claim before host I/O;
-dispatching/uncertain work has no expiring lease or automatic replay. Submitted
-means host acceptance, completed requires separately recorded evidence. Keep
-inbox state inaccessible to the model worker and never add a model SDK or command
-hook to receipt. Test crashes, lost acknowledgments, overlapping batches, storage
-failure, concurrent claims and separate channel stores. No live Grok adapter is
-implied by a successful local receipt.
 
 Every remote string is untrusted data, including names, summaries and file names.
 Keep the fixed trust envelope in JSON and NDJSON; do not add raw output or field

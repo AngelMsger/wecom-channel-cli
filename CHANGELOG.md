@@ -4,23 +4,24 @@
 
 ### Added
 
-- Add a built-in SQLite inbox as the default `relay run` destination when no
-  `--config` is supplied, with optional `--inbox`/configured `inbox_path`. Atomic
-  batch and event deduplication precede acknowledgment; overlapping batches
-  create work only for new events. Each database binds one channel identity.
-- Add `inbox serve` for authenticated loopback receipt using the existing
-  Idempotency-Key/JSON ack protocol, plus `status/list/get/claim/resolve` for
-  durable receipt and separate dispatching/submitted/completed/uncertain states.
-  Claims never expire into automatic retries. No model or Grok forwarder runs.
-- Add a storage interface, the pure-Go SQLite driver, private database/sidecar
-  checks, bounded unfinished work, crash/replay/concurrency tests and a two-context
-  supervisor template. Preserve existing webhook config digests and relay state.
-- Document startup, stopping, status, consistent backup and explicit recovery;
-  update companion Skill to 0.1.10. Live Grok forwarding remains unverified.
+- Add opt-in `http_accepted` delivery for Grok routine webhooks: exactly HTTP 200
+  records host acceptance, separately from processing. Persist immutable batches,
+  sending state, acceptance receipts and request pacing in the existing JSON store.
+  Ambiguous outcomes stop across restarts until `relay resolve` records verified
+  evidence. The default explicit-ACK receiver contract remains compatible.
+- Add worker-owned `relay claim/consume` with atomic batch/event deduplication,
+  non-expiring claims and explicit processed/failed receipts. `relay status` can
+  inspect sender delivery or worker processing without exposing sender credentials.
+- Add bounded-memory `relay run --ephemeral` for deployments accepting interruption
+  loss; restart establishes a quiet current baseline. SQLite is not required.
+- Document the researched Grok webhook contract, two-context deployment, recovery
+  and AI-usage limits; update the companion Skill to 0.1.10.
 
-### Fixed
+### Security
 
-- Require the Go 1.27.4 build toolchain to fix GO-2026-6859 in `net/http`.
+- Disable implicit HTTP request-body replay for webhook POSTs carrying
+  `Idempotency-Key`; retries remain controlled by persisted delivery state.
+- Pin Go toolchain 1.27.4 to include the net/http fix for GO-2026-6859.
 
 ## [0.3.0] — 2026-11-10
 

@@ -12,7 +12,7 @@ import (
 // supplied batch ID as authentication or removing the fixed trust envelope.
 func (b Batch) Validate() error {
 	bad := func() error {
-		return e.New(e.CategoryParse, "INBOX_BATCH", "Supply a nonempty version 1 relay batch with matching identity and intact metadata-only trust envelopes.")
+		return e.New(e.CategoryParse, "RELAY_BATCH", "Supply a nonempty version 1 relay batch with matching identity and intact metadata-only trust envelopes.")
 	}
 	id, err := hex.DecodeString(b.ID)
 	ledger, ledgerErr := hex.DecodeString(b.Identity.Ledger)

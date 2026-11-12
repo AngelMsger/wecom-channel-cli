@@ -199,11 +199,10 @@ without an active watch. See [watching](watching.md) for coverage and limits.
 
 `relay run` implements a consumer outside the broker and model worker through
 `internal/relay`. It uses existing `event.scan` requests; no broker endpoint,
-authorization policy or remote WeCom write is added. Without destination config,
-the receiver is a local SQLite inbox at `STATE.inbox.sqlite`; `--inbox` overrides
-that path. Optional fixed destination config and receiver credentials stay in
-that service. For webhook destinations, the shared transport performs one
-POST attempt without redirects/proxies; durable retries belong to the consumer
+authorization policy or remote WeCom write is added. Fixed destination config
+and receiver credentials stay in that service. The shared transport performs one
+POST attempt without redirects/proxies; request-body rewind is disabled so
+net/http cannot infer retry permission from `Idempotency-Key`. Durable retries belong to the consumer
 state machine. Existing `event watch` keeps its no-reconnect contract.
 
 The versioned private JSON state commits collected sequence and queued metadata
@@ -222,58 +221,49 @@ accepted events. Unknown polling actors cannot be replaced by resource creators.
 After a bounded window or batch size, events are grouped by post into an immutable
 batch. Its digest binds consumer identity, coverage and exact payload. New events
 never alter an attempted batch. Attempts and retry deadlines persist before HTTP;
-only a committed local receipt or a 2xx with the exact JSON `ack` dequeues it. Retry budgets survive restart
+the default `explicit_ack` mode dequeues only on a 2xx with the exact JSON `ack`. Retry budgets survive restart
 and require explicit reset after repair. Permission, protocol, binding and gap
 errors stop; only known transient failures have opt-in bounded retries.
 
-Delivery is at least once. The receiver must durably deduplicate before launching
-a model job. Acknowledgment means processing completed or responsibility passed
-to the receiver's durable job queue; it does not prove an asynchronous Bot finished.
-The relay has no model client, content preview, history-fetch loop or shell runner.
-Empty/filtered scans make no webhook request. See the
-[receiver contract](watching.md#relay-events-without-model-polling) and Linux
-service reference for finite-session supervision and recovery.
+Explicit-ACK delivery is at least once. Its receiver must durably deduplicate
+before launching a model job. Acknowledgment means processing completed or
+responsibility passed to the receiver's durable queue, not proof that a Bot
+finished. `http_accepted` instead follows the documented Grok routine contract:
+exactly HTTP 200 accepts the batch, regardless of response body. Acceptance
+retains the batch and receipt locally; acknowledged and accepted counters differ.
+Other received HTTP statuses reject it. Only configured transient rejections may
+retry. A transport error or restart with `sending` becomes `unknown` and stops,
+even with remaining retry budget. `relay resolve` requires a stopped sender and
+verified operator evidence; `--retry-failed` cannot clear uncertainty. Saved
+minimum request spacing limits notifications without invoking a model to debounce.
 
-`internal/inbox.Store` is a transaction-level persistence boundary for receipt,
-inspection and host-processing transitions. The shipped implementation uses
-`database/sql` and `modernc.org/sqlite`, matching Calendar's pure-Go driver while
-keeping channel security and lifecycle semantics local. It uses a private 0600
-file, rollback journaling, `synchronous=EXTRA`, foreign keys, a busy timeout and
-immediate write transactions; all operations use one connection per handle.
-Schema/application versions reject unrelated or newer databases. Normal startup
-permits hot-journal recovery; read-only status and dry-run never initialize or
-migrate storage. SQLite needs a persistent local filesystem with correct locks
-and fsync; it is not distributed storage or protection against losing the host.
+Worker processing uses a separate private versioned JSON file and the same atomic
+snapshot writer. `relay claim` locks, validates the complete trust envelope and
+pinned context/bot/channel/ledger, deduplicates batch digests and event IDs, and
+persists a random claim token before returning new work. Concurrent lock contention
+grants no work. `relay consume` reports processed/failed with that exact claim;
+repeated matching reports are idempotent. Claims never expire into auto-replay.
+No worker file needs sender credentials/configuration, and the sender cannot
+infer processing from host acceptance. `relay status` selects either local schema.
+Sender receipt history is capped at 10000 batches; worker records are capped at
+10000 batches/20000 event IDs, with the shared 16 MiB file limit. Capacity stops
+without eviction; manual archival must preserve deduplication over replay windows.
 
-One transaction binds the database to context/bot/channel/ledger, checks an
-immutable batch digest, deduplicates event IDs with payload digests, and inserts
-the receipt and its new-event work. An overlapping batch retains its original
-envelope but only new events enter `work`. Receipt never launches a process.
-The local relay and authenticated loopback `inbox serve` use the same `Accept`
-method; HTTP returns the actual batch ID only after commit. A lost response can
-replay without another work item. Unfinished work is capped at 10,000 events;
-full/damaged storage stops acknowledgment, with no overflow eviction. Receipt
-keys and completed work are retained indefinitely, requiring disk monitoring
-and consistent backups rather than automatic pruning.
-
-`inbox claim` changes received to dispatching atomically and persists a random
-attempt ID before a trusted adapter performs host I/O. Concurrent claims cannot
-both succeed. Claims have no expiring lease. Dispatching/uncertain states survive
-restart and require host reconciliation; only verified non-submission permits
-another claim. `inbox resolve` requires that attempt ID and a non-secret evidence
-reference, records an audit transition, and separates submitted from completed.
-The CLI records the adapter's evidence assertion; it does not independently
-verify a host job. It contains no Grok API client or automatic forwarding.
-External storage can implement the same contract behind the existing webhook;
-there is no runtime-loaded database plugin or arbitrary command adapter.
+`--ephemeral` replaces sender persistence with bounded memory and validation,
+mutually exclusive with `--state`. Each new process establishes a quiet current
+baseline; interruption loss is accepted. Broker persistence is unchanged. The
+existing file store meets this scope without a SQLite dependency, storage daemon,
+or extra HTTP receiver. The relay has no model client, content preview, history
+fetch loop or shell runner. Empty scans make no request. Local claims cannot
+prevent duplicated paid wakeups that already happened at the host. See the
+[host contract and recovery guide](watching.md#direct-grok-routine-webhook).
 
 The sibling applicability table below remains unchanged: Jenkins/OpenObserve
 supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
 and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads
 are intentionally different. None provides acknowledged channel dispatch. This
 single-project change reuses kit errors/output/transport without shared API,
-fx adapter or sibling command changes. The SQLite dependency remains local to
-this project. The pinned kit lacks the newer
+dependency, fx adapter or sibling command changes. The pinned kit lacks the newer
 redirect-guidance helper described by the workspace standard; relay preserves
 this project's curated secret-free refusal without copying that helper locally.
 
@@ -338,9 +328,7 @@ and cross-ledger exactly-once delivery are not claimed.
   (default 60/minute), and each handler admits at most eight concurrent requests.
 - Upstream timeout: 30 seconds; local request context: 60 seconds; CLI default:
   65 seconds. CLI requests can be bounded further, up to a two-minute maximum.
-- Broker event ledger: 5000 events, 48-hour retention. Receiver inbox: 10,000
-  unfinished events, 1 MiB per receipt, no automatic deduplication expiry.
-  Default proposal capacity: 1000,
+- Default inbox: 5000 events, 48-hour retention. Default proposal capacity: 1000,
   retained without automatic pruning. Full storage rejects new work.
 - Default proposals expire in 3600 seconds. Content is 1–20480 UTF-8 bytes;
   outbound control/bidi characters and unsupported inline placeholders are

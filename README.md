@@ -233,20 +233,18 @@ bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See [watching](docs/watching.md) for setup, partial coverage and
 checkpoint delivery limits.
 
-For unattended Bot integration, run the ordinary `relay run` service instead
-of scheduling repeated model turns. It queues metadata durably, filters and
-groups changes by thread, and commits only nonempty batches to a built-in SQLite
-inbox by default. No separate receiver or external database is needed: run
-`relay run --whole-channel --state /private/service/state.json` with the selected
-context, then inspect `inbox status/list/get --db /private/service/state.json.inbox.sqlite`.
-An explicit private config can still select an external webhook. Durable receipt,
-host acceptance and processing completion are separate states; the inbox does
-not automatically wake Grok or claim that a Bot handled the channel. See the
-[relay setup and receiver contract](docs/watching.md#relay-events-without-model-polling)
-and [service example](deploy/wecom-channel-relay.service). `relay status`
-provides local counts and timestamps without a model or network call. The
-[local service template](deploy/wecom-channel-relay@.service) keeps channel
-contexts in separate state directories and databases.
+For unattended Bot integration, run ordinary `relay run` software. It filters and
+batches change metadata, making no request on empty scans. Use durable JSON
+`--state` for recovery or bounded-memory `--ephemeral` if interruption loss is
+acceptable. SQLite is not required. The default receiver contract uses an exact
+batch ACK; opt-in `http_accepted` sends directly to Grok routine webhooks and
+records HTTP 200 as acceptance, separately from processing completion. Uncertain
+outcomes stop for reconciliation. Worker-owned `relay claim/consume` deduplicates
+business work without exposing sender credentials. See the
+[setup, host contract and recovery guide](docs/watching.md#direct-grok-routine-webhook).
+`relay status` inspects local delivery or processing records without network or
+model calls. This implementation has been tested against local mocks; live Grok
+activation requires verification in the actual host environment.
 
 ## Propose, review, send
 

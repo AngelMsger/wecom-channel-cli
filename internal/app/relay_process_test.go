@@ -19,13 +19,18 @@ import (
 
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
 	"github.com/angelmsger/wecom-channel-cli/internal/config"
-	"github.com/angelmsger/wecom-channel-cli/internal/inbox"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 )
 
 func TestCLIProcessRelay(t *testing.T) {
+	for _, mode := range []string{relay.ExplicitAck, relay.HTTPAccepted} {
+		t.Run(mode, func(t *testing.T) { testCLIProcessRelay(t, mode) })
+	}
+}
+
+func testCLIProcessRelay(t *testing.T, mode string) {
 	binary := os.Getenv("WECOM_CHANNEL_TEST_BINARY")
 	if binary == "" {
 		t.Skip("make e2e supplies the executable")
@@ -96,18 +101,32 @@ func TestCLIProcessRelay(t *testing.T) {
 	add("two", "human", "user")
 	var mu sync.Mutex
 	var bodies []string
+	uncertain := false
 	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		bodies = append(bodies, string(data))
 		attempt := len(bodies)
+		loseResponse := uncertain
 		mu.Unlock()
 		var batch relay.Batch
 		if json.Unmarshal(data, &batch) != nil || batch.ID == "" || r.Header.Get("Idempotency-Key") != batch.ID {
 			t.Error("invalid batch request")
 		}
+		if loseResponse {
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			_ = conn.Close()
+			return
+		}
 		if attempt == 1 {
 			w.WriteHeader(503)
+			return
+		}
+		if mode == relay.HTTPAccepted {
+			if r.Header.Get("Authorization") != "Bearer synthetic" {
+				t.Error("missing bearer")
+			}
+			w.WriteHeader(200)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"ack": batch.ID})
@@ -115,6 +134,10 @@ func TestCLIProcessRelay(t *testing.T) {
 	defer receiver.Close()
 	c := relay.DefaultConfig()
 	c.URL, c.BatchSize, c.RetryLimit, c.RetryBaseSeconds = receiver.URL, 2, 1, 1
+	if mode == relay.HTTPAccepted {
+		c.DeliveryMode = mode
+		c.TokenEnv = "TEST_GROK_TOKEN"
+	}
 	configPath, statePath := filepath.Join(dir, "relay.json"), filepath.Join(dir, "relay", "state.json")
 	data, _ := json.Marshal(c)
 	if err = os.WriteFile(configPath, data, 0600); err != nil {
@@ -125,7 +148,7 @@ func TestCLIProcessRelay(t *testing.T) {
 		bounded, stop := context.WithTimeout(context.Background(), 8*time.Second)
 		defer stop()
 		process := exec.CommandContext(bounded, binary, args...)
-		process.Env = append([]string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_NO_SKILL_HINT=1"}, extraEnv...)
+		process.Env = append([]string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_NO_SKILL_HINT=1", "TEST_GROK_TOKEN=synthetic"}, extraEnv...)
 		var out, stderr bytes.Buffer
 		process.Stdout, process.Stderr = &out, &stderr
 		err := process.Run()
@@ -179,7 +202,11 @@ func TestCLIProcessRelay(t *testing.T) {
 		t.Fatal("lost grouping/trust")
 	}
 	out, stderr, code = runRelay(nil, "relay", "status", "--state", statePath)
-	if code != 0 || !strings.Contains(out, `"acknowledged_events": 2`) || !strings.Contains(out, `"queued_events": 0`) {
+	counter := `"acknowledged_events": 2`
+	if mode == relay.HTTPAccepted {
+		counter = `"accepted_events": 2`
+	}
+	if code != 0 || !strings.Contains(out, counter) || !strings.Contains(out, `"queued_events": 0`) {
 		t.Fatal(code, out, stderr)
 	}
 	// A retained self callback is skipped by the broker before reaching the relay.
@@ -199,6 +226,91 @@ func TestCLIProcessRelay(t *testing.T) {
 	if count != 2 {
 		t.Fatal("empty/filtered scan dispatched", count)
 	}
+
+	if mode == relay.HTTPAccepted {
+		// Worker uses its own file, without sender config or credential access.
+		payloadPath := filepath.Join(dir, "batch.json")
+		_ = os.WriteFile(payloadPath, []byte(requests[1]), 0600)
+		workerPath := filepath.Join(dir, "worker.json")
+		claimArgs := []string{"relay", "claim", "--consumer-state", workerPath, "--batch-file", payloadPath}
+		out, stderr, code = runRelay(nil, append(append([]string{}, claimArgs...), "--dry-run")...)
+		if code != 0 {
+			t.Fatal(out, stderr)
+		}
+		if _, err := os.Stat(workerPath + ".lock"); !os.IsNotExist(err) {
+			t.Fatal("dry claim wrote lock")
+		}
+		out, stderr, code = runRelay(nil, claimArgs...)
+		var claimed relay.ClaimResult
+		if code != 0 || json.Unmarshal([]byte(out), &claimed) != nil || !claimed.Claimed || claimed.Token == "" {
+			t.Fatal(out, stderr)
+		}
+		out, stderr, code = runRelay(nil, claimArgs...)
+		if code != 0 || !strings.Contains(out, `"claimed": false`) || strings.Contains(out, "claim_id") {
+			t.Fatal("duplicate granted work", out, stderr)
+		}
+		consumeArgs := []string{"relay", "consume", "--consumer-state", workerPath, "--batch-id", batch.ID, "--claim-id", claimed.Token, "--result", "processed"}
+		for i := 0; i < 2; i++ {
+			out, stderr, code = runRelay(nil, consumeArgs...)
+			if code != 0 {
+				t.Fatal(out, stderr)
+			}
+		}
+		out, stderr, code = runRelay(nil, "relay", "status", "--consumer-state", workerPath, "--batch-id", batch.ID)
+		if code != 0 || !strings.Contains(out, `"status": "processed"`) || strings.Contains(out, claimed.Token) {
+			t.Fatal(out, stderr)
+		}
+		// Restart with memory-only state establishes the current head quietly.
+		memoryArgs := []string{"relay", "run", "--whole-channel", "--config", configPath, "--ephemeral", "--duration", "100ms"}
+		for i := 0; i < 2; i++ {
+			out, stderr, code = runRelay(nil, memoryArgs...)
+			if code != 0 {
+				t.Fatal(out, stderr)
+			}
+		}
+		mu.Lock()
+		count = len(bodies)
+		uncertain = true
+		mu.Unlock()
+		if count != 2 {
+			t.Fatal("memory startup replayed history")
+		}
+		unknownPath := filepath.Join(dir, "relay", "unknown.json")
+		unknownArgs := []string{"relay", "run", "--whole-channel", "--config", configPath, "--state", unknownPath, "--duration", "1s"}
+		out, stderr, code = runRelay(nil, append(append([]string{}, unknownArgs...), "--after-sequence", "0")...)
+		if code == 0 || !strings.Contains(stderr, "RELAY_OUTCOME_UNKNOWN") {
+			t.Fatal(out, stderr)
+		}
+		unknown, _, err := relay.Read(unknownPath)
+		if err != nil || unknown.Inflight == nil || unknown.Inflight.Status != "unknown" {
+			t.Fatal(unknown, err)
+		}
+		for _, retry := range []bool{false, true} {
+			attemptArgs := append([]string{}, unknownArgs...)
+			if retry {
+				attemptArgs = append(attemptArgs, "--retry-failed")
+			}
+			out, stderr, code = runRelay(nil, attemptArgs...)
+			if code == 0 || !strings.Contains(stderr, "RELAY_OUTCOME_UNKNOWN") {
+				t.Fatal(out, stderr)
+			}
+		}
+		mu.Lock()
+		count = len(bodies)
+		mu.Unlock()
+		if count != 3 {
+			t.Fatal("unknown result replayed", count)
+		}
+		id := unknown.Inflight.Batch.ID
+		out, stderr, code = runRelay(nil, "relay", "resolve", "--state", unknownPath, "--batch-id", id, "--outcome", "accepted", "--evidence", "synthetic-host-run")
+		if code != 0 {
+			t.Fatal(out, stderr)
+		}
+		unknown, _, err = relay.Read(unknownPath)
+		if err != nil || unknown.Inflight != nil || unknown.AcceptedBatches != 1 || unknown.AckedBatches != 0 {
+			t.Fatal(unknown, err)
+		}
+	}
 	// Destination/filter changes cannot reuse the queue, even after it drains.
 	c.Changes = []int{2}
 	data, _ = json.Marshal(c)
@@ -207,86 +319,4 @@ func TestCLIProcessRelay(t *testing.T) {
 	if code != 11 || out != "" || !strings.Contains(stderr, "RELAY_BINDING_CHANGED") {
 		t.Fatal(code, out, stderr)
 	}
-	t.Run("default SQLite inbox", func(t *testing.T) {
-		localState := filepath.Join(dir, "relay", "local.json")
-		dbPath := localState + ".inbox.sqlite"
-		localArgs := []string{"relay", "run", "--whole-channel", "--state", localState, "--duration", "200ms"}
-		out, stderr, code := runRelay(nil, append(append([]string{}, localArgs...), "--dry-run")...)
-		if code != 0 || !strings.Contains(out, `"delivery": "sqlite_inbox"`) {
-			t.Fatal(code, out, stderr)
-		}
-		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
-			t.Fatal("dry-run created inbox", err)
-		}
-		// Establish a quiet baseline over the already retained events.
-		out, stderr, code = runRelay(nil, localArgs...)
-		if code != 0 || out != "" {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay(nil, "inbox", "status", "--db", dbPath)
-		if code != 0 || !strings.Contains(out, `"received_events": 0`) {
-			t.Fatal(code, out, stderr)
-		}
-		add("local-new", "human", "user")
-		localArgs[len(localArgs)-1] = "6s"
-		out, stderr, code = runRelay(nil, append(append([]string{}, localArgs...), "--max-batches", "1")...)
-		if code != 0 || out != "" || !strings.Contains(stderr, "acknowledged") {
-			t.Fatal(code, out, stderr)
-		}
-		localArgs[len(localArgs)-1] = "200ms"
-		out, stderr, code = runRelay(nil, localArgs...)
-		if code != 0 || out != "" {
-			t.Fatal(code, out, stderr)
-		}
-		db, err := inbox.Open(dbPath, true)
-		if err != nil {
-			t.Fatal(err)
-		}
-		status, err := db.Status(context.Background())
-		items, _, listErr := db.List(context.Background(), inbox.Received, 0, 100)
-		db.Close()
-		if err != nil || listErr != nil || status.ReceivedEvents != 1 || len(items) != 1 {
-			t.Fatal(status, items, err, listErr)
-		}
-		id := items[0].ID
-		out, stderr, code = runRelay([]string{"WECOM_CHANNEL_CLI_READ_ONLY=true"}, "inbox", "claim", "--db", dbPath, "--id", id)
-		if code == 0 || out != "" || !strings.Contains(stderr, "READONLY_BLOCKED") {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay([]string{"WECOM_CHANNEL_CLI_READ_ONLY=true"}, "inbox", "claim", "--db", dbPath, "--id", id, "--dry-run")
-		if code != 0 || !strings.Contains(out, `"dry_run": true`) {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay(nil, "inbox", "claim", "--db", dbPath, "--id", id)
-		var claimed inbox.Item
-		if code != 0 || json.Unmarshal([]byte(out), &claimed) != nil || claimed.Status != inbox.Dispatching || claimed.Attempt == "" {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay(nil, "inbox", "claim", "--db", dbPath, "--id", id)
-		if code != 11 || out != "" {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay(nil, "inbox", "resolve", "--db", dbPath, "--id", id, "--attempt", claimed.Attempt, "--status", "submitted", "--evidence", "synthetic-job")
-		if code != 0 || !strings.Contains(out, `"status": "submitted"`) {
-			t.Fatal(code, out, stderr)
-		}
-		out, stderr, code = runRelay(nil, "inbox", "status", "--db", dbPath)
-		if code != 0 || !strings.Contains(out, `"completed": 0`) || !strings.Contains(out, `"submitted": 1`) {
-			t.Fatal(code, out, stderr)
-		}
-		// Lost acknowledged storage must stop, not silently create an empty inbox.
-		if err := os.Rename(dbPath, dbPath+".backup"); err != nil {
-			t.Fatal(err)
-		}
-		out, stderr, code = runRelay(nil, localArgs...)
-		if code == 0 || out != "" || !strings.Contains(stderr, "INBOX_STORAGE") {
-			t.Fatal(code, out, stderr)
-		}
-		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
-			t.Fatal("recreated missing acknowledged inbox")
-		}
-		if err := os.Rename(dbPath+".backup", dbPath); err != nil {
-			t.Fatal(err)
-		}
-	})
 }

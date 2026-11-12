@@ -241,3 +241,92 @@ func TestRelayFullQueueValidatesWithoutSkippingUncollectedEvent(t *testing.T) {
 		t.Fatal("full queue skipped event", err, saved)
 	}
 }
+
+func TestRelayAcceptedUnknownAndCrashNeverReplay(t *testing.T) {
+	for _, outcome := range []string{"accepted", "unknown", "crash"} {
+		t.Run(outcome, func(t *testing.T) {
+			st, p, cfg := relayFixture()
+			st.DeliveryMode = relay.HTTPAccepted
+			cfg.DeliveryMode = relay.HTTPAccepted
+			cfg.RetryLimit = 5
+			var saved relay.State
+			calls := 0
+			err := pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1,
+				func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil },
+				func(context.Context, relay.Batch) error {
+					calls++
+					if saved.Inflight.Status != "sending" {
+						t.Fatal("not persisted before POST")
+					}
+					if outcome == "unknown" {
+						return relay.UnknownOutcome()
+					}
+					return nil
+				},
+				func(s relay.State) error {
+					if outcome == "crash" && s.AcceptedBatches > 0 {
+						return errors.New("disk failed after HTTP 200")
+					}
+					saved = copyRelayState(t, s)
+					return nil
+				}, func(string, relay.State, string) {})
+			if calls != 1 {
+				t.Fatal(calls)
+			}
+			if outcome == "accepted" {
+				if err != nil || saved.AcceptedBatches != 1 || saved.AckedBatches != 0 || saved.Inflight != nil {
+					t.Fatal(err, saved)
+				}
+				return
+			}
+			if err == nil || saved.Inflight == nil {
+				t.Fatal(err)
+			}
+			err = pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, saved, time.Second, 1,
+				func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+					t.Fatal("scan before reconciliation")
+					return p, nil
+				},
+				func(context.Context, relay.Batch) error { t.Fatal("replayed possible wakeup"); return nil },
+				func(s relay.State) error { saved = copyRelayState(t, s); return nil }, func(string, relay.State, string) {})
+			if e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || saved.Inflight.Status != "unknown" {
+				t.Fatal(err, saved)
+			}
+		})
+	}
+}
+
+func TestRelayAcceptedPersistenceFailureAndPacing(t *testing.T) {
+	for _, failAt := range []int{1, 2, 3} {
+		st, p, cfg := relayFixture()
+		st.DeliveryMode = relay.HTTPAccepted
+		cfg.DeliveryMode = relay.HTTPAccepted
+		saves := 0
+		err := pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1,
+			func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil },
+			func(context.Context, relay.Batch) error { t.Fatal("sent despite save failure"); return nil },
+			func(relay.State) error {
+				saves++
+				if saves == failAt {
+					return errors.New("disk full")
+				}
+				return nil
+			}, func(string, relay.State, string) {})
+		if err == nil {
+			t.Fatal("ignored save failure")
+		}
+	}
+	st, p, cfg := relayFixture()
+	st.DeliveryMode = relay.HTTPAccepted
+	cfg.DeliveryMode = relay.HTTPAccepted
+	st.NextDelivery = time.Now().Add(time.Hour).UnixMilli()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	err := pumpRelay(ctx, cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1,
+		func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil },
+		func(context.Context, relay.Batch) error { t.Fatal("ignored persisted rate bound"); return nil },
+		func(relay.State) error { return nil }, func(string, relay.State, string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
