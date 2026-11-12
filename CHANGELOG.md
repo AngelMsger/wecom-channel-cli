@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-12
+
 ### Added
 
 - Add opt-in `http_accepted` delivery for Grok routine webhooks: exactly HTTP 200

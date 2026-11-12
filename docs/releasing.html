@@ -149,11 +149,15 @@ changes only WeCom Channel CLI; it does not modify sibling checkouts or the kit.
 <p>The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.</p>
-<h2 id="version-030">Version 0.3.0</h2>
-<p>Version 0.3.0 embeds companion Skill 0.1.9, adds durable relay delivery and
-canonical proposal/policy commands, and excludes self-bot observations across
-callbacks and polling. Existing watch/relay bindings require explicit migration;
-see <a href="release-notes.md">release notes</a> and <a href="watching.html#self-exclusion">self exclusion</a>.
+<h2 id="version-040">Version 0.4.0</h2>
+<p>Version 0.4.0 embeds companion Skill 0.1.10 and adds direct Grok routine webhook
+acceptance, explicit uncertainty reconciliation, worker-owned claims/completion,
+and optional bounded-memory relay delivery. Durable delivery uses the existing
+atomic JSON store; no extra receiver or database is required. Existing 0.3.0
+explicit-ACK configurations and state remain readable with their original settings.
+Changing delivery mode requires deliberately provisioning a separate consumer after
+reconciling old work. See <a href="release-notes.md">release notes</a> and
+<a href="watching.html#direct-grok-routine-webhook">direct Grok setup</a>.
 Its tag uses the family artifact set and npm OIDC workflow described above.</p>
 <h2 id="first-release-evidence">First-release evidence</h2>
 <p>Version <strong>0.1.0</strong>, embedding companion Skill <strong>0.1.4</strong>, was published on 2026-10-27

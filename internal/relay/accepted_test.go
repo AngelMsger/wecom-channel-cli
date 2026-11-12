@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,9 +47,9 @@ func TestHTTPAcceptanceContract(t *testing.T) {
 		}
 	}
 	// A server can start a run and close the connection before returning headers.
-	calls := 0
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls++
+		calls.Add(1)
 		c, _, _ := w.(http.Hijacker).Hijack()
 		_ = c.Close()
 	}))
@@ -60,8 +61,8 @@ func TestHTTPAcceptanceContract(t *testing.T) {
 	t.Setenv(c.TokenEnv, "synthetic")
 	h, _ := NewWebhook(c)
 	err := h.Send(context.Background(), Batch{ID: "batch"})
-	if err == nil || e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || Retryable(err) || calls != 1 {
-		t.Fatal(err, calls)
+	if err == nil || e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || Retryable(err) || calls.Load() != 1 {
+		t.Fatal(err, calls.Load())
 	}
 }
 
@@ -222,11 +223,11 @@ func TestConsumerConflictFailureAndCapacityNeverGrantWork(t *testing.T) {
 }
 
 func TestAcceptedWebhookDoesNotReplayOnReusedConnection(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
-		calls++
-		if calls == 2 {
+		calls.Add(1)
+		if calls.Load() == 2 {
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			_ = conn.Close()
 			return
@@ -248,7 +249,7 @@ func TestAcceptedWebhookDoesNotReplayOnReusedConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = h.Send(context.Background(), Batch{ID: "second"})
-	if err == nil || e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || calls != 2 {
-		t.Fatalf("POST replayed by HTTP transport: calls=%d err=%v", calls, err)
+	if err == nil || e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || calls.Load() != 2 {
+		t.Fatalf("POST replayed by HTTP transport: calls=%d err=%v", calls.Load(), err)
 	}
 }

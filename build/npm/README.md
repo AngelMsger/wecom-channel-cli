@@ -7,7 +7,7 @@ callbacks, native emoji reactions, and exact-intent operator approvals.
 Install or upgrade:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.3.0
+npm install -g @angelmsger/wecom-channel-cli@0.4.0
 wecom-channel-cli auth guide
 wecom-channel-cli skill install
 ```
