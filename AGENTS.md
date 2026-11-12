@@ -85,7 +85,8 @@ HTTP acceptance is not processing completion. Persist sending before POST; ambig
 HTTP-accepted outcomes stop until evidence-based reconciliation, never blind retry.
 Worker claims belong in a separate private file with atomic event/batch deduplication;
 never give a worker sender configuration or credentials. Persist retry budgets across
-restart; fatal binding/gap/permission/protocol failures stop. Unknown polling
+restart; fatal binding/gap/permission/protocol failures stop. Persist terminal delivery
+errors so a supervisor restart cannot silently retry them before explicit repair. Unknown polling
 actors cannot be excluded as if they were resource creators. Receiver idempotency
 is required before a Bot wakeup in explicit-ack mode. Direct routine webhooks do not
 guarantee deduplication or exactly-once wakeups; state that boundary. Test actual
@@ -145,3 +146,6 @@ Run `make lint test e2e build docs-check site-check` and `npm test --prefix buil
 vulnerable dependency and regenerate affected docs/artifacts before claiming readiness. Also test with `GOWORK=off` before
 release or dependency changes. Supported broker platforms are Linux and macOS;
 the Linux service deployment is the production isolation reference.
+
+Do not latch HTTP outcome uncertainty as a terminal delivery error: reconciliation
+of verified non-acceptance resumes the remaining budget without a generic reset.

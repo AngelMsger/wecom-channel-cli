@@ -332,6 +332,11 @@ original configuration to drain it, or reconcile it before deliberately creating
 a separate consumer. Never delete state or reuse `--after-sequence` as automatic
 gap recovery.
 
+Terminal delivery failures (including authentication, redirects and invalid ACKs)
+remain latched in `terminal_error` across restarts. Repair the receiver before
+using `--retry-failed`; this clears the latch and budget, but cannot clear an
+unknown HTTP acceptance without `relay resolve`. Existing state remains readable.
+
 ### Direct Grok routine webhook
 
 The official [routine documentation](https://cursor.com/help/grok-bot/routines.md)

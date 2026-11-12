@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-11-12
+
+- Persist terminal webhook failures across process restarts in both delivery modes.
+  Repair the receiver and explicitly use `--retry-failed`; an unknown HTTP outcome
+  still requires evidence-based reconciliation before retrying. Update the companion
+  Skill and loaded handshake to 0.1.11.
+
 ## [0.4.0] — 2026-11-12
 
 ### Added
@@ -211,6 +218,9 @@ Published from `3a65bf9` through GitHub Actions with npm provenance.
 - Media transfer, content edits/deletes, forwarded chat expansion, Windows and
   channel long connections are not implemented. Deployment must sandbox the agent.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.1.0

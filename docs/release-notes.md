@@ -1,4 +1,13 @@
-# WeCom Channel CLI 0.4.0
+# WeCom Channel CLI 0.4.1
+
+Version 0.4.1 fixes terminal webhook failure recovery. Authentication failures,
+redirects and invalid ACKs now remain stopped across process restarts, even when
+attempts remain. Repair the receiver, then explicitly use `--retry-failed`; an
+unknown HTTP acceptance still requires `relay resolve` with verified host evidence.
+Existing 0.4.0 state remains readable by 0.4.1. Companion Skill 0.1.11 describes
+this recovery boundary.
+
+## Webhook capabilities retained from 0.4.0
 
 Deliver channel changes directly to Grok routine webhooks without periodic AI
 polling or an ACK-only receiver service.
@@ -17,12 +26,12 @@ polling or an ACK-only receiver service.
   `--ephemeral` memory delivery when interruption loss is acceptable. SQLite is
   not required. Idle scans make no webhook/model requests.
 - Provide per-context Grok configuration, request pacing, supervision and recovery
-  guidance. Ship companion Skill 0.1.10 and Go toolchain 1.27.4.
+  guidance. Ship companion Skill 0.1.11 and Go toolchain 1.27.4.
 
 ## Upgrade
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.4.0
+npm install -g @angelmsger/wecom-channel-cli@0.4.1
 wecom-channel-cli version
 wecom-channel-cli skill install
 wecom-channel-cli skill status

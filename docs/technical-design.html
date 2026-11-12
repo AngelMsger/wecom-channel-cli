@@ -413,4 +413,8 @@ are needed.</p>
 <p>Before release, repeat with <code>GOWORK=off</code>, run the race detector and cross-build,
 then complete an explicitly authorized live tenant and isolated-worker check.
 Generated docs come from the same Cobra tree and can be checked without Git.</p>
+<p>Terminal relay delivery failures also persist their error code in the inflight
+record. A process restart cannot retry a permission, redirect or invalid-ACK
+failure merely because attempts remain. Explicit <code>--retry-failed</code> after repair
+clears that latch; uncertain HTTP acceptance still requires evidence first.</p>
 </article></main><footer class="wrap footer doc-footer"><span>wecom channel cli / MIT</span><p>An independent connector. Verify tenant access and worker isolation before deployment.</p><a href="index.html">Back to home ↗</a></footer></body></html>
