@@ -135,12 +135,16 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
-## Version 0.3.0
+## Version 0.4.0
 
-Version 0.3.0 embeds companion Skill 0.1.9, adds durable relay delivery and
-canonical proposal/policy commands, and excludes self-bot observations across
-callbacks and polling. Existing watch/relay bindings require explicit migration;
-see [release notes](release-notes.md) and [self exclusion](watching.md#self-exclusion).
+Version 0.4.0 embeds companion Skill 0.1.10 and adds direct Grok routine webhook
+acceptance, explicit uncertainty reconciliation, worker-owned claims/completion,
+and optional bounded-memory relay delivery. Durable delivery uses the existing
+atomic JSON store; no extra receiver or database is required. Existing 0.3.0
+explicit-ACK configurations and state remain readable with their original settings.
+Changing delivery mode requires deliberately provisioning a separate consumer after
+reconciling old work. See [release notes](release-notes.md) and
+[direct Grok setup](watching.md#direct-grok-routine-webhook).
 Its tag uses the family artifact set and npm OIDC workflow described above.
 
 ## First-release evidence

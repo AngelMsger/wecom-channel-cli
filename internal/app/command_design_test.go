@@ -14,7 +14,7 @@ func TestCanonicalCommandResponsibilities(t *testing.T) {
 	root := NewRootCmd()
 	for group, want := range map[string][]string{
 		"event":    {"context", "get", "list", "watch"},
-		"relay":    {"run", "status"},
+		"relay":    {"claim", "consume", "resolve", "run", "status"},
 		"policy":   {"example", "validate"},
 		"config":   {"delete-context", "get-contexts", "path", "set-context", "use-context"},
 		"proposal": {"approve", "get", "list", "reject", "resolve"},

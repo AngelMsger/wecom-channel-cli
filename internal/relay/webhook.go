@@ -48,6 +48,10 @@ func (h *Webhook) Send(ctx context.Context, batch Batch) error {
 	if err != nil {
 		return configError()
 	}
+	// net/http treats Idempotency-Key as permission to replay a POST on a
+	// reused connection. This host does not promise deduplication. Disable body
+	// rewind so only the persisted relay state machine can authorize a replay.
+	req.GetBody = nil
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", batch.ID)
 	if h.token != "" {
@@ -55,10 +59,18 @@ func (h *Webhook) Send(ctx context.Context, batch Batch) error {
 	}
 	resp, err := h.client.Do(ctx, req)
 	if err != nil {
+		if h.config.Mode() == HTTPAccepted {
+			return UnknownOutcome()
+		}
 		return e.New(e.CategoryNetwork, "RELAY_UNREACHABLE", "The receiver did not return a reliable acknowledgment; the immutable batch remains queued.")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if h.config.Mode() == HTTPAccepted && resp.StatusCode == http.StatusOK {
+		// The documented host contract establishes acceptance from the status
+		// alone. Never wait for or interpret a body as processing completion.
+		return nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || h.config.Mode() == HTTPAccepted {
 		x := e.New(e.CategoryServer, "RELAY_REJECTED", "The receiver rejected the batch; it remains queued.").WithHTTPStatus(resp.StatusCode)
 		x.Retryable = Retryable(x)
 		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
@@ -79,6 +91,10 @@ func (h *Webhook) Send(ctx context.Context, batch Batch) error {
 		return e.New(e.CategoryParse, "RELAY_ACK", "The receiver must return a JSON ack matching the batch ID after successful processing or durable handoff. The batch remains queued.")
 	}
 	return nil
+}
+
+func UnknownOutcome() error {
+	return e.New(e.CategoryConflict, "RELAY_OUTCOME_UNKNOWN", "The host may already have started a run. Automatic replay is stopped; inspect host history and use relay resolve with verified evidence before retrying.")
 }
 
 // Retryable is deliberately narrower than the generic error categories: queue

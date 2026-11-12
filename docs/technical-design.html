@@ -169,7 +169,8 @@ without an active watch. See <a href="watching.html">watching</a> for coverage a
 <code>internal/relay</code>. It uses existing <code>event.scan</code> requests; no broker endpoint,
 authorization policy or remote WeCom write is added. Fixed destination config
 and receiver credentials stay in that service. The shared transport performs one
-POST attempt without redirects/proxies; durable retries belong to the consumer
+POST attempt without redirects/proxies; request-body rewind is disabled so
+net/http cannot infer retry permission from <code>Idempotency-Key</code>. Durable retries belong to the consumer
 state machine. Existing <code>event watch</code> keeps its no-reconnect contract.</p>
 <p>The versioned private JSON state commits collected sequence and queued metadata
 atomically with file/directory fsync and an exclusive writer lock. It binds
@@ -186,16 +187,39 @@ accepted events. Unknown polling actors cannot be replaced by resource creators.
 After a bounded window or batch size, events are grouped by post into an immutable
 batch. Its digest binds consumer identity, coverage and exact payload. New events
 never alter an attempted batch. Attempts and retry deadlines persist before HTTP;
-only a 2xx with the exact JSON <code>ack</code> dequeues it. Retry budgets survive restart
+the default <code>explicit_ack</code> mode dequeues only on a 2xx with the exact JSON <code>ack</code>. Retry budgets survive restart
 and require explicit reset after repair. Permission, protocol, binding and gap
 errors stop; only known transient failures have opt-in bounded retries.</p>
-<p>Delivery is at least once. The receiver must durably deduplicate before launching
-a model job. Acknowledgment means processing completed or responsibility passed
-to the receiver's durable job queue; it does not prove an asynchronous Bot finished.
-The relay has no model client, content preview, history-fetch loop or shell runner.
-Empty/filtered scans make no webhook request. See the
-<a href="watching.html#relay-events-without-model-polling">receiver contract</a> and Linux
-service reference for finite-session supervision and recovery.</p>
+<p>Explicit-ACK delivery is at least once. Its receiver must durably deduplicate
+before launching a model job. Acknowledgment means processing completed or
+responsibility passed to the receiver's durable queue, not proof that a Bot
+finished. <code>http_accepted</code> instead follows the documented Grok routine contract:
+exactly HTTP 200 accepts the batch, regardless of response body. Acceptance
+retains the batch and receipt locally; acknowledged and accepted counters differ.
+Other received HTTP statuses reject it. Only configured transient rejections may
+retry. A transport error or restart with <code>sending</code> becomes <code>unknown</code> and stops,
+even with remaining retry budget. <code>relay resolve</code> requires a stopped sender and
+verified operator evidence; <code>--retry-failed</code> cannot clear uncertainty. Saved
+minimum request spacing limits notifications without invoking a model to debounce.</p>
+<p>Worker processing uses a separate private versioned JSON file and the same atomic
+snapshot writer. <code>relay claim</code> locks, validates the complete trust envelope and
+pinned context/bot/channel/ledger, deduplicates batch digests and event IDs, and
+persists a random claim token before returning new work. Concurrent lock contention
+grants no work. <code>relay consume</code> reports processed/failed with that exact claim;
+repeated matching reports are idempotent. Claims never expire into auto-replay.
+No worker file needs sender credentials/configuration, and the sender cannot
+infer processing from host acceptance. <code>relay status</code> selects either local schema.
+Sender receipt history is capped at 10000 batches; worker records are capped at
+10000 batches/20000 event IDs, with the shared 16 MiB file limit. Capacity stops
+without eviction; manual archival must preserve deduplication over replay windows.</p>
+<p><code>--ephemeral</code> replaces sender persistence with bounded memory and validation,
+mutually exclusive with <code>--state</code>. Each new process establishes a quiet current
+baseline; interruption loss is accepted. Broker persistence is unchanged. The
+existing file store meets this scope without a SQLite dependency, storage daemon,
+or extra HTTP receiver. The relay has no model client, content preview, history
+fetch loop or shell runner. Empty scans make no request. Local claims cannot
+prevent duplicated paid wakeups that already happened at the host. See the
+<a href="watching.html#direct-grok-routine-webhook">host contract and recovery guide</a>.</p>
 <p>The sibling applicability table below remains unchanged: Jenkins/OpenObserve
 supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
 and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads

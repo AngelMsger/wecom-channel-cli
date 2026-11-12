@@ -23,7 +23,7 @@ Available Commands:
   post        Inspect post data through broker policy
   proposal    Inspect immutable proposals; operator-only actions approve, reject or reconcile them
   reaction    Inspect or propose native emoji reactions on posts and replies
-  relay       Run and inspect durable event delivery to a configured host adapter
+  relay       Deliver changes and track local delivery and processing state
   reply       Inspect reply data through broker policy
   search      Inspect search data through broker policy
   skill       Inspect or install the embedded companion Skill
@@ -902,7 +902,7 @@ Global Flags:
 
 ## wecom-channel-cli relay
 
-Run and inspect durable event delivery to a configured host adapter
+Deliver changes and track local delivery and processing state
 
 ```text
 Usage:
@@ -910,7 +910,10 @@ Usage:
   wecom-channel-cli relay [command]
 
 Available Commands:
-  run         Run a bounded collector and deliver acknowledged batches without a model
+  claim       Atomically claim a webhook batch in worker-owned state before processing
+  consume     Record a claimed batch as processed or failed; never send channel replies
+  resolve     Reconcile an unknown HTTP acceptance using verified host evidence
+  run         Collect changes and deliver nonempty batches without a model
   status      Read local delivery counts and timestamps; this does not probe process liveness
 
 Global Flags:
@@ -924,9 +927,79 @@ Global Flags:
 Use "wecom-channel-cli relay [command] --help" for more information about a command.
 ```
 
+## wecom-channel-cli relay claim
+
+Atomically claim a webhook batch in worker-owned state before processing
+
+```text
+Usage:
+  wecom-channel-cli relay claim [flags]
+
+Flags:
+      --batch-file string       Original relay batch JSON; - reads stdin (required)
+      --consumer-state string   Private worker-owned claim file, one per context (required)
+      --dry-run                 Validate input and inspect state without claiming, locks or writes
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli relay consume
+
+Record a claimed batch as processed or failed; never send channel replies
+
+```text
+Usage:
+  wecom-channel-cli relay consume [flags]
+
+Flags:
+      --batch-id string         Batch ID returned by relay claim (required)
+      --claim-id string         Claim token returned only to the successful claimant (required)
+      --consumer-state string   Private worker-owned claim file (required)
+      --dry-run                 Validate completion without locks or writes
+      --result string           processed or failed (required); neither permits automatic replay
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli relay resolve
+
+Reconcile an unknown HTTP acceptance using verified host evidence
+
+```text
+Usage:
+  wecom-channel-cli relay resolve [flags]
+
+Flags:
+      --batch-id string   Exact unknown batch ID (required)
+      --dry-run           Validate resolution without locks or writes
+      --evidence string   Non-secret host run or operator reconciliation reference (required)
+      --outcome string    accepted or not_accepted, verified from host history (required)
+      --state string      Private sender-owned relay state (required)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
 ## wecom-channel-cli relay run
 
-Run a bounded collector and deliver acknowledged batches without a model
+Collect changes and deliver nonempty batches without a model
 
 ```text
 Usage:
@@ -941,12 +1014,13 @@ Flags:
       --allow-partial        Explicitly accept allowlisted-human callback coverage
       --config string        Private operator-provisioned JSON with fixed destination, filters and retry bounds
       --dry-run              Inspect binding and coverage without credentials, remote reads, locks or state writes
-      --duration duration    Maximum session duration, up to 24h; queued work survives exit (default 5m0s)
+      --duration duration    Maximum session duration, up to 24h; only --state preserves queued work on exit (default 5m0s)
+      --ephemeral            Keep delivery state only in bounded memory; interruption loses pending work, restart starts quietly now
       --interval duration    Minimum scan interval, 1s–1m; operator polling rates still apply (default 2s)
-      --max-batches int      Stop after this many acknowledged batches in this session (default 1000)
+      --max-batches int      Stop after this many acknowledged or HTTP-accepted batches in this session (default 1000)
       --post stringArray     Observe this post and its replies; repeat for up to 32 IDs
       --retry-failed         Explicitly reset persisted retry budgets after repairing a failed receiver or scan
-      --state string         Durable queue in an existing private service-owned directory (required)
+      --state string         Durable JSON queue in an existing private service-owned directory; mutually exclusive with --ephemeral
       --whole-channel        Observe the selected channel
 
 Global Flags:
@@ -967,7 +1041,9 @@ Usage:
   wecom-channel-cli relay status [flags]
 
 Flags:
-      --state string   Private relay state file (required)
+      --batch-id string         Inspect a specific retained delivery or worker claim
+      --consumer-state string   Private worker-owned processing state; mutually exclusive with --state
+      --state string            Private sender-owned relay state
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval

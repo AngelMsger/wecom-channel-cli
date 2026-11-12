@@ -6,12 +6,12 @@
 <p>An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.</p>
-<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.3.0">0.3.0 is published</a>, tested offline against synthetic services and
+<p><strong>Status: <a href="https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.4.0">0.4.0 is published</a>, tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.</strong> Linux and macOS are supported.
-Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.3.0">GitHub release</a>.</p>
+Download native binaries from the <a href="https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.4.0">GitHub release</a>.</p>
 <p>The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
@@ -20,7 +20,7 @@ and operator have separate OS identities and the agent's tools are sandboxed.
 Read the <a href="security.html">security and deployment guide</a> before connecting a bot.</p>
 <h2 id="install">Install</h2>
 <p>With Node.js 20 or newer, run this in a trusted operator setup session:</p>
-<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.3.0
+<pre><code class="language-sh">npm install -g @angelmsger/wecom-channel-cli@0.4.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 </code></pre>
@@ -212,14 +212,18 @@ from authorized humans. Watches stop on explicit limits. Resume files
 bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See <a href="watching.html">watching</a> for setup, partial coverage and
 checkpoint delivery limits.</p>
-<p>For unattended Bot integration, run the ordinary <code>relay run</code> service instead
-of scheduling repeated model turns. It queues metadata durably, filters and
-groups changes by thread, and dispatches only nonempty batches to a configured
-receiver. A matching acknowledgment removes the batch; retries retain its
-idempotency key. The receiver must deduplicate before waking a Bot. See the
-<a href="watching.html#relay-events-without-model-polling">relay setup and receiver contract</a>
-and <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-relay.service">service example</a>. <code>relay status</code>
-provides local counts and timestamps without a model or network call.</p>
+<p>For unattended Bot integration, run ordinary <code>relay run</code> software. It filters and
+batches change metadata, making no request on empty scans. Use durable JSON
+<code>--state</code> for recovery or bounded-memory <code>--ephemeral</code> if interruption loss is
+acceptable. SQLite is not required. The default receiver contract uses an exact
+batch ACK; opt-in <code>http_accepted</code> sends directly to Grok routine webhooks and
+records HTTP 200 as acceptance, separately from processing completion. Uncertain
+outcomes stop for reconciliation. Worker-owned <code>relay claim/consume</code> deduplicates
+business work without exposing sender credentials. See the
+<a href="watching.html#direct-grok-routine-webhook">setup, host contract and recovery guide</a>.
+<code>relay status</code> inspects local delivery or processing records without network or
+model calls. This implementation has been tested against local mocks; live Grok
+activation requires verification in the actual host environment.</p>
 <h2 id="propose-review-send">Propose, review, send</h2>
 <p>A proposal has no remote effect. Use a stable idempotency key and reuse it if a
 local response is lost. The broker binds that key to the immutable proposal;

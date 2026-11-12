@@ -30,6 +30,18 @@ type Config struct {
 	TimeoutSeconds     int      `json:"timeout_seconds"`
 	RetryLimit         int      `json:"retry_limit"`
 	RetryBaseSeconds   int      `json:"retry_base_seconds"`
+	DeliveryMode       string   `json:"delivery_mode,omitempty"`
+	MinDeliverySeconds int      `json:"min_delivery_interval_seconds,omitempty"`
+}
+
+const ExplicitAck = "explicit_ack"
+const HTTPAccepted = "http_accepted"
+
+func (c Config) Mode() string {
+	if c.DeliveryMode == "" {
+		return ExplicitAck
+	}
+	return c.DeliveryMode
 }
 
 func DefaultConfig() Config {
@@ -54,6 +66,9 @@ func configError() error {
 }
 
 func (c Config) Validate() error {
+	if (c.Mode() != ExplicitAck && c.Mode() != HTTPAccepted) || c.MinDeliverySeconds < 0 || c.MinDeliverySeconds > 3600 || (c.Mode() == HTTPAccepted && c.TokenEnv == "") {
+		return configError()
+	}
 	u, err := url.Parse(c.URL)
 	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || len(c.URL) > 2048 {
 		return configError()

@@ -80,10 +80,15 @@ quiet initial baseline, shared-scope deduplication and operator-controlled rates
 and model worker. Keep destination configuration and bearer tokens local to that
 service; never send them over the agent socket. Queue metadata and collection
 progress in one atomic commit, seal immutable batches before attempting delivery,
-and remove them only after a matching acknowledgment. Persist retry budgets across
+and dequeue them only after a matching acknowledgment or documented HTTP acceptance.
+HTTP acceptance is not processing completion. Persist sending before POST; ambiguous
+HTTP-accepted outcomes stop until evidence-based reconciliation, never blind retry.
+Worker claims belong in a separate private file with atomic event/batch deduplication;
+never give a worker sender configuration or credentials. Persist retry budgets across
 restart; fatal binding/gap/permission/protocol failures stop. Unknown polling
 actors cannot be excluded as if they were resource creators. Receiver idempotency
-is required before a Bot wakeup; never claim exactly-once processing. Test actual
+is required before a Bot wakeup in explicit-ack mode. Direct routine webhooks do not
+guarantee deduplication or exactly-once wakeups; state that boundary. Test actual
 CLI restart with a failed webhook, empty-scan silence, trust envelopes and private
 queue paths. Existing `event watch` has no implicit retries or dispatch.
 

@@ -8,12 +8,12 @@ An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.
 
-**Status: [0.3.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.3.0), tested offline against synthetic services and
+**Status: [0.4.0 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.4.0), tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
-Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.3.0).
+Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.4.0).
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
@@ -27,7 +27,7 @@ Read the [security and deployment guide](docs/security.md) before connecting a b
 With Node.js 20 or newer, run this in a trusted operator setup session:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.3.0
+npm install -g @angelmsger/wecom-channel-cli@0.4.0
 wecom-channel-cli version
 wecom-channel-cli auth guide
 ```
@@ -233,14 +233,18 @@ bind the context, policy, ledger and thread filters; they never skip a detected
 history gap. See [watching](docs/watching.md) for setup, partial coverage and
 checkpoint delivery limits.
 
-For unattended Bot integration, run the ordinary `relay run` service instead
-of scheduling repeated model turns. It queues metadata durably, filters and
-groups changes by thread, and dispatches only nonempty batches to a configured
-receiver. A matching acknowledgment removes the batch; retries retain its
-idempotency key. The receiver must deduplicate before waking a Bot. See the
-[relay setup and receiver contract](docs/watching.md#relay-events-without-model-polling)
-and [service example](deploy/wecom-channel-relay.service). `relay status`
-provides local counts and timestamps without a model or network call.
+For unattended Bot integration, run ordinary `relay run` software. It filters and
+batches change metadata, making no request on empty scans. Use durable JSON
+`--state` for recovery or bounded-memory `--ephemeral` if interruption loss is
+acceptable. SQLite is not required. The default receiver contract uses an exact
+batch ACK; opt-in `http_accepted` sends directly to Grok routine webhooks and
+records HTTP 200 as acceptance, separately from processing completion. Uncertain
+outcomes stop for reconciliation. Worker-owned `relay claim/consume` deduplicates
+business work without exposing sender credentials. See the
+[setup, host contract and recovery guide](docs/watching.md#direct-grok-routine-webhook).
+`relay status` inspects local delivery or processing records without network or
+model calls. This implementation has been tested against local mocks; live Grok
+activation requires verification in the actual host environment.
 
 ## Propose, review, send
 

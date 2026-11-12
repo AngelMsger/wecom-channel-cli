@@ -16,7 +16,7 @@ wecom-channel-cli
   reaction  types | list | propose
   search    start | get
   event     list | get | context | watch
-  relay     run | status
+  relay     run | status | claim | consume | resolve
   proposal  list | get | approve | reject | resolve
   policy    example | validate
   broker    serve
@@ -45,8 +45,11 @@ This inventory omits Cobra's built-in help/completion. The
 | `event list/get` | Read retained observation/mention metadata once | Broker ledger; these commands do not listen |
 | `event context` | Read the post and exact reply authorized by a fresh human mention | Mention-specific permission, unlike general content browsing |
 | `event watch` | Stream bounded observations to NDJSON | Consumer checkpoint records successful output, not processing |
-| `relay run` | Collect, queue, filter, batch and deliver to one configured host adapter | Separate trusted service; durable queue and explicit acknowledgment |
-| `relay status` | Read local queue counts/timestamps | No network; not a process-liveness probe or Bot-completion claim |
+| `relay run` | Collect, queue, filter, batch and deliver to one configured host adapter | Separate trusted service; optional durable queue, explicit ACK or documented HTTP acceptance |
+| `relay status` | Inspect sender delivery or worker claims | Read-only local files, no network or liveness probe |
+| `relay claim` | Atomically claim new batch/event IDs before work | Worker-owned state; no sender credentials; no automatic reclaim |
+| `relay consume` | Report processed/failed for a matching claim | Idempotent worker report; does not send channel content |
+| `relay resolve` | Record verified host outcome for an uncertain batch | Trusted sender operator; never guess from a timeout |
 | `policy example/validate` | Generate or validate broker authorization policy offline | Operator-owned configuration; neither command installs it |
 | `broker serve` | Run the credential-holding service from that policy | Isolated broker identity |
 | `config ...` | Manage local connection coordinates and selected context | Client configuration; never changes broker permissions |
@@ -58,7 +61,7 @@ This inventory omits Cobra's built-in help/completion. The
 ## Choosing an observation primitive
 
 Use `event list/get` for a one-time inspection of retained events, `event watch`
-for a bounded foreground stream, and `relay run` for unattended acknowledged
+for a bounded foreground stream, and `relay run` for unattended change
 delivery. A relay is a stateful service with its own queue and lifecycle, so its
 status belongs under `relay`, not under `event`. There is one broker scan path
 behind watch and relay; neither adds a second upstream observation engine.

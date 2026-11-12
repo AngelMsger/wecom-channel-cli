@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-12
+
+### Added
+
+- Add opt-in `http_accepted` delivery for Grok routine webhooks: exactly HTTP 200
+  records host acceptance, separately from processing. Persist immutable batches,
+  sending state, acceptance receipts and request pacing in the existing JSON store.
+  Ambiguous outcomes stop across restarts until `relay resolve` records verified
+  evidence. The default explicit-ACK receiver contract remains compatible.
+- Add worker-owned `relay claim/consume` with atomic batch/event deduplication,
+  non-expiring claims and explicit processed/failed receipts. `relay status` can
+  inspect sender delivery or worker processing without exposing sender credentials.
+- Add bounded-memory `relay run --ephemeral` for deployments accepting interruption
+  loss; restart establishes a quiet current baseline. SQLite is not required.
+- Document the researched Grok webhook contract, two-context deployment, recovery
+  and AI-usage limits; update the companion Skill to 0.1.10.
+
+### Security
+
+- Disable implicit HTTP request-body replay for webhook POSTs carrying
+  `Idempotency-Key`; retries remain controlled by persisted delivery state.
+- Pin Go toolchain 1.27.4 to include the net/http fix for GO-2026-6859.
+
 ## [0.3.0] — 2026-11-10
 
 ### Added
