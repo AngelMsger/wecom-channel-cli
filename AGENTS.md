@@ -146,3 +146,6 @@ Run `make lint test e2e build docs-check site-check` and `npm test --prefix buil
 vulnerable dependency and regenerate affected docs/artifacts before claiming readiness. Also test with `GOWORK=off` before
 release or dependency changes. Supported broker platforms are Linux and macOS;
 the Linux service deployment is the production isolation reference.
+
+Do not latch HTTP outcome uncertainty as a terminal delivery error: reconciliation
+of verified non-acceptance resumes the remaining budget without a generic reset.

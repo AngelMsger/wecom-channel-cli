@@ -1,9 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -358,5 +362,66 @@ func TestRelayTerminalDeliveryFailureSurvivesRestart(t *testing.T) {
 		if e.Safe(err).Code != "RELAY_REJECTED" || calls != 1 {
 			t.Fatal(err, calls)
 		}
+	}
+}
+
+func TestRelayVerifiedRejectionResumesWithoutBudgetReset(t *testing.T) {
+	st, p, cfg := relayFixture()
+	st.DeliveryMode, cfg.DeliveryMode = relay.HTTPAccepted, relay.HTTPAccepted
+	cfg.RetryLimit, cfg.RetryBaseSeconds = 2, 1
+	var saved relay.State
+	var original []byte
+	save := func(s relay.State) error { saved = copyRelayState(t, s); return saved.Validate() }
+	err := pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1,
+		func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil },
+		func(_ context.Context, b relay.Batch) error {
+			original, _ = json.Marshal(b)
+			return relay.UnknownOutcome()
+		},
+		save, func(string, relay.State, string) {})
+	if e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" || saved.Inflight.Failure != "" {
+		t.Fatal("unknown outcome incorrectly latched as terminal failure", err, saved)
+	}
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "state.json")
+	store, err := relay.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.Save(saved); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	var out, diag bytes.Buffer
+	args := []string{"relay", "resolve", "--state", path, "--batch-id", saved.Inflight.Batch.ID, "--outcome", "not_accepted", "--evidence", "verified-host-rejection", "--allow-writes"}
+	if code := Execute(args, strings.NewReader(""), &out, &diag); code != 0 {
+		t.Fatal(code, diag.String())
+	}
+	saved, _, err = relay.Read(path)
+	if err != nil || saved.Inflight.Status != "rejected" || saved.Inflight.Attempts != 1 {
+		t.Fatal(err, saved)
+	}
+	p.Items = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	calls := 0
+	err = pumpRelay(ctx, cfg, broker.ScanRequest{WholeChannel: true}, saved, time.Second, 1,
+		func(context.Context, broker.ScanRequest) (broker.ScanPage, error) { return p, nil },
+		func(_ context.Context, b relay.Batch) error {
+			calls++
+			repeated, _ := json.Marshal(b)
+			if !bytes.Equal(original, repeated) {
+				t.Fatal("reconciled retry changed payload")
+			}
+			return nil
+		}, save, func(string, relay.State, string) {})
+	if err != nil || calls != 1 || saved.AcceptedBatches != 1 || saved.Inflight != nil {
+		t.Fatal(err, calls, saved)
 	}
 }

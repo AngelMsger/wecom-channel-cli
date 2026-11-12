@@ -297,7 +297,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					}
 					continue
 				}
-				if !relay.Retryable(err) {
+				if !relay.Retryable(err) && e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" {
 					st.Inflight.Failure = e.Safe(err).Code
 				}
 				if cfg.Mode() == relay.HTTPAccepted {

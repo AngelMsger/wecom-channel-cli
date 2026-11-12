@@ -135,6 +135,13 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
+## Version 0.4.1
+
+Version 0.4.1 embeds companion Skill 0.1.11 and persists terminal delivery errors
+across restart in both modes. Existing 0.4.0 state remains readable; repair and
+explicitly reset a terminal failure before resuming. Unknown HTTP acceptance still
+requires evidence-based reconciliation. See [release notes](release-notes.md).
+
 ## Version 0.4.0
 
 Version 0.4.0 embeds companion Skill 0.1.10 and adds direct Grok routine webhook
