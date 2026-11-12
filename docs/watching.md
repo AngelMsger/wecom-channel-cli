@@ -179,8 +179,8 @@ model calls. There is no model SDK or shell-command adapter in the relay.
 
 The existing `event watch` contract is unchanged. Relay configuration and state
 belong to a separate trusted service account, **not the model worker**. The relay
-needs only its channel's agent socket and a receiver credential; never give it
-the WeCom Secret, broker state, or operator socket. No destination or credential
+needs its channel's agent socket and, only for authenticated webhook delivery,
+a receiver credential. Never give it the WeCom Secret, broker state, or operator socket. No destination or credential
 is sent through the broker API.
 
 ### Local receipt for two channels
