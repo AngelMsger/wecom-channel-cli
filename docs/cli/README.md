@@ -18,12 +18,13 @@ Available Commands:
   config      Manage local client contexts; authorization belongs to operator policy
   doctor      Check broker readiness and policy; use auth check to verify upstream credentials
   event       Read or watch channel observations and authenticated callback events
+  inbox       Inspect durable receipt and explicitly track host processing; never invokes a Bot
   member      Inspect member data through broker policy
   policy      Generate or validate the broker's operator-owned authorization policy offline
   post        Inspect post data through broker policy
   proposal    Inspect immutable proposals; operator-only actions approve, reject or reconcile them
   reaction    Inspect or propose native emoji reactions on posts and replies
-  relay       Run and inspect durable event delivery to a configured host adapter
+  relay       Run and inspect durable delivery to a local inbox or configured receiver
   reply       Inspect reply data through broker policy
   search      Inspect search data through broker policy
   skill       Inspect or install the embedded companion Skill
@@ -450,6 +451,168 @@ Flags:
       --max-events int       Stop after this many matching emitted events (default 1000)
       --post stringArray     Watch this post and its replies; repeat for up to 32 post IDs
       --whole-channel        Watch post/reply changes throughout this channel context
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox
+
+Inspect durable receipt and explicitly track host processing; never invokes a Bot
+
+```text
+Usage:
+  wecom-channel-cli inbox [flags]
+  wecom-channel-cli inbox [command]
+
+Available Commands:
+  claim       Persist a dispatch attempt before a trusted adapter contacts its host
+  get         Read a batch, its deduplicated work and host-processing evidence
+  list        List received batches and processing states with bounded pagination
+  resolve     Record a verified host outcome; uncertain attempts are never retried automatically
+  serve       Serve the relay acknowledgment protocol on loopback with a durable SQLite inbox
+  status      Read receipt counts and distinct host-processing states
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+
+Use "wecom-channel-cli inbox [command] --help" for more information about a command.
+```
+
+## wecom-channel-cli inbox claim
+
+Persist a dispatch attempt before a trusted adapter contacts its host
+
+```text
+Usage:
+  wecom-channel-cli inbox claim [flags]
+
+Flags:
+      --db string   Private SQLite inbox (default relay destination is STATE.inbox.sqlite)
+      --dry-run     Preview the transition without writing or contacting a host
+      --id string   Batch ID from inbox list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox get
+
+Read a batch, its deduplicated work and host-processing evidence
+
+```text
+Usage:
+  wecom-channel-cli inbox get [flags]
+
+Flags:
+      --db string   Private SQLite inbox (default relay destination is STATE.inbox.sqlite)
+      --id string   Batch ID from inbox list
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox list
+
+List received batches and processing states with bounded pagination
+
+```text
+Usage:
+  wecom-channel-cli inbox list [flags]
+
+Flags:
+      --cursor string   Continuation from the same inbox list query
+      --db string       Private SQLite inbox (default relay destination is STATE.inbox.sqlite)
+      --limit int       Maximum batches, 1–100 (default 50)
+      --status string   Filter received, dispatching, submitted, completed, uncertain or duplicate
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox resolve
+
+Record a verified host outcome; uncertain attempts are never retried automatically
+
+```text
+Usage:
+  wecom-channel-cli inbox resolve [flags]
+
+Flags:
+      --attempt string    Exact attempt_id from claim/get; prevents stale adapters changing newer attempts
+      --db string         Private SQLite inbox (default relay destination is STATE.inbox.sqlite)
+      --dry-run           Preview the transition without writing or contacting a host
+      --evidence string   Non-secret host receipt or reconciliation reference; never a token or URL
+      --id string         Batch ID from inbox list
+      --status string     Verified submitted/completed, uncertain, or verified not_submitted to permit a new claim
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox serve
+
+Serve the relay acknowledgment protocol on loopback with a durable SQLite inbox
+
+```text
+Usage:
+  wecom-channel-cli inbox serve [flags]
+
+Flags:
+      --db string          SQLite file in an existing private service-owned directory
+      --dry-run            Validate paths and listener configuration without token access, writes or binding
+      --listen string      Literal loopback address; POST /batches accepts relay deliveries (default "127.0.0.1:8789")
+      --token-env string   Protected environment variable holding the required receiver bearer token (default "WECOM_CHANNEL_INBOX_TOKEN")
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli inbox status
+
+Read receipt counts and distinct host-processing states
+
+```text
+Usage:
+  wecom-channel-cli inbox status [flags]
+
+Flags:
+      --db string   Private SQLite inbox (default relay destination is STATE.inbox.sqlite)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -902,7 +1065,7 @@ Global Flags:
 
 ## wecom-channel-cli relay
 
-Run and inspect durable event delivery to a configured host adapter
+Run and inspect durable delivery to a local inbox or configured receiver
 
 ```text
 Usage:
@@ -933,15 +1096,17 @@ Usage:
   wecom-channel-cli relay run [flags]
 
 Examples:
-  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h
-  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json
+  wecom-channel-cli --use-context daily-ai relay run --whole-channel --state /var/lib/wecom-relay/daily-ai/state.json --duration 24h
+  wecom-channel-cli inbox status --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite
+  wecom-channel-cli relay status --state /var/lib/wecom-relay/daily-ai/state.json
 
 Flags:
       --after-sequence int   Replay after this sequence only when creating new relay state
       --allow-partial        Explicitly accept allowlisted-human callback coverage
-      --config string        Private operator-provisioned JSON with fixed destination, filters and retry bounds
+      --config string        Optional private JSON with one destination, filters and retry bounds; existing webhooks remain supported
       --dry-run              Inspect binding and coverage without credentials, remote reads, locks or state writes
       --duration duration    Maximum session duration, up to 24h; queued work survives exit (default 5m0s)
+      --inbox string         SQLite inbox path without --config (default: STATE.inbox.sqlite)
       --interval duration    Minimum scan interval, 1s–1m; operator polling rates still apply (default 2s)
       --max-batches int      Stop after this many acknowledged batches in this session (default 1000)
       --post stringArray     Observe this post and its replies; repeat for up to 32 IDs

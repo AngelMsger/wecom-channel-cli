@@ -63,6 +63,13 @@ delivery. A relay is a stateful service with its own queue and lifecycle, so its
 status belongs under `relay`, not under `event`. There is one broker scan path
 behind watch and relay; neither adds a second upstream observation engine.
 
+`inbox` owns downstream receipt and host-processing state. `serve` adapts the
+receipt contract to existing HTTP relays; default local delivery calls the same
+store directly. `status/list/get` inspect it, `claim` reserves work before host
+I/O, and `resolve` records the reconciled outcome. No command invokes a Bot.
+The relay's collected/acknowledged cursor is not a replacement for these states,
+and no inbox operation changes broker permissions or channel content.
+
 `event context` deliberately stays separate from `post/reply get`: it expresses
 the narrower permission granted by a fresh authenticated human mention. It is
 not an alternative to `config` contexts and does not fetch arbitrary history.

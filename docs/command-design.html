@@ -151,6 +151,12 @@ for a bounded foreground stream, and <code>relay run</code> for unattended ackno
 delivery. A relay is a stateful service with its own queue and lifecycle, so its
 status belongs under <code>relay</code>, not under <code>event</code>. There is one broker scan path
 behind watch and relay; neither adds a second upstream observation engine.</p>
+<p><code>inbox</code> owns downstream receipt and host-processing state. <code>serve</code> adapts the
+receipt contract to existing HTTP relays; default local delivery calls the same
+store directly. <code>status/list/get</code> inspect it, <code>claim</code> reserves work before host
+I/O, and <code>resolve</code> records the reconciled outcome. No command invokes a Bot.
+The relay's collected/acknowledged cursor is not a replacement for these states,
+and no inbox operation changes broker permissions or channel content.</p>
 <p><code>event context</code> deliberately stays separate from <code>post/reply get</code>: it expresses
 the narrower permission granted by a fresh authenticated human mention. It is
 not an alternative to <code>config</code> contexts and does not fetch arbitrary history.

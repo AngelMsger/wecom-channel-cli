@@ -142,15 +142,186 @@ durable consumer, use the opt-in relay described below.</p>
 every few minutes still pays for a model turn even when stdout is empty. Repeated
 model-driven <code>reply list</code> calls also put unrelated history back into context.
 Run <code>relay run</code> as ordinary supervised software instead: it collects from the
-same <code>event.scan</code> interface, persists a queue and calls a fixed receiver only for
-nonempty eligible batches. Empty scans and health checks make zero receiver or
+same <code>event.scan</code> interface, persists a queue and delivers nonempty eligible
+batches. Without <code>--config</code>, the destination is the built-in SQLite inbox at
+<code>STATE.inbox.sqlite</code>; <code>--inbox FILE</code> selects another local path. No HTTP service,
+external database, token or model runtime is required for local receipt.
+An explicit <code>--config</code> retains the existing webhook destination or selects an
+absolute <code>inbox_path</code>. Empty scans and health checks make zero receiver or
 model calls. There is no model SDK or shell-command adapter in the relay.</p>
 <p>The existing <code>event watch</code> contract is unchanged. Relay configuration and state
 belong to a separate trusted service account, <strong>not the model worker</strong>. The relay
 needs only its channel's agent socket and a receiver credential; never give it
 the WeCom Secret, broker state, or operator socket. No destination or credential
 is sent through the broker API.</p>
-<h3 id="provision-and-preview">Provision and preview</h3>
+<h3 id="local-receipt-for-two-channels">Local receipt for two channels</h3>
+<p>Use a persistent local disk or persistent cloud volume, with correct file locking
+and fsync semantics. An ephemeral container filesystem is not durable across
+host replacement; SQLite does not provide replication or host-loss recovery.
+Run these commands as the trusted relay service identity, outside the model
+worker. Existing <code>daily-ai</code> and <code>knowledge-lab</code> client contexts must already point
+to their separate authorized broker sockets. No broker permission changes are
+needed. Create private directories under a service-owned persistent location:</p>
+<pre><code class="language-sh">install -d -m 0700 /var/lib/wecom-relay/daily-ai
+install -d -m 0700 /var/lib/wecom-relay/knowledge-lab
+
+wecom-channel-cli --use-context daily-ai relay run --whole-channel \
+  --state /var/lib/wecom-relay/daily-ai/state.json --duration 24h --dry-run
+wecom-channel-cli --use-context knowledge-lab relay run --whole-channel \
+  --state /var/lib/wecom-relay/knowledge-lab/state.json --duration 24h --dry-run
+</code></pre>
+<p>After the previews and local tests pass, run each command without <code>--dry-run</code>
+under its own supervisor. Only <code>relay run</code> is needed; do not also run <code>event watch</code>
+or scheduled AI inspections. Each new state starts at the broker's quiet baseline;
+do not add <code>--after-sequence 0</code> unless deliberately replaying retained history.
+Collection progress and the inbox are independent durable stages. A crash between
+the SQLite commit and relay acknowledgment replays the batch safely.</p>
+<p>The <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-relay@.service">local service template</a> runs one
+instance per client context. Provision its service account, socket access, binary
+and client config directory first, then install the unit. The commands below apply
+only after that setup and verification:</p>
+<pre><code class="language-sh">systemctl start wecom-channel-relay@daily-ai wecom-channel-relay@knowledge-lab
+systemctl status wecom-channel-relay@daily-ai wecom-channel-relay@knowledge-lab
+systemctl stop wecom-channel-relay@daily-ai wecom-channel-relay@knowledge-lab
+</code></pre>
+<p>For other hosts, use their ordinary process supervisor with the same commands.
+SIGTERM/Ctrl-C stops a foreground relay; queued work survives. Renew normal
+bounded sessions without an AI turn. A failed service requires repair, not an
+automatic <code>--retry-failed</code> loop. Inspect both stages independently:</p>
+<pre><code class="language-sh">wecom-channel-cli relay status --state /var/lib/wecom-relay/daily-ai/state.json
+wecom-channel-cli inbox status --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite
+wecom-channel-cli inbox list --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite \
+  --status received --limit 50
+wecom-channel-cli inbox get --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite --id BATCH_ID
+</code></pre>
+<p>Use the corresponding <code>knowledge-lab</code> paths for the other channel. Lists return
+<code>items/next/has_more</code>; reuse <code>next</code> as <code>--cursor</code> with the same status filter. Each
+database binds to one context/bot/channel/ledger on first receipt; another identity
+is rejected, never merged. A batch ID reused with a different payload or an event
+ID reused with conflicting metadata also fails closed. The same batch gets the
+same acknowledgment without another insert. Overlapping batches insert only new
+events into <code>work</code>; <code>original</code> retains the delivery for audit. An all-duplicate
+batch has status <code>duplicate</code> and cannot be claimed. Process <code>work</code>, not <code>original</code>.</p>
+<p>To customize batching, filters or scan retry limits, provision a private config
+using <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/inbox.example.json">inbox.example.json</a> and pass <code>--config FILE</code>
+instead of <code>--inbox</code>. Select these settings before creating relay state; later
+changes still require the existing binding/migration checks. The default without
+a config has no additional transient retries; the example opts into five.</p>
+<h3 id="receipt-and-host-processing-are-separate">Receipt and host processing are separate</h3>
+<table>
+<thead>
+<tr>
+<th>Inbox status</th>
+<th>Meaning</th>
+<th>Automatic replay</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>received</code></td>
+<td>Metadata and deduplication keys committed; ready for a trusted host adapter</td>
+<td>Can be claimed once</td>
+</tr>
+<tr>
+<td><code>dispatching</code></td>
+<td>Attempt committed before host I/O; outcome may be unknown</td>
+<td>Never reclaimed by timeout or restart</td>
+</tr>
+<tr>
+<td><code>submitted</code></td>
+<td>Adapter recorded a host acceptance receipt</td>
+<td>Never interpreted as completion</td>
+</tr>
+<tr>
+<td><code>completed</code></td>
+<td>Adapter/operator recorded separate completion evidence</td>
+<td>Terminal</td>
+</tr>
+<tr>
+<td><code>uncertain</code></td>
+<td>Host outcome needs reconciliation</td>
+<td>Never retried automatically</td>
+</tr>
+<tr>
+<td><code>duplicate</code></td>
+<td>All events already belong to earlier work</td>
+<td>No new work</td>
+</tr>
+</tbody>
+</table>
+<p><code>inbox status.received_batches</code> counts durable receipts, including overlapping
+batches; <code>received_events</code> counts unique events. <code>work_states</code> distinguishes all
+stages. <code>relay status.acknowledged_*</code> remains a handoff count, not a processing
+count. Neither status command probes liveness or calls a model.</p>
+<p>This release implements receipt and state tracking, <strong>not a verified Grok
+forwarder</strong>. Do not point the relay directly at a Bot wakeup webhook unless it
+implements the exact durable acknowledgment contract. A trusted adapter may
+inspect the inbox using ordinary software; it must invoke the host only when
+claiming new work. No empty batch or health check should start an AI turn.</p>
+<p>The adapter claims a specific ID before any host request:</p>
+<pre><code class="language-sh">wecom-channel-cli inbox claim --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite --id BATCH_ID
+# Retain attempt_id and process only work. Contact the verified host adapter here.
+wecom-channel-cli inbox resolve --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite \
+  --id BATCH_ID --attempt ATTEMPT_ID --status submitted --evidence HOST_JOB_ID
+# Only after a separate host completion observation:
+wecom-channel-cli inbox resolve --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite \
+  --id BATCH_ID --attempt ATTEMPT_ID --status completed --evidence COMPLETION_REFERENCE
+</code></pre>
+<p>Claim and resolve support <code>--dry-run</code> and the CLI read-only guard. They never
+send a network request. Resolve records the trusted adapter/operator's assertion;
+the CLI does not independently verify a Grok job. Evidence must be a non-secret
+receipt/reference, never credentials or a signed URL. The exact attempt ID blocks
+stale adapters from changing a newer attempt. HTTP 200 from Grok means at most
+<code>submitted</code> when its documented contract establishes acceptance. A timeout,
+interrupted request or lost claim output leaves <code>dispatching</code>/<code>uncertain</code>: inspect
+<code>inbox get</code>, query the host by its idempotency/job key, and reconcile before acting.
+Only verified non-submission may be resolved with <code>--status not_submitted</code>, which
+returns the work to <code>received</code>. Absence of evidence or elapsed time is not proof
+of non-submission. A recorded <code>submitted</code> batch cannot be reset this way.</p>
+<h3 id="local-receiver-for-existing-webhook-deployments">Local receiver for existing webhook deployments</h3>
+<p>For a relay already configured for HTTP, the same storage is available through
+an optional loopback receiver. Use one database and receiver port per channel.
+Supply the matching bearer token to the receiver and relay through protected
+service environments; do not put its value in argv, config JSON or logs:</p>
+<pre><code class="language-sh">wecom-channel-cli inbox serve --db /var/lib/wecom-relay/daily-ai/inbox.sqlite \
+  --listen 127.0.0.1:8789 --token-env WECOM_CHANNEL_INBOX_TOKEN --dry-run
+wecom-channel-cli inbox serve --db /var/lib/wecom-relay/daily-ai/inbox.sqlite \
+  --listen 127.0.0.1:8789 --token-env WECOM_CHANNEL_INBOX_TOKEN
+</code></pre>
+<p>Set the protected relay config's <code>webhook_url</code> to
+<code>http://127.0.0.1:8789/batches</code> and <code>token_env</code> to <code>WECOM_CHANNEL_INBOX_TOKEN</code>.
+The listener requires authentication, accepts only bounded version 1 JSON batches,
+checks <code>Idempotency-Key == id</code>, and returns <code>{&quot;ack&quot;:&quot;ACTUAL_BATCH_ID&quot;}</code> only after
+the transaction commits. Storage failure returns a non-2xx; it never confirms
+success. SIGTERM drains active requests and closes the database. Restart the
+receiver with the same database, then recover the relay's retry budget if needed.
+There is no remote status, claim or arbitrary command endpoint.</p>
+<h3 id="inbox-recovery-and-external-storage">Inbox recovery and external storage</h3>
+<p>The inbox permits at most 10,000 unfinished unique events. Capacity/disk failures
+stop receipt without dropping work; the relay retains its sealed batch and its
+existing bounded queue. Completed receipts and deduplication keys are never
+automatically expired or pruned. Monitor disk space, oldest pending work and
+<code>dispatching</code>/<code>uncertain</code> counts with ordinary operator tooling, without model
+prompts. Deduplication history consumes storage even after work completes.</p>
+<p>After a crash, restart the receiver/local relay normally with the same database
+to allow SQLite hot-journal recovery. Read-only inspection may fail until recovery
+finishes. If the relay stopped after an unconfirmed attempt, inspect the receipt,
+repair the problem, then explicitly run the original invocation with
+<code>--retry-failed</code>. Replaying into the same inbox is safe; replaying the Bot request
+without host reconciliation is not. A missing inbox or receipt count older than
+acknowledged relay progress fails startup. Never delete state, the database or
+journal files as recovery. Stop writers before taking a consistent backup of the
+relay state and inbox together; restore both with their original identities and
+configuration. A partial/older backup cannot prove that no events were lost.</p>
+<p><code>internal/inbox.Store</code> defines atomic receipt and processing transitions; SQLite
+is the shipped implementation, using the family's pure-Go driver. An external
+database can implement the same semantics in a separate receiver behind the
+existing webhook protocol. No external database or plugin installation is required,
+and no arbitrary storage module or shell hook is loaded by the CLI. Existing
+webhook configs and their binding digests remain compatible. Switching a saved
+relay to a new destination still requires the existing deliberate migration:
+drain/reconcile it first and preserve receiver deduplication across any overlap.</p>
+<h3 id="provision-an-external-webhook-and-preview">Provision an external webhook and preview</h3>
 <p>Copy <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/relay.example.json">relay.example.json</a> to a protected service
 directory, set its fixed receiver URL, and install it with mode 0600, owned by
 root or the relay account. Every ancestor must be root/service-owned and not
@@ -332,7 +503,10 @@ validation, immutable retry payloads across process restart, bounded retry/cance
 binding/gap failures and private-file/lock protection. <code>make e2e</code> runs the actual
 CLI against mock broker and webhook services. Existing polling tests continue to
 cover old-thread replies and snapshot completeness. These tests establish CLI
-behavior; they do not measure model billing or verify a live Grok integration.</p>
+behavior; they do not measure model billing or verify a live Grok integration.
+Inbox tests additionally cover concurrent duplicate receipt/claim, overlapping
+events, identity isolation, transaction rollback, full storage, a lost HTTP ack,
+hot-journal recovery after process exit, and actual CLI receiver/relay restart.</p>
 <h2 id="preview-and-permissions">Preview and permissions</h2>
 <pre><code class="language-sh">wecom-channel-cli --use-context engineering event watch \
   --whole-channel --checkpoint .watch/channel.json --dry-run

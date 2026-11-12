@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add a built-in SQLite inbox as the default `relay run` destination when no
+  `--config` is supplied, with optional `--inbox`/configured `inbox_path`. Atomic
+  batch and event deduplication precede acknowledgment; overlapping batches
+  create work only for new events. Each database binds one channel identity.
+- Add `inbox serve` for authenticated loopback receipt using the existing
+  Idempotency-Key/JSON ack protocol, plus `status/list/get/claim/resolve` for
+  durable receipt and separate dispatching/submitted/completed/uncertain states.
+  Claims never expire into automatic retries. No model or Grok forwarder runs.
+- Add a storage interface, the pure-Go SQLite driver, private database/sidecar
+  checks, bounded unfinished work, crash/replay/concurrency tests and a two-context
+  supervisor template. Preserve existing webhook config digests and relay state.
+- Document startup, stopping, status, consistent backup and explicit recovery;
+  update companion Skill to 0.1.10. Live Grok forwarding remains unverified.
+
+### Fixed
+
+- Require the Go 1.27.4 build toolchain to fix GO-2026-6859 in `net/http`.
+
 ## [0.3.0] — 2026-11-10
 
 ### Added

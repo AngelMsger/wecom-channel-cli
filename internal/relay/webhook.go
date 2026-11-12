@@ -22,6 +22,9 @@ type Webhook struct {
 }
 
 func NewWebhook(c Config) (*Webhook, error) {
+	if c.InboxPath != "" {
+		return nil, configError()
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}

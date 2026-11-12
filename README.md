@@ -235,12 +235,18 @@ checkpoint delivery limits.
 
 For unattended Bot integration, run the ordinary `relay run` service instead
 of scheduling repeated model turns. It queues metadata durably, filters and
-groups changes by thread, and dispatches only nonempty batches to a configured
-receiver. A matching acknowledgment removes the batch; retries retain its
-idempotency key. The receiver must deduplicate before waking a Bot. See the
+groups changes by thread, and commits only nonempty batches to a built-in SQLite
+inbox by default. No separate receiver or external database is needed: run
+`relay run --whole-channel --state /private/service/state.json` with the selected
+context, then inspect `inbox status/list/get --db /private/service/state.json.inbox.sqlite`.
+An explicit private config can still select an external webhook. Durable receipt,
+host acceptance and processing completion are separate states; the inbox does
+not automatically wake Grok or claim that a Bot handled the channel. See the
 [relay setup and receiver contract](docs/watching.md#relay-events-without-model-polling)
 and [service example](deploy/wecom-channel-relay.service). `relay status`
-provides local counts and timestamps without a model or network call.
+provides local counts and timestamps without a model or network call. The
+[local service template](deploy/wecom-channel-relay@.service) keeps channel
+contexts in separate state directories and databases.
 
 ## Propose, review, send
 

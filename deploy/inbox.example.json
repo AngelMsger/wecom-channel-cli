@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "inbox_path": "/var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite",
+  "batch_window_seconds": 5,
+  "batch_size": 50,
+  "queue_limit": 1000,
+  "retry_limit": 5,
+  "retry_base_seconds": 5
+}

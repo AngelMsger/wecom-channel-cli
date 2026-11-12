@@ -194,6 +194,28 @@ delivery and retry budgets survive restart. Filters never declare content safe;
 unknown polling actors stay eligible rather than being guessed from creators.
 See the [relay contract](watching.md#relay-events-without-model-polling).
 
+The default destination is the built-in local SQLite inbox, outside the broker
+and model worker. Each database binds one context/bot/channel/ledger; mixed
+identities and conflicting deduplication payloads fail closed. File and sidecar
+ownership, private modes, symlinks/hard links and all ancestors are checked before
+SQLite opens. Atomic receipt stores metadata and its intact trust envelope, not
+message bodies. A missing or older inbox cannot silently replace acknowledged
+relay progress. Protect persistent volumes and backups as service state; this is
+not an encrypted or tamper-proof database against the service owner or root.
+
+Optional `inbox serve` binds only literal loopback addresses and requires a
+protected environment bearer token. It has bounded requests/timeouts and one
+receipt endpoint; no status, claim or host-execution HTTP route exists. Failed
+storage never produces an acknowledgment. Keep the port and token inaccessible
+to untrusted workers; loopback alone is not authentication. Logs contain no
+headers, bodies or token values. Local SQLite delivery needs no receiver token.
+
+Only a trusted host adapter/operator may use inbox claim/resolve. A claim persists
+before host I/O and cannot expire into an automatic retry; uncertain dispatch
+requires reconciliation. Submitted is acceptance, not completion. Resolve records
+explicit evidence but does not verify it remotely. These commands grant no broker
+write authority, never execute channel instructions, and never send a Bot request.
+
 ## Review and recovery
 
 Native emoji reactions express a bot action and use the same independent review

@@ -15,6 +15,7 @@ func TestCanonicalCommandResponsibilities(t *testing.T) {
 	for group, want := range map[string][]string{
 		"event":    {"context", "get", "list", "watch"},
 		"relay":    {"run", "status"},
+		"inbox":    {"claim", "get", "list", "resolve", "serve", "status"},
 		"policy":   {"example", "validate"},
 		"config":   {"delete-context", "get-contexts", "path", "set-context", "use-context"},
 		"proposal": {"approve", "get", "list", "reject", "resolve"},

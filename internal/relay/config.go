@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Version            int      `json:"version"`
 	URL                string   `json:"webhook_url"`
+	InboxPath          string   `json:"inbox_path,omitempty"`
 	TokenEnv           string   `json:"token_env,omitempty"`
 	Kinds              []string `json:"kinds"`
 	Changes            []int    `json:"changes"`
@@ -50,16 +51,22 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func configError() error {
-	return e.New(e.CategoryConfig, "RELAY_CONFIG", "Use a protected relay JSON configuration with a fixed HTTPS webhook (HTTP only for literal loopback), valid filters and bounded delivery limits.").WithNextSteps("wecom-channel-cli relay run --help", "Review deploy/relay.example.json and docs/watching.md.")
+	return e.New(e.CategoryConfig, "RELAY_CONFIG", "Use a protected relay JSON configuration with one absolute inbox_path or a fixed HTTPS webhook_url (HTTP only for literal loopback), valid filters and bounded delivery limits.").WithNextSteps("wecom-channel-cli relay run --help", "Review deploy/relay.example.json and docs/watching.md.")
 }
 
 func (c Config) Validate() error {
-	u, err := url.Parse(c.URL)
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || len(c.URL) > 2048 {
-		return configError()
-	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
-		return configError()
+	if c.InboxPath != "" {
+		if c.URL != "" || c.TokenEnv != "" || !filepath.IsAbs(c.InboxPath) || filepath.Clean(c.InboxPath) != c.InboxPath {
+			return configError()
+		}
+	} else {
+		u, err := url.Parse(c.URL)
+		if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || len(c.URL) > 2048 {
+			return configError()
+		}
+		if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
+			return configError()
+		}
 	}
 	if c.Version != 1 || c.BatchWindowSeconds < 1 || c.BatchWindowSeconds > 300 || c.BatchSize < 1 || c.BatchSize > 100 || c.QueueLimit < c.BatchSize || c.QueueLimit > 10000 || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 30 || c.RetryLimit < 0 || c.RetryLimit > 20 || c.RetryBaseSeconds < 1 || c.RetryBaseSeconds > 300 {
 		return configError()

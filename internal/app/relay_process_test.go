@@ -19,6 +19,7 @@ import (
 
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
 	"github.com/angelmsger/wecom-channel-cli/internal/config"
+	"github.com/angelmsger/wecom-channel-cli/internal/inbox"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
@@ -206,4 +207,86 @@ func TestCLIProcessRelay(t *testing.T) {
 	if code != 11 || out != "" || !strings.Contains(stderr, "RELAY_BINDING_CHANGED") {
 		t.Fatal(code, out, stderr)
 	}
+	t.Run("default SQLite inbox", func(t *testing.T) {
+		localState := filepath.Join(dir, "relay", "local.json")
+		dbPath := localState + ".inbox.sqlite"
+		localArgs := []string{"relay", "run", "--whole-channel", "--state", localState, "--duration", "200ms"}
+		out, stderr, code := runRelay(nil, append(append([]string{}, localArgs...), "--dry-run")...)
+		if code != 0 || !strings.Contains(out, `"delivery": "sqlite_inbox"`) {
+			t.Fatal(code, out, stderr)
+		}
+		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+			t.Fatal("dry-run created inbox", err)
+		}
+		// Establish a quiet baseline over the already retained events.
+		out, stderr, code = runRelay(nil, localArgs...)
+		if code != 0 || out != "" {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay(nil, "inbox", "status", "--db", dbPath)
+		if code != 0 || !strings.Contains(out, `"received_events": 0`) {
+			t.Fatal(code, out, stderr)
+		}
+		add("local-new", "human", "user")
+		localArgs[len(localArgs)-1] = "6s"
+		out, stderr, code = runRelay(nil, append(append([]string{}, localArgs...), "--max-batches", "1")...)
+		if code != 0 || out != "" || !strings.Contains(stderr, "acknowledged") {
+			t.Fatal(code, out, stderr)
+		}
+		localArgs[len(localArgs)-1] = "200ms"
+		out, stderr, code = runRelay(nil, localArgs...)
+		if code != 0 || out != "" {
+			t.Fatal(code, out, stderr)
+		}
+		db, err := inbox.Open(dbPath, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, err := db.Status(context.Background())
+		items, _, listErr := db.List(context.Background(), inbox.Received, 0, 100)
+		db.Close()
+		if err != nil || listErr != nil || status.ReceivedEvents != 1 || len(items) != 1 {
+			t.Fatal(status, items, err, listErr)
+		}
+		id := items[0].ID
+		out, stderr, code = runRelay([]string{"WECOM_CHANNEL_CLI_READ_ONLY=true"}, "inbox", "claim", "--db", dbPath, "--id", id)
+		if code == 0 || out != "" || !strings.Contains(stderr, "READONLY_BLOCKED") {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay([]string{"WECOM_CHANNEL_CLI_READ_ONLY=true"}, "inbox", "claim", "--db", dbPath, "--id", id, "--dry-run")
+		if code != 0 || !strings.Contains(out, `"dry_run": true`) {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay(nil, "inbox", "claim", "--db", dbPath, "--id", id)
+		var claimed inbox.Item
+		if code != 0 || json.Unmarshal([]byte(out), &claimed) != nil || claimed.Status != inbox.Dispatching || claimed.Attempt == "" {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay(nil, "inbox", "claim", "--db", dbPath, "--id", id)
+		if code != 11 || out != "" {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay(nil, "inbox", "resolve", "--db", dbPath, "--id", id, "--attempt", claimed.Attempt, "--status", "submitted", "--evidence", "synthetic-job")
+		if code != 0 || !strings.Contains(out, `"status": "submitted"`) {
+			t.Fatal(code, out, stderr)
+		}
+		out, stderr, code = runRelay(nil, "inbox", "status", "--db", dbPath)
+		if code != 0 || !strings.Contains(out, `"completed": 0`) || !strings.Contains(out, `"submitted": 1`) {
+			t.Fatal(code, out, stderr)
+		}
+		// Lost acknowledged storage must stop, not silently create an empty inbox.
+		if err := os.Rename(dbPath, dbPath+".backup"); err != nil {
+			t.Fatal(err)
+		}
+		out, stderr, code = runRelay(nil, localArgs...)
+		if code == 0 || out != "" || !strings.Contains(stderr, "INBOX_STORAGE") {
+			t.Fatal(code, out, stderr)
+		}
+		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+			t.Fatal("recreated missing acknowledged inbox")
+		}
+		if err := os.Rename(dbPath+".backup", dbPath); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

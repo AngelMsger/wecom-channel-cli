@@ -167,8 +167,10 @@ without an active watch. See <a href="watching.html">watching</a> for coverage a
 <h2 id="durable-consumer-relay">Durable consumer relay</h2>
 <p><code>relay run</code> implements a consumer outside the broker and model worker through
 <code>internal/relay</code>. It uses existing <code>event.scan</code> requests; no broker endpoint,
-authorization policy or remote WeCom write is added. Fixed destination config
-and receiver credentials stay in that service. The shared transport performs one
+authorization policy or remote WeCom write is added. Without destination config,
+the receiver is a local SQLite inbox at <code>STATE.inbox.sqlite</code>; <code>--inbox</code> overrides
+that path. Optional fixed destination config and receiver credentials stay in
+that service. For webhook destinations, the shared transport performs one
 POST attempt without redirects/proxies; durable retries belong to the consumer
 state machine. Existing <code>event watch</code> keeps its no-reconnect contract.</p>
 <p>The versioned private JSON state commits collected sequence and queued metadata
@@ -186,7 +188,7 @@ accepted events. Unknown polling actors cannot be replaced by resource creators.
 After a bounded window or batch size, events are grouped by post into an immutable
 batch. Its digest binds consumer identity, coverage and exact payload. New events
 never alter an attempted batch. Attempts and retry deadlines persist before HTTP;
-only a 2xx with the exact JSON <code>ack</code> dequeues it. Retry budgets survive restart
+only a committed local receipt or a 2xx with the exact JSON <code>ack</code> dequeues it. Retry budgets survive restart
 and require explicit reset after repair. Permission, protocol, binding and gap
 errors stop; only known transient failures have opt-in bounded retries.</p>
 <p>Delivery is at least once. The receiver must durably deduplicate before launching
@@ -196,12 +198,43 @@ The relay has no model client, content preview, history-fetch loop or shell runn
 Empty/filtered scans make no webhook request. See the
 <a href="watching.html#relay-events-without-model-polling">receiver contract</a> and Linux
 service reference for finite-session supervision and recovery.</p>
+<p><code>internal/inbox.Store</code> is a transaction-level persistence boundary for receipt,
+inspection and host-processing transitions. The shipped implementation uses
+<code>database/sql</code> and <code>modernc.org/sqlite</code>, matching Calendar's pure-Go driver while
+keeping channel security and lifecycle semantics local. It uses a private 0600
+file, rollback journaling, <code>synchronous=EXTRA</code>, foreign keys, a busy timeout and
+immediate write transactions; all operations use one connection per handle.
+Schema/application versions reject unrelated or newer databases. Normal startup
+permits hot-journal recovery; read-only status and dry-run never initialize or
+migrate storage. SQLite needs a persistent local filesystem with correct locks
+and fsync; it is not distributed storage or protection against losing the host.</p>
+<p>One transaction binds the database to context/bot/channel/ledger, checks an
+immutable batch digest, deduplicates event IDs with payload digests, and inserts
+the receipt and its new-event work. An overlapping batch retains its original
+envelope but only new events enter <code>work</code>. Receipt never launches a process.
+The local relay and authenticated loopback <code>inbox serve</code> use the same <code>Accept</code>
+method; HTTP returns the actual batch ID only after commit. A lost response can
+replay without another work item. Unfinished work is capped at 10,000 events;
+full/damaged storage stops acknowledgment, with no overflow eviction. Receipt
+keys and completed work are retained indefinitely, requiring disk monitoring
+and consistent backups rather than automatic pruning.</p>
+<p><code>inbox claim</code> changes received to dispatching atomically and persists a random
+attempt ID before a trusted adapter performs host I/O. Concurrent claims cannot
+both succeed. Claims have no expiring lease. Dispatching/uncertain states survive
+restart and require host reconciliation; only verified non-submission permits
+another claim. <code>inbox resolve</code> requires that attempt ID and a non-secret evidence
+reference, records an audit transition, and separates submitted from completed.
+The CLI records the adapter's evidence assertion; it does not independently
+verify a host job. It contains no Grok API client or automatic forwarding.
+External storage can implement the same contract behind the existing webhook;
+there is no runtime-loaded database plugin or arbitrary command adapter.</p>
 <p>The sibling applicability table below remains unchanged: Jenkins/OpenObserve
 supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
 and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads
 are intentionally different. None provides acknowledged channel dispatch. This
 single-project change reuses kit errors/output/transport without shared API,
-dependency, fx adapter or sibling command changes. The pinned kit lacks the newer
+fx adapter or sibling command changes. The SQLite dependency remains local to
+this project. The pinned kit lacks the newer
 redirect-guidance helper described by the workspace standard; relay preserves
 this project's curated secret-free refusal without copying that helper locally.</p>
 <h2 id="write-state">Write state</h2>
@@ -256,7 +289,9 @@ local client response: 4 MiB; JSON depth: 32.</li>
 (default 60/minute), and each handler admits at most eight concurrent requests.</li>
 <li>Upstream timeout: 30 seconds; local request context: 60 seconds; CLI default:
 65 seconds. CLI requests can be bounded further, up to a two-minute maximum.</li>
-<li>Default inbox: 5000 events, 48-hour retention. Default proposal capacity: 1000,
+<li>Broker event ledger: 5000 events, 48-hour retention. Receiver inbox: 10,000
+unfinished events, 1 MiB per receipt, no automatic deduplication expiry.
+Default proposal capacity: 1000,
 retained without automatic pruning. Full storage rejects new work.</li>
 <li>Default proposals expire in 3600 seconds. Content is 1–20480 UTF-8 bytes;
 outbound control/bidi characters and unsupported inline placeholders are

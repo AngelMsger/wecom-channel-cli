@@ -2,31 +2,35 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
+	"github.com/angelmsger/wecom-channel-cli/internal/inbox"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
+	"github.com/angelmsger/wecom-channel-cli/internal/securefs"
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 func (s *appState) relayCommands() *cobra.Command {
-	g := &cobra.Command{Use: "relay", Short: "Run and inspect durable event delivery to a configured host adapter"}
+	g := &cobra.Command{Use: "relay", Short: "Run and inspect durable delivery to a local inbox or configured receiver"}
 	g.AddCommand(s.relayCommand(), s.relayStatusCommand())
 	return g
 }
 
 func (s *appState) relayCommand() *cobra.Command {
 	scan := broker.ScanRequest{Limit: 100}
-	var configPath, statePath string
+	var configPath, statePath, inboxPath string
 	var duration, interval time.Duration
 	var maxBatches int
 	var dry, retryFailed bool
 	cmd := &cobra.Command{Use: "run", Short: "Run a bounded collector and deliver acknowledged batches without a model", Args: cobra.NoArgs,
-		Long:    "Run this opt-in consumer as a separate trusted service, outside the model worker.\nIt reads the existing agent socket and a private operator-provisioned relay config.\nThe broker never receives a webhook URL or credential. Empty scans send nothing.\nBatches retain the untrusted envelope and contain metadata only. The receiver must\ndeduplicate Idempotency-Key and return {\"ack\":\"BATCH_ID\"} after processing or\ndurable handoff. Retries are explicitly bounded by config retry_limit (default 0).\nGaps, permission errors, binding changes and invalid acknowledgments stop delivery.\nUse a supervisor to renew bounded sessions; see docs/watching.md for deployment.",
-		Example: "  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h\n  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json",
+		Long:    "Run this opt-in consumer as a separate trusted service, outside the model worker.\nWithout --config, commit metadata batches to STATE.inbox.sqlite (or --inbox).\nUse inbox status/list/get to inspect receipt; receipt never means a Bot completed.\nOptional private --config selects inbox_path or the existing webhook_url protocol.\nThe broker never receives a destination or credential. Empty scans send nothing.\nHTTP receivers must deduplicate Idempotency-Key and return {\"ack\":\"BATCH_ID\"}\nafter durable handoff. Retries are bounded by config retry_limit (default 0).\nGaps, permission errors, binding changes and invalid acknowledgments stop delivery.\nUse a supervisor to renew bounded sessions; see docs/watching.md for deployment.",
+		Example: "  wecom-channel-cli --use-context daily-ai relay run --whole-channel --state /var/lib/wecom-relay/daily-ai/state.json --duration 24h\n  wecom-channel-cli inbox status --db /var/lib/wecom-relay/daily-ai/state.json.inbox.sqlite\n  wecom-channel-cli relay status --state /var/lib/wecom-relay/daily-ai/state.json",
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if duration <= 0 || duration > 24*time.Hour || interval < time.Second || interval > time.Minute || maxBatches < 1 || maxBatches > 100000 || statePath == "" {
@@ -37,9 +41,34 @@ func (s *appState) relayCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		cfg, err := relay.LoadConfig(configPath)
+		cfg := relay.DefaultConfig()
+		if configPath != "" {
+			if inboxPath != "" {
+				return e.New(e.CategoryUsage, "RELAY_DESTINATION", "Use --inbox without --config, or select one destination in the protected configuration.")
+			}
+			cfg, err = relay.LoadConfig(configPath)
+		} else {
+			if inboxPath == "" {
+				inboxPath = statePath + ".inbox.sqlite"
+			}
+			cfg.InboxPath, err = filepath.Abs(inboxPath)
+			if err == nil {
+				err = cfg.Validate()
+			}
+		}
 		if err != nil {
 			return err
+		}
+		delivery := "webhook_with_explicit_ack"
+		if cfg.InboxPath != "" {
+			delivery = "sqlite_inbox"
+			stateAbs, pathErr := filepath.Abs(statePath)
+			if pathErr != nil || cfg.InboxPath == stateAbs || cfg.InboxPath == stateAbs+".lock" {
+				return e.New(e.CategoryUsage, "RELAY_DESTINATION", "Keep inbox and relay state in separate files.")
+			}
+			if err = securefs.Directory(filepath.Dir(cfg.InboxPath), true, false); err != nil {
+				return err
+			}
 		}
 		if !dry {
 			if err = s.guard("relay run"); err != nil {
@@ -76,6 +105,28 @@ func (s *appState) relayCommand() *cobra.Command {
 		if !exists {
 			st = relay.State{Version: 1, Consumer: consumer, After: scan.After, FromNow: !cmd.Flags().Changed("after-sequence")}
 		}
+		if cfg.InboxPath != "" {
+			if _, err = os.Lstat(cfg.InboxPath); err == nil {
+				// Normal startup must permit SQLite hot-journal recovery after a crash.
+				receiver, openErr := inbox.Open(cfg.InboxPath, dry)
+				if openErr != nil {
+					return openErr
+				}
+				received, readErr := receiver.Status(cmd.Context())
+				receiver.Close()
+				if readErr != nil {
+					return readErr
+				}
+				if received.ReceivedBatches < st.AckedBatches {
+					return e.New(e.CategoryConfig, "INBOX_STORAGE", "The inbox is older than acknowledged relay progress. Restore a consistent inbox and relay backup before resuming.")
+				}
+				if received.Identity != nil && st.Binding != "" && *received.Identity != st.Identity {
+					return e.New(e.CategoryConflict, "INBOX_BINDING_CHANGED", "This inbox belongs to another relay identity. Restore the original inbox or provision separate channel state.")
+				}
+			} else if !os.IsNotExist(err) || st.AckedBatches > 0 {
+				return e.New(e.CategoryConfig, "INBOX_STORAGE", "The acknowledged inbox is missing or inaccessible. Restore it with the matching relay state; do not silently create an empty replacement.")
+			}
+		}
 		scan.FromNow = st.FromNow
 		ctx, cancel := context.WithTimeout(cmd.Context(), duration)
 		defer cancel()
@@ -101,11 +152,22 @@ func (s *appState) relayCommand() *cobra.Command {
 			if err = validateRelayPage(p, st, scan); err != nil {
 				return err
 			}
-			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "retry_failed": retryFailed, "duration": duration.String(), "delivery": "webhook_with_explicit_ack", "content": "metadata_only"})
+			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "retry_failed": retryFailed, "duration": duration.String(), "delivery": delivery, "content": "metadata_only"})
 		}
-		hook, err := relay.NewWebhook(cfg)
-		if err != nil {
-			return err
+		var send func(context.Context, relay.Batch) error
+		if cfg.InboxPath != "" {
+			receiver, openErr := inbox.Open(cfg.InboxPath, false)
+			if openErr != nil {
+				return openErr
+			}
+			defer receiver.Close()
+			send = receiver.Accept
+		} else {
+			hook, hookErr := relay.NewWebhook(cfg)
+			if hookErr != nil {
+				return hookErr
+			}
+			send = hook.Send
 		}
 		if !exists {
 			if err = store.Save(st); err != nil {
@@ -124,17 +186,19 @@ func (s *appState) relayCommand() *cobra.Command {
 		skillDriftNotice(cmd)
 		notice := func(reason string, st relay.State, code string) {
 			v := relayStatus(st)
+			v["delivery"] = delivery
 			v["state"], v["error_code"] = reason, code
 			output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": map[string]any{"relay": v}})
 		}
-		return pumpRelay(ctx, cfg, scan, st, interval, maxBatches, fetch, hook.Send, store.Save, notice)
+		return pumpRelay(ctx, cfg, scan, st, interval, maxBatches, fetch, send, store.Save, notice)
 	}
 	f := cmd.Flags()
 	f.BoolVar(&scan.WholeChannel, "whole-channel", false, "Observe the selected channel")
 	f.StringArrayVar(&scan.Posts, "post", nil, "Observe this post and its replies; repeat for up to 32 IDs")
 	f.BoolVar(&scan.AllowPartial, "allow-partial", false, "Explicitly accept allowlisted-human callback coverage")
 	f.Int64Var(&scan.After, "after-sequence", 0, "Replay after this sequence only when creating new relay state")
-	f.StringVar(&configPath, "config", "", "Private operator-provisioned JSON with fixed destination, filters and retry bounds")
+	f.StringVar(&configPath, "config", "", "Optional private JSON with one destination, filters and retry bounds; existing webhooks remain supported")
+	f.StringVar(&inboxPath, "inbox", "", "SQLite inbox path without --config (default: STATE.inbox.sqlite)")
 	f.StringVar(&statePath, "state", "", "Durable queue in an existing private service-owned directory (required)")
 	f.DurationVar(&duration, "duration", 5*time.Minute, "Maximum session duration, up to 24h; queued work survives exit")
 	f.DurationVar(&interval, "interval", 2*time.Second, "Minimum scan interval, 1s–1m; operator polling rates still apply")

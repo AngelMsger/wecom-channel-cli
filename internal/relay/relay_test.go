@@ -262,3 +262,28 @@ func TestConfigValidationAndUnknownActors(t *testing.T) {
 		}
 	}
 }
+
+func TestInboxDestinationPreservesPublishedWebhookBinding(t *testing.T) {
+	_, _, cfg := fixture()
+	// Published configuration bytes participate in persisted consumer/batch IDs.
+	const legacy = `{"version":1,"webhook_url":"https://example.invalid/events","kinds":["topic_event","topic_reply_event"],"changes":[1,2,3],"exclude_self":true,"batch_window_seconds":5,"batch_size":50,"queue_limit":1000,"timeout_seconds":30,"retry_limit":0,"retry_base_seconds":5}`
+	if apiclient.Digest(cfg) != apiclient.Digest(json.RawMessage(legacy)) {
+		t.Fatal("changed existing webhook consumer identity")
+	}
+	cfg.URL, cfg.InboxPath = "", "/private/relay/inbox.sqlite"
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewWebhook(cfg); err == nil {
+		t.Fatal("local storage became a webhook")
+	}
+	for _, bad := range []Config{
+		func() Config { c := cfg; c.URL = "https://example.invalid"; return c }(),
+		func() Config { c := cfg; c.TokenEnv = "TOKEN"; return c }(),
+		func() Config { c := cfg; c.InboxPath = "relative.sqlite"; return c }(),
+	} {
+		if bad.Validate() == nil {
+			t.Fatal("accepted ambiguous local destination")
+		}
+	}
+}

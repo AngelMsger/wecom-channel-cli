@@ -214,12 +214,18 @@ history gap. See <a href="watching.html">watching</a> for setup, partial coverag
 checkpoint delivery limits.</p>
 <p>For unattended Bot integration, run the ordinary <code>relay run</code> service instead
 of scheduling repeated model turns. It queues metadata durably, filters and
-groups changes by thread, and dispatches only nonempty batches to a configured
-receiver. A matching acknowledgment removes the batch; retries retain its
-idempotency key. The receiver must deduplicate before waking a Bot. See the
+groups changes by thread, and commits only nonempty batches to a built-in SQLite
+inbox by default. No separate receiver or external database is needed: run
+<code>relay run --whole-channel --state /private/service/state.json</code> with the selected
+context, then inspect <code>inbox status/list/get --db /private/service/state.json.inbox.sqlite</code>.
+An explicit private config can still select an external webhook. Durable receipt,
+host acceptance and processing completion are separate states; the inbox does
+not automatically wake Grok or claim that a Bot handled the channel. See the
 <a href="watching.html#relay-events-without-model-polling">relay setup and receiver contract</a>
 and <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-relay.service">service example</a>. <code>relay status</code>
-provides local counts and timestamps without a model or network call.</p>
+provides local counts and timestamps without a model or network call. The
+<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/wecom-channel-relay@.service">local service template</a> keeps channel
+contexts in separate state directories and databases.</p>
 <h2 id="propose-review-send">Propose, review, send</h2>
 <p>A proposal has no remote effect. Use a stable idempotency key and reuse it if a
 local response is lost. The broker binds that key to the immutable proposal;
