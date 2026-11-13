@@ -127,7 +127,12 @@ func TestRelayRestartReusesBatchAndStopsOnUnsafeResume(t *testing.T) {
 				return broker.ScanPage{}, e.New(e.CategoryConflict, code, "stop")
 			},
 			func(context.Context, relay.Batch) error { t.Fatal("dispatched after fatal resume"); return nil },
-			func(relay.State) error { t.Fatal("saved after fatal resume"); return nil },
+			func(s relay.State) error {
+				if s.LastScanError == nil || s.LastScanError.Code != code || s.After != saved.After || s.Inflight.Attempts != saved.Inflight.Attempts {
+					t.Fatal("fatal scan changed queue or lost diagnostics", s)
+				}
+				return nil
+			},
 			func(string, relay.State, string) {})
 		if e.Safe(err).Code != code {
 			t.Fatal(err)
@@ -253,6 +258,8 @@ func TestRelayAcceptedUnknownAndCrashNeverReplay(t *testing.T) {
 			st.DeliveryMode = relay.HTTPAccepted
 			cfg.DeliveryMode = relay.HTTPAccepted
 			cfg.RetryLimit = 5
+			independent := 20
+			cfg.ScanRetryLimit, cfg.DeliveryRetryLimit = &independent, &independent
 			var saved relay.State
 			calls := 0
 			err := pumpRelay(context.Background(), cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 1,

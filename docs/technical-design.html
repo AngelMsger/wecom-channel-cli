@@ -190,6 +190,22 @@ never alter an attempted batch. Attempts and retry deadlines persist before HTTP
 the default <code>explicit_ack</code> mode dequeues only on a 2xx with the exact JSON <code>ack</code>. Retry budgets survive restart
 and require explicit reset after repair. Permission, protocol, binding and gap
 errors stop; only known transient failures have opt-in bounded retries.</p>
+<p>Optional <code>scan_retry_limit</code> and <code>delivery_retry_limit</code> independently override the
+legacy <code>retry_limit</code>; omitted fields preserve legacy JSON/config digests. Before
+testing the scan budget, save a bounded <code>last_scan_error</code> with a fixed sanitized
+cause, phase, timestamp, attempt and effective limit. The same schema records
+<code>last_delivery_error</code> without replacing the terminal-error latch or uncertainty
+barrier. Retain this history after success/reset; counters and outcome state
+control recovery. Exhaustion errors and notices expose the original diagnosis,
+including after restart, without copying arbitrary messages or error details.</p>
+<p>Scan backoff uses equal jitter under the five-minute exponential cap, with the
+effective poll interval and validated Retry-After metadata as lower bounds.
+The upstream adapter accepts delta seconds or HTTP dates and hashes optional
+request correlation; the existing broker error details carry only this curated
+metadata. Local rate limits supply a conservative 60-second wait. No transport
+retry is introduced and delivery retry timing remains unchanged. CLI request
+and session contexts bound scans and waits. Status preserves queue age through
+sealing with <code>queued_at</code> on delivery metadata, outside the immutable batch digest.</p>
 <p>Explicit-ACK delivery is at least once. Its receiver must durably deduplicate
 before launching a model job. Acknowledgment means processing completed or
 responsibility passed to the receiver's durable queue, not proof that a Bot
@@ -220,12 +236,46 @@ or extra HTTP receiver. The relay has no model client, content preview, history
 fetch loop or shell runner. Empty scans make no request. Local claims cannot
 prevent duplicated paid wakeups that already happened at the host. See the
 <a href="watching.html#direct-grok-routine-webhook">host contract and recovery guide</a>.</p>
-<p>The sibling applicability table below remains unchanged: Jenkins/OpenObserve
-supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
-and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads
-are intentionally different. None provides acknowledged channel dispatch. This
-single-project change reuses kit errors/output/transport without shared API,
-dependency, fx adapter or sibling command changes. The pinned kit lacks the newer
+<p>The retry-diagnostics review is scoped to this repository:</p>
+<table>
+<thead>
+<tr>
+<th>Project</th>
+<th>Applicability to this change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WeCom Channel</td>
+<td>Implement durable scan diagnostics, independent retry limits and throttling waits here</td>
+</tr>
+<tr>
+<td>WeCom Chat</td>
+<td>Its adapted relay has the same scan-exhaustion diagnostic gap; a follow-up port must preserve chat grants, epochs and deadlines. No sibling edits in this change</td>
+</tr>
+<tr>
+<td>Jenkins / OpenObserve</td>
+<td>Streaming/cancellation patterns remain useful; no durable webhook retry policy to update</td>
+</tr>
+<tr>
+<td>WeCom Calendar</td>
+<td>Durable-state precedent; mirror synchronization has different retry semantics</td>
+</tr>
+<tr>
+<td>Confluence</td>
+<td>Remote watch subscriptions, not local durable dispatch</td>
+</tr>
+<tr>
+<td>Bitbucket / Jira / Prometheus</td>
+<td>Bounded reads, not durable webhook dispatch</td>
+</tr>
+<tr>
+<td>Agent CLI Kit</td>
+<td>Reuse errors/output/transport; no generic retry engine or dependency change</td>
+</tr>
+</tbody>
+</table>
+<p>The pinned kit lacks the newer
 redirect-guidance helper described by the workspace standard; relay preserves
 this project's curated secret-free refusal without copying that helper locally.</p>
 <h2 id="write-state">Write state</h2>

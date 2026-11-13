@@ -135,6 +135,17 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
+## Version 0.4.2
+
+Version 0.4.2 embeds companion Skill 0.1.12 and retains sanitized scan/delivery
+failure diagnostics across restart and recovery. Optional phase retry limits
+inherit the legacy shared limit when omitted. The Grok example now allows twenty
+scan retries with jitter/throttling waits and no delivery retries; existing bound
+configurations are not migrated automatically. Unknown outcomes, terminal delivery
+failures and worker deduplication keep their explicit recovery boundaries. See
+[release notes](release-notes.md) and the
+[supervision checklist](watching.md#supervision-and-activation-checklist).
+
 ## Version 0.4.1
 
 Version 0.4.1 embeds companion Skill 0.1.11 and persists terminal delivery errors

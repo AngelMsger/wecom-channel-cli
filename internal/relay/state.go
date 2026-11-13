@@ -48,6 +48,7 @@ type Delivery struct {
 	HTTPStatus  int    `json:"http_status,omitempty"`
 	Evidence    string `json:"evidence,omitempty"`
 	Failure     string `json:"terminal_error,omitempty"`
+	QueuedAt    int64  `json:"queued_at,omitempty"`
 }
 
 type Receipt struct {
@@ -61,30 +62,32 @@ type Receipt struct {
 }
 
 type State struct {
-	Version         int                  `json:"relay_version"`
-	Consumer        string               `json:"consumer"`
-	Identity        broker.WatchIdentity `json:"identity"`
-	Binding         string               `json:"binding"`
-	After           int64                `json:"collected_sequence"`
-	FromNow         bool                 `json:"from_now,omitempty"`
-	Coverage        broker.WatchCoverage `json:"coverage"`
-	Pending         []Record             `json:"pending"`
-	PendingSince    int64                `json:"pending_since"`
-	Inflight        *Delivery            `json:"inflight,omitempty"`
-	Collected       int64                `json:"collected_events"`
-	Filtered        int64                `json:"filtered_events"`
-	Acknowledged    int64                `json:"acknowledged_events"`
-	AckedBatches    int64                `json:"acknowledged_batches"`
-	LastScan        int64                `json:"last_scan_at"`
-	LastAck         int64                `json:"last_ack_at"`
-	ScanFailures    int                  `json:"scan_failures"`
-	NextScan        int64                `json:"next_scan_at"`
-	DeliveryMode    string               `json:"delivery_mode,omitempty"`
-	AcceptedEvents  int64                `json:"accepted_events,omitempty"`
-	AcceptedBatches int64                `json:"accepted_batches,omitempty"`
-	LastAccepted    int64                `json:"last_accepted_at,omitempty"`
-	Receipts        []Receipt            `json:"receipts,omitempty"`
-	NextDelivery    int64                `json:"next_delivery_at,omitempty"`
+	Version           int                  `json:"relay_version"`
+	Consumer          string               `json:"consumer"`
+	Identity          broker.WatchIdentity `json:"identity"`
+	Binding           string               `json:"binding"`
+	After             int64                `json:"collected_sequence"`
+	FromNow           bool                 `json:"from_now,omitempty"`
+	Coverage          broker.WatchCoverage `json:"coverage"`
+	Pending           []Record             `json:"pending"`
+	PendingSince      int64                `json:"pending_since"`
+	Inflight          *Delivery            `json:"inflight,omitempty"`
+	Collected         int64                `json:"collected_events"`
+	Filtered          int64                `json:"filtered_events"`
+	Acknowledged      int64                `json:"acknowledged_events"`
+	AckedBatches      int64                `json:"acknowledged_batches"`
+	LastScan          int64                `json:"last_scan_at"`
+	LastAck           int64                `json:"last_ack_at"`
+	ScanFailures      int                  `json:"scan_failures"`
+	NextScan          int64                `json:"next_scan_at"`
+	DeliveryMode      string               `json:"delivery_mode,omitempty"`
+	AcceptedEvents    int64                `json:"accepted_events,omitempty"`
+	AcceptedBatches   int64                `json:"accepted_batches,omitempty"`
+	LastAccepted      int64                `json:"last_accepted_at,omitempty"`
+	Receipts          []Receipt            `json:"receipts,omitempty"`
+	NextDelivery      int64                `json:"next_delivery_at,omitempty"`
+	LastScanError     *ErrorRecord         `json:"last_scan_error,omitempty"`
+	LastDeliveryError *ErrorRecord         `json:"last_delivery_error,omitempty"`
 }
 
 func (s State) Depth() int {
@@ -149,7 +152,7 @@ func (s *State) Seal(c Config, now time.Time) bool {
 		b.Threads[i].Events = append(b.Threads[i].Events, r)
 	}
 	b.ID = batchID(s.Consumer, b)
-	s.Inflight = &Delivery{Batch: b}
+	s.Inflight = &Delivery{Batch: b, QueuedAt: s.PendingSince}
 	s.Pending = append([]Record(nil), s.Pending[n:]...)
 	if len(s.Pending) == 0 {
 		s.PendingSince = 0
@@ -264,6 +267,9 @@ func Read(path string) (State, bool, error) {
 }
 
 func (s State) Validate() error {
+	if !s.LastScanError.valid("scan") || !s.LastDeliveryError.valid("delivery") {
+		return stateError()
+	}
 	if s.Version != 1 || len(s.Consumer) != 64 || s.After < 0 || s.Depth() > 10000 || s.ScanFailures < 0 || s.ScanFailures > 21 || s.Filtered < 0 || s.Acknowledged < 0 || s.Collected != s.Filtered+s.Acknowledged+s.AcceptedEvents+int64(s.Depth()) || s.AckedBatches < 0 || (len(s.Pending) > 0 && s.PendingSince <= 0) {
 		return stateError()
 	}
@@ -322,7 +328,7 @@ func (s State) Validate() error {
 		if receipts[d.Batch.ID] || (s.DeliveryMode == "" && d.Status != "") || (d.Status != "" && d.Status != "sending" && d.Status != "unknown" && d.Status != "rejected") || (d.Status != "" && d.Attempts < 1) {
 			return stateError()
 		}
-		if d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || d.Batch.ID != batchID(s.Consumer, d.Batch) {
+		if d.QueuedAt < 0 || d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || d.Batch.ID != batchID(s.Consumer, d.Batch) {
 			return stateError()
 		}
 		for _, t := range d.Batch.Threads {

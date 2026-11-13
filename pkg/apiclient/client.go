@@ -87,7 +87,7 @@ func (c *HTTPClient) call(ctx context.Context, path, token string, body any) ([]
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, e.New(e.CategoryServer, "HTTP_REJECTED", "WeCom returned a non-success HTTP status.").WithHTTPStatus(resp.StatusCode)
+		return nil, e.New(e.CategoryServer, "HTTP_REJECTED", "WeCom returned a non-success HTTP status.").WithHTTPStatus(resp.StatusCode).WithDetails(failureMetadata(resp.Header, c.now()))
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil || len(data) > maxResponse {
@@ -115,7 +115,7 @@ func (c *HTTPClient) call(ctx context.Context, path, token string, body any) ([]
 			cat = e.CategoryPermission
 			hint = "Ask the operator to verify API mode and grayscale feature access."
 		}
-		x := e.New(cat, code, fmt.Sprintf("WeCom rejected the request (code %d).", *result.Code)).WithHint(hint)
+		x := e.New(cat, code, fmt.Sprintf("WeCom rejected the request (code %d).", *result.Code)).WithHint(hint).WithDetails(failureMetadata(resp.Header, c.now()))
 		x.Retryable = false
 		return nil, x
 	}

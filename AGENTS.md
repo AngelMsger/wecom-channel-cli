@@ -86,8 +86,12 @@ HTTP-accepted outcomes stop until evidence-based reconciliation, never blind ret
 Worker claims belong in a separate private file with atomic event/batch deduplication;
 never give a worker sender configuration or credentials. Persist retry budgets across
 restart; fatal binding/gap/permission/protocol failures stop. Persist terminal delivery
-errors so a supervisor restart cannot silently retry them before explicit repair. Unknown polling
-actors cannot be excluded as if they were resource creators. Receiver idempotency
+errors so a supervisor restart cannot silently retry them before explicit repair.
+Scan and delivery retry limits inherit the legacy limit unless explicitly overridden;
+never improve scan resilience by relaxing delivery retries. Preserve sanitized error
+history before exhaustion checks and across restart/recovery, without persisting
+raw error text or sensitive context. Keep throttling waits durable and cancellable.
+Unknown polling actors cannot be excluded as if they were resource creators. Receiver idempotency
 is required before a Bot wakeup in explicit-ack mode. Direct routine webhooks do not
 guarantee deduplication or exactly-once wakeups; state that boundary. Test actual
 CLI restart with a failed webhook, empty-scan silence, trust envelopes and private

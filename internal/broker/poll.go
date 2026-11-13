@@ -69,7 +69,7 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time)
 			return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_BUDGET", "The polling snapshot exceeds poll_max_requests. Select fewer --post IDs or ask the operator to review the budget; no partial snapshot was committed.")
 		}
 		if !b.rateAllowed("poll-upstream") {
-			return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_RATE_LIMIT", "Polling reached the context's requests_per_minute budget. Increase the interval, narrow the scope, or ask the operator to review the rate limit.")
+			return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_RATE_LIMIT", "Polling reached the context's requests_per_minute budget. Increase the interval, narrow the scope, or ask the operator to review the rate limit.").WithDetails(apiclient.FailureMetadata{RetryAfterSeconds: 60})
 		}
 		requests++
 		return b.API.Read(ctx, q)

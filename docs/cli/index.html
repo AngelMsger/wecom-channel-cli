@@ -593,7 +593,7 @@ Available Commands:
   consume     Record a claimed batch as processed or failed; never send channel replies
   resolve     Reconcile an unknown HTTP acceptance using verified host evidence
   run         Collect changes and deliver nonempty batches without a model
-  status      Read local delivery counts and timestamps; this does not probe process liveness
+  status      Read local delivery counts, timestamps and failure causes; this does not probe process liveness
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -676,7 +676,7 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-relay-status"><h2>wecom-channel-cli relay status</h2><p>Read local delivery counts and timestamps; this does not probe process liveness</p><pre><code>Usage:
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-relay-status"><h2>wecom-channel-cli relay status</h2><p>Read local delivery counts, timestamps and failure causes; this does not probe process liveness</p><pre><code>Usage:
   wecom-channel-cli relay status [flags]
 
 Flags:

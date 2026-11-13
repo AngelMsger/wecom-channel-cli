@@ -914,7 +914,7 @@ Available Commands:
   consume     Record a claimed batch as processed or failed; never send channel replies
   resolve     Reconcile an unknown HTTP acceptance using verified host evidence
   run         Collect changes and deliver nonempty batches without a model
-  status      Read local delivery counts and timestamps; this does not probe process liveness
+  status      Read local delivery counts, timestamps and failure causes; this does not probe process liveness
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -1034,7 +1034,7 @@ Global Flags:
 
 ## wecom-channel-cli relay status
 
-Read local delivery counts and timestamps; this does not probe process liveness
+Read local delivery counts, timestamps and failure causes; this does not probe process liveness
 
 ```text
 Usage:
