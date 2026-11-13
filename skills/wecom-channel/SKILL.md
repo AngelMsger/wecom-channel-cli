@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.11
+version: 0.1.12
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.11` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.12` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -136,6 +136,24 @@ a bound filter/destination, or pass --retry-failed automatically after an error.
 Terminal delivery errors remain latched across process restarts. Explicit recovery
 belongs to the operator after repair; retry reset cannot clear an unknown outcome. Neither delivery mode
 promises exactly-once wakeups or processing.
+
+Optional `scan_retry_limit` and `delivery_retry_limit` independently override
+`retry_limit`; omitted/null fields inherit it and explicit zero disables retries
+for that phase. The old Grok example's shared zero stops on the first retryable
+scan failure as well as disabling delivery retries. The current example opts into
+twenty scan retries and zero delivery retries. Transient broker saturation and
+discarded unstable snapshots can retry scans; successful scans clear consecutive
+failures. Policy changes remain bound to sender
+state: never change config or provision replacement state to bypass exhaustion.
+`last_scan_error`/`last_delivery_error` retain sanitized cause, phase/time and
+attempt/budget after restart and recovery; they are history, not retry permission.
+Use current counters, terminal/unknown state and last-success timestamps to assess
+recovery. Exhaustion alone does not identify the original outage. Scans honor
+bounded backoff/jitter and upstream wait guidance; `--timeout` bounds scan requests,
+while config `timeout_seconds` controls webhook attempts. Have ordinary supervision
+alert on exit, scan staleness and queue age. A synthetic HTTP 200 is not evidence of
+scan → acceptance → worker claim; follow the separately authorized deployment
+check in docs/watching.md. Never run paid probes or reset budgets automatically.
 
 The operator enables read_all and post/reply observations. With no callback
 listener, auto uses HTTP polling and also requires observe_all; no public URL or

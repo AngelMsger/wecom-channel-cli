@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-11-13
+
+- Preserve bounded, sanitized scan and delivery failure diagnostics across restart
+  and recovery, including the original scan cause when zero retries immediately
+  exhaust the budget. Expose them in notices, exhaustion error details and status;
+  retain queue age through batch sealing for external monitoring.
+- Add optional independent `scan_retry_limit` and `delivery_retry_limit` overrides
+  with backward-compatible `retry_limit` fallback. Add bounded scan backoff/jitter,
+  persisted upstream Retry-After waits and hashed request correlation. Keep terminal
+  delivery failures and unknown outcomes stopped until explicit operator recovery.
+- Retry temporary broker saturation and unstable read-only snapshots without
+  relaxing delivery policy. Retain known polling intervals after restart and
+  automatically recover scans within their persisted consecutive-failure budget.
+- Configure the Grok example for twenty scan retries and zero delivery retries;
+  document the legacy shared-zero behavior, configuration binding and concrete
+  non-AI supervision/activation checks. Update companion Skill/handshake to 0.1.12.
+
 ## [0.4.1] — 2026-11-12
 
 - Persist terminal webhook failures across process restarts in both delivery modes.
@@ -218,7 +235,8 @@ Published from `3a65bf9` through GitHub Actions with npm provenance.
 - Media transfer, content edits/deletes, forwarded chat expansion, Windows and
   channel long connections are not implemented. Deployment must sandbox the agent.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AngelMsger/wecom-channel-cli/compare/v0.2.0...v0.3.0

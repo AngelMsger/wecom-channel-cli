@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 )
 
@@ -29,7 +30,7 @@ func TestCallPreservesHTTPFailureClassification(t *testing.T) {
 	}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(e.New(e.CategoryServer, "HTTP_REJECTED", "upstream rejected").WithHTTPStatus(503).Payload())
+		_ = json.NewEncoder(w).Encode(e.New(e.CategoryServer, "HTTP_REJECTED", "upstream rejected").WithHTTPStatus(503).WithDetails(apiclient.FailureMetadata{RetryAfterSeconds: 900, RequestIDDigest: apiclient.Digest("request")}).Payload())
 	})}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
@@ -37,5 +38,9 @@ func TestCallPreservesHTTPFailureClassification(t *testing.T) {
 	_, err = Call(context.Background(), socket, Request{Operation: "event.scan", Scan: &ScanRequest{WholeChannel: true, Limit: 1}})
 	if err == nil || e.Safe(err).HTTPStatus != 503 || e.Safe(err).Code != "HTTP_REJECTED" {
 		t.Fatal("lost retry classification at socket boundary", err)
+	}
+	m := apiclient.ReadFailureMetadata(e.Safe(err).Details)
+	if m.RetryAfterSeconds != 900 || m.RequestIDDigest != apiclient.Digest("request") {
+		t.Fatal("lost throttle/correlation metadata at socket boundary", m)
 	}
 }

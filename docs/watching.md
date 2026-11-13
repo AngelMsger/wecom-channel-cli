@@ -226,7 +226,17 @@ claim of a tested production installation or Grok-host compatibility.
 
 `relay status` reads only the atomic local snapshot, even while the service runs.
 It exposes queued/collected/filtered/acknowledged counts, inflight ID and attempts,
-coverage, and last-scan/last-ack timestamps (Unix milliseconds). `initialized`
+coverage, and last-scan/last-ack timestamps (Unix milliseconds). `oldest_queued_at`
+survives batch sealing and retry; zero means no known queued timestamp. Legacy
+inflight batches fall back to broker receipt time, an upper bound on queue age.
+`last_scan_error` and `last_delivery_error`, when present, retain the most recent
+failure even after recovery. Each includes a bounded code, fixed sanitized cause,
+phase, `at` timestamp, attempt, effective retry limit, retryability and HTTP status.
+Metadata contains only validated retry guidance and, when available, a SHA-256
+digest of `X-Request-ID`; it contains no raw error text, headers, payload, URL,
+credential or context ID. A diagnostic is history, not an active failure latch;
+compare it with current counters, `terminal_error` and success timestamps.
+`initialized`
 is false until the first successful broker handshake; startup retry budgets are
 already durable in that state. Status cannot prove
 process liveness; compare timestamps with the configured scan interval and use
@@ -247,8 +257,10 @@ startup, retry, acknowledgment, stop and failure notices go to stderr.
 | `batch_size` | 50 / 1–100 | Maximum events per webhook request; full batches can dispatch early |
 | `queue_limit` | 1000 / batch size–10000 | Pending plus inflight event bound |
 | `timeout_seconds` | 30 / 1–30 | Webhook attempt deadline |
-| `retry_limit` | 0 / 0–20 | Explicit additional attempts after a transient failure; example opts into 5 |
-| `retry_base_seconds` | 5 / 1–300 | Exponential retry delay, capped at five minutes |
+| `retry_limit` | 0 / 0–20 | Legacy fallback for both phase limits; additional attempts after a transient failure |
+| `scan_retry_limit` | Omitted / 0–20 | Override only consecutive scan retries; explicit zero stops on the first retryable scan failure |
+| `delivery_retry_limit` | Omitted / 0–20 | Override only delivery retries per immutable batch; explicit zero permits no retry |
+| `retry_base_seconds` | 5 / 1–300 | Exponential delay capped at five minutes; scans use jitter between half and all of that delay |
 
 The scan interval respects broker polling policy. A window groups events already
 collected; it cannot increase upstream polling resolution. Payloads group events
@@ -310,15 +322,42 @@ durable idempotency, not on pretending that HTTP timeouts prove failure.
 ### Retry and recovery
 
 Retries are opt-in (`retry_limit` defaults to zero), bounded, and visible on stderr.
+Omitted or null phase limits inherit `retry_limit`; an explicit phase zero overrides
+it. Existing configurations therefore retain their retry counts and consumer
+digests. For example, `retry_limit: 3, scan_retry_limit: 0` permits three delivery
+retries and no scan retries. `scan_retry_limit: 5, delivery_retry_limit: 0` permits
+five scan retries (six consecutive failed scans total), with no delivery retries.
+Never increase delivery retries merely to make observation more resilient.
 In explicit-ACK mode they apply to connectivity failures, HTTP 408/429/5xx and
 known rate limits. HTTP acceptance mode never automatically retries a transport
 error; only a received 408/429/5xx is eligible under the documented host contract.
 They do not apply to permissions/authentication, redirects, malformed acknowledgments,
 protocol errors, snapshot capacity/budget limits, missing history or changed bindings.
+Read-only scans additionally retry `BUSY` (temporary broker concurrency saturation)
+and `POLL_UNSTABLE` (a snapshot discarded because a resource changed during paging).
+Those scan-only cases do not authorize another webhook attempt. A successful scan
+resets consecutive scan failures automatically; delivery counters remain separate.
 The existing `watch` still stops without reconnecting. Relay scan and delivery
-budgets are independent; an upstream transient failure can coexist with draining
+counters and effective limits are independent; an upstream transient failure can coexist with draining
 already validated queued work. Startup always revalidates the live ledger before
 dispatching persisted work, so a broker outage can delay that validation.
+
+Scan retries persist their next deadline after applying jitter, the effective
+polling interval and any valid upstream `Retry-After` lower bound. Both delta
+seconds and HTTP dates are supported (0–2147483647 seconds); malformed or
+out-of-range guidance is ignored. A valid server wait can exceed the five-minute
+local backoff cap. Restarts retain the last known broker polling interval even if
+the first resumed scan fails. Broker rate-limit errors supply a 60-second wait. Delivery
+retry timing is unchanged. `timeout_seconds` bounds webhook attempts only;
+scans already use the CLI `--timeout` (default 65 seconds) and broker HTTP client
+deadline. The session deadline/cancellation bounds requests and retry waits.
+
+Before checking a failed scan's budget, the relay saves its diagnostic. A zero
+limit therefore still returns `RELAY_RETRIES_EXHAUSTED`, but its error details
+identify the exhausted phase and last cause, and failure notices and `relay status`
+retain that cause across restart. Older exhausted state without a saved cause
+remains stopped; an upgrade cannot reconstruct an unrecorded incident's cause.
+Do not infer network failure or uncertain webhook delivery from exhaustion alone.
 
 Attempt counts and next-attempt times survive process restart, including before
 the first successful broker handshake. After exhaustion,
@@ -331,6 +370,13 @@ them cannot silently redirect, refilter or reinterpret pending work. Restore the
 original configuration to drain it, or reconcile it before deliberately creating
 a separate consumer. Never delete state or reuse `--after-sequence` as automatic
 gap recovery.
+
+Adding/changing phase limits is a configuration change and does not rebind existing
+state, even with `--retry-failed`. Keep the original configuration for recovery;
+reconcile queued/uncertain work and preserve worker deduplication before explicitly
+provisioning a consumer with a different policy. New state fields are optional for
+upgrades; older binaries may reject a newer snapshot, so do not downgrade by
+stripping diagnostics or restoring stale state.
 
 Terminal delivery failures (including authentication, redirects and invalid ACKs)
 remain latched in `terminal_error` across restarts. Repair the receiver before
@@ -353,6 +399,14 @@ SQLite service is needed. The original version 1 payload stays intact:
 `threads[].events[].data` contains the post/reply IDs. Grok accepts arbitrary JSON;
 there is no need to invent a second `batch_id`/`events` wire format. The header
 `Idempotency-Key` still equals `id`, but is only a correlation key at this host.
+
+The current example explicitly sets twenty scan retries and zero delivery retries,
+with waits increasing to the five-minute backoff cap. This tolerates sustained
+transient outages while retaining a finite, persisted budget and operator alerts.
+The v0.4.0/v0.4.1 example supplied only `retry_limit: 0`: that also stops scanning
+on its first retryable failure. Existing copies retain that behavior until the
+operator deliberately provisions the independent policy; do not overwrite a
+configuration bound to saved work.
 
 The states have distinct meanings:
 
@@ -417,6 +471,69 @@ per relay. Two such relays produce approximately at most 120 starts/hour when
 healthy, below the reviewed 200/routine and 300/account limits. Other jobs still
 share these limits; this is not a global rate limiter across processes. Idle
 scans send no request. Do not use empty requests as health probes.
+
+#### Supervision and activation checklist
+
+Use ordinary software outside model turns for each relay's exit, liveness, scan
+freshness and queue-age alerts. Configure an actual operator notification target;
+the CLI emits diagnostics but does not send deployment alerts itself.
+
+1. Use systemd or the host's supported process supervisor. The example's
+   `Restart=always` renews normal bounded sessions and signal crashes, while
+   `RestartPreventExitStatus=1…11` intentionally leaves structured failures stopped.
+   Alert immediately on unexpected exit, failed/inactive service or restart bursts.
+   Inspect `systemctl show wecom-channel-relay@daily-ai` with properties
+   `ActiveState`, `SubState`, `Result`, `ExecMainStatus` and `NRestarts`, and retain
+   stderr through `journalctl -u wecom-channel-relay@daily-ai`.
+2. Read each private sender snapshot as the sender identity, for example every
+   60 seconds. Alert if the file is missing/unreadable or initialization never
+   completes within the startup deadline. For an active relay with room to scan,
+   alert when `last_scan_at` stops advancing beyond the effective scan interval
+   plus request timeout and monitor grace (for example 30 + 65 + 60 seconds).
+   Account for a known `next_scan_at` by allowing that deadline plus request timeout
+   and grace, while still reporting sustained retry/backoff separately. A full
+   queue intentionally pauses collection; that requires a queue alert, not a
+   healthy-scan claim. Never use snapshot readability as process-liveness evidence.
+3. Alert on nonzero `queued_events` older than the deployment's delivery SLO
+   (for example five minutes using `now_ms - oldest_queued_at`), queue saturation,
+   `terminal_error`, `unknown`/interrupted `sending`, and exhausted budgets.
+   If a legacy queued timestamp is unavailable, track sustained nonzero depth
+   in the monitor instead of claiming zero age. Check worker claim/processing
+   age separately: accepted delivery is not completed work.
+4. Exercise the alerts with a local mock or a deliberately authorized maintenance
+   test. Verify a nonzero CLI exit is logged, the supervisor stays stopped for
+   structured failure, and an operator receives the alert. In a shell wrapper
+   using `set -euo pipefail`, capture the exit in a conditional; a bare invocation
+   followed by `status=$?` can exit before the logging branch:
+
+   ```bash
+   set -euo pipefail
+   if /usr/local/bin/wecom-channel-cli relay run --whole-channel \
+     --config /etc/wecom-relay/daily-ai.json \
+     --state /var/lib/wecom-relay-daily-ai/state.json --duration 24h; then
+     status=0
+   else
+     status=$?
+   fi
+   printf 'relay stopped: exit=%s\n' "$status" >&2
+   exit "$status"
+   ```
+
+   This wrapper records exit status; the supervisor/monitor still owns notification.
+   Supply the preconfigured socket/context through its protected service environment.
+5. After repair, inspect the original diagnostic, saved queue and host history;
+   reconcile uncertainty first. An operator may reset an exhausted budget once
+   with `--retry-failed`. Verify the service remains active, `last_scan_at` advances,
+   retries stop accumulating, and queued work reaches the expected acceptance and
+   worker state. Never automatically reset budgets, discard state, resolve unknown
+   outcomes or replay failed/abandoned business work.
+6. Distinguish probe evidence. A synthetic HTTP-200 request tests only that request's
+   endpoint acceptance and may start a paid run; it does not exercise relay scans
+   or establish end-to-end delivery. A separately authorized end-to-end trial must
+   trace one eligible test event through scan/collection, the exact batch ID's
+   acceptance receipt, the matching worker claim and its reported outcome. Check
+   duplicate claim suppression and a quiet interval with zero webhook requests.
+   Keep business/channel-write approval separate; no live probe is part of local CI.
 
 #### Claim and report processing from the routine
 
@@ -517,7 +634,10 @@ Local synthetic tests cover idle silence, baseline establishment, both delivery
 contracts, exact-200 acceptance without reading a response body, immutable retries,
 persist-before-send failures, lost responses and interrupted sending, restart
 blocking, explicit resolution, local claim deduplication/completion, private paths,
-context binding and request pacing. `make e2e` runs actual CLI processes against
+context binding and request pacing. Scan regressions cover zero-budget cause
+preservation through disk/restart/status, independent phase limits, throttling,
+blocked-scan request/session deadlines, explicit recovery and retained error history.
+`make e2e` runs actual CLI processes against
 mock broker/webhook services. Existing polling tests cover old-thread replies,
 atomic snapshots and failed-page recovery. These tests validate the CLI behavior;
 no real Grok routine or channel posting was used, and no AI billing was measured.
