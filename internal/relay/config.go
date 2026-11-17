@@ -32,6 +32,24 @@ type Config struct {
 	RetryBaseSeconds   int      `json:"retry_base_seconds"`
 	DeliveryMode       string   `json:"delivery_mode,omitempty"`
 	MinDeliverySeconds int      `json:"min_delivery_interval_seconds,omitempty"`
+	ScanRetryLimit     *int     `json:"scan_retry_limit,omitempty"`
+	DeliveryRetryLimit *int     `json:"delivery_retry_limit,omitempty"`
+}
+
+// Omitted phase limits inherit the legacy limit, including its zero default.
+// Keep new fields optional so legacy consumer/configuration digests stay stable.
+func (c Config) ScanRetries() int {
+	if c.ScanRetryLimit != nil {
+		return *c.ScanRetryLimit
+	}
+	return c.RetryLimit
+}
+
+func (c Config) DeliveryRetries() int {
+	if c.DeliveryRetryLimit != nil {
+		return *c.DeliveryRetryLimit
+	}
+	return c.RetryLimit
 }
 
 const ExplicitAck = "explicit_ack"
@@ -66,6 +84,9 @@ func configError() error {
 }
 
 func (c Config) Validate() error {
+	if c.ScanRetries() < 0 || c.ScanRetries() > 20 || c.DeliveryRetries() < 0 || c.DeliveryRetries() > 20 {
+		return configError()
+	}
 	if (c.Mode() != ExplicitAck && c.Mode() != HTTPAccepted) || c.MinDeliverySeconds < 0 || c.MinDeliverySeconds > 3600 || (c.Mode() == HTTPAccepted && c.TokenEnv == "") {
 		return configError()
 	}

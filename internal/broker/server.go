@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
+	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
@@ -30,7 +31,7 @@ func (b *Broker) Handler(admin bool) http.Handler {
 			key = "operator"
 		}
 		if !b.rateAllowed(key) {
-			writeError(w, e.New(e.CategoryRateLimit, "RATE_LIMITED", "The local request budget is exhausted."))
+			writeError(w, e.New(e.CategoryRateLimit, "RATE_LIMITED", "The local request budget is exhausted.").WithDetails(apiclient.FailureMetadata{RetryAfterSeconds: 60}))
 			return
 		}
 		select {

@@ -1,64 +1,59 @@
-# WeCom Channel CLI 0.4.1
+# WeCom Channel CLI 0.4.2
 
-Version 0.4.1 fixes terminal webhook failure recovery. Authentication failures,
-redirects and invalid ACKs now remain stopped across process restarts, even when
-attempts remain. Repair the receiver, then explicitly use `--retry-failed`; an
-unknown HTTP acceptance still requires `relay resolve` with verified host evidence.
-Existing 0.4.0 state remains readable by 0.4.1. Companion Skill 0.1.11 describes
-this recovery boundary.
+Version 0.4.2 fixes the scan-diagnostic gap in Issue #13 and improves unattended
+relay resilience without increasing webhook delivery retries. Companion Skill
+0.1.12 documents the recovery and monitoring contract.
 
-## Webhook capabilities retained from 0.4.0
+## Changes
 
-Deliver channel changes directly to Grok routine webhooks without periodic AI
-polling or an ACK-only receiver service.
+- Save sanitized scan failures before testing the retry budget. Even a zero-budget
+  stop retains the original error code/cause, phase, timestamp, attempt and budget
+  in exhaustion details, notices and `relay status`, including after restart.
+  Retain corresponding delivery error history without weakening terminal latches.
+- Add optional `scan_retry_limit` and `delivery_retry_limit`. Omitted/null fields
+  inherit `retry_limit`; explicit zero disables retries for that phase. The Grok
+  example now allows twenty scan retries and zero delivery retries.
+- Use capped exponential scan backoff with jitter, respect valid upstream
+  Retry-After guidance and keep the wait deadline across restart. Preserve hashed
+  request correlation when supplied. Retry temporary broker saturation and safely
+  discarded unstable snapshots; retain known polling intervals on restart.
+- Preserve queue age through batch sealing/retries and document ordinary process
+  supervision, exit/scan-staleness/queue-age alerts, safe shell exit capture and
+  authorized end-to-end acceptance checks.
 
-- Add opt-in `delivery_mode: "http_accepted"`. Exactly HTTP 200 records host
-  acceptance, separately from processing completion. Preserve the existing
-  `explicit_ack` mode for receivers with durable idempotent handoff.
-- Persist sending before HTTP and retain accepted metadata batches for recovery.
-  Missing responses and interrupted sending stop as `unknown`; `relay resolve`
-  records verified host evidence before any retry. Disable implicit HTTP POST
-  replay even when an `Idempotency-Key` header is present.
-- Add worker-owned `relay claim/consume` and state queries. Atomic batch/event
-  deduplication grants work once per retained worker ledger, with explicit
-  processed/failed results. Worker files do not need sender credentials.
-- Keep durable queues in the existing atomic JSON store, with optional bounded
-  `--ephemeral` memory delivery when interruption loss is acceptable. SQLite is
-  not required. Idle scans make no webhook/model requests.
-- Provide per-context Grok configuration, request pacing, supervision and recovery
-  guidance. Ship companion Skill 0.1.11 and Go toolchain 1.27.4.
+The original reported incident's scan cause remains unknown: this release cannot
+recover diagnostics older binaries never recorded. A synthetic HTTP 200 alone is
+not evidence of a working scan → acceptance → worker-claim path.
 
-## Upgrade
+## Upgrade and recovery
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.4.1
+npm install -g @angelmsger/wecom-channel-cli@0.4.2
 wecom-channel-cli version
 wecom-channel-cli skill install
 wecom-channel-cli skill status
 ```
 
-Reload the agent's Skill after installation. Existing 0.3.0 explicit-ACK relay
-configurations retain their default behavior and saved consumer digest. Keep the
-same config/socket/scope when resuming their queues. Switching a saved relay to
-`http_accepted` changes its bound configuration: stop and reconcile old work,
-then provision a new consumer with its own state path and quiet current baseline.
-Do not delete pending state or use history replay as automatic migration.
-Broker policies, permissions and observation storage are unchanged. The self-bot
-exclusion migration still applies when upgrading from versions older than 0.3.0;
-see [self exclusion](watching.md#self-exclusion).
+Reload the agent's Skill after installation. Upgrade the broker as well as the
+relay CLI to obtain upstream throttling metadata. Existing configurations and
+saved state remain readable with their original settings; omitted phase limits
+preserve the consumer digest. The old Grok example's shared `retry_limit: 0` still
+stops on the first retryable scan failure. The new example is a provisioning
+choice, not an automatic edit to existing deployments.
 
-Use separate sender and worker state per channel. `--ephemeral` loses pending
-work and uncertainty state on interruption; broker persistence remains enabled.
-Worker claims never expire into automatic replay. Capacity limits stop without
-evicting events; retain deduplication history for the possible replay lifetime.
-See [Grok setup and recovery](watching.md#direct-grok-routine-webhook).
+Stop and reconcile saved work before changing a bound configuration or provisioning
+a new consumer. Do not delete state, strip diagnostic fields for a downgrade or
+replay history as automatic migration. Older binaries may reject newer snapshots.
+After repairing an exhausted budget, an operator may explicitly use `--retry-failed`
+once with the same configuration. Never put that flag in a supervisor restart loop.
 
-The official Grok contract was reviewed on 2026-11-12. HTTP acceptance does not
-prove processing finished, and local claims cannot prevent duplicated AI starts
-that already occurred at the host. Network ambiguity requires reconciliation;
-external side effects still need their own idempotency and independent approval.
+Unknown HTTP outcomes and interrupted `sending` still stop before scanning or
+replaying; use `relay resolve` only with verified host evidence. Terminal delivery
+errors remain latched until explicit repair/reset. Worker claims never expire
+into automatic business-work replay. HTTP acceptance is not processing completion,
+and local deduplication cannot prevent a paid host run that already started.
 
-Validation uses synthetic services and actual CLI processes, including empty-scan
-silence, quiet restarts, lost-response handling, claims and completion. No live
-Grok routine or channel write is used. Verify the actual host integration before
-enabling continuous production monitoring.
+See [Grok deployment and monitoring](watching.md#supervision-and-activation-checklist)
+and [recovery](watching.md#resolve-uncertainty-and-preserve-recovery-evidence).
+Validation uses synthetic services and actual CLI processes; no live Grok routine,
+channel write or production supervision deployment is part of these checks.

@@ -194,6 +194,16 @@ before POST; ambiguous outcomes and interrupted sending stop until a trusted
 operator records verified host evidence with `relay resolve`. Even bounded blind
 retries can cause repeated paid AI runs, so they are not used for unknown outcomes.
 
+Scan resilience has an independent retry limit; enabling scan retries cannot
+authorize additional webhook attempts. Sanitized last-scan/last-delivery records
+contain only bounded codes, fixed cause summaries, phase/time/counters, HTTP status,
+validated wait guidance and hashed request correlation. Raw messages, response
+bodies, credential-bearing URLs, headers and sensitive context IDs are excluded.
+These records survive recovery for diagnosis but never grant retry authority.
+The persisted terminal-error latch and unknown/sending reconciliation barrier
+remain authoritative. Deployment exit/staleness/queue-age monitoring belongs to
+ordinary external software; see the [activation checklist](watching.md#supervision-and-activation-checklist).
+
 Worker-owned claim/processing files are distinct from protected sender state.
 Local `relay claim/consume` never read sender configuration, change broker policy,
 launch a job or send content. Locks and persistent event/batch deduplication grant

@@ -209,6 +209,9 @@ func testCLIProcessRelay(t *testing.T, mode string) {
 	if code != 0 || !strings.Contains(out, counter) || !strings.Contains(out, `"queued_events": 0`) {
 		t.Fatal(code, out, stderr)
 	}
+	if !strings.Contains(out, `"last_delivery_error"`) || !strings.Contains(out, `"code": "RELAY_REJECTED"`) || !strings.Contains(out, `"http_status": 503`) {
+		t.Fatal("delivery error history lost after restart and success", out)
+	}
 	// A retained self callback is skipped by the broker before reaching the relay.
 	add("self", "bot", "bot")
 	args[len(args)-3] = "150ms"

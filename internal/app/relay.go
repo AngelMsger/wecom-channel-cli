@@ -25,7 +25,7 @@ func (s *appState) relayCommand() *cobra.Command {
 	var maxBatches int
 	var dry, retryFailed, ephemeral bool
 	cmd := &cobra.Command{Use: "run", Short: "Collect changes and deliver nonempty batches without a model", Args: cobra.NoArgs,
-		Long:    "Run as a separate trusted service using a private fixed-destination config.\nEmpty scans send nothing. delivery_mode defaults to explicit_ack, requiring\n{\"ack\":\"BATCH_ID\"}. http_accepted accepts exactly HTTP 200 as host acceptance,\nnot processing completion; ambiguous outcomes stop until relay resolve.\nChoose durable JSON --state or lossy bounded-memory --ephemeral.\nRetries and request pacing are configured explicitly. Use a supervisor to renew\nbounded sessions; see docs/watching.md for Grok setup and worker claims.",
+		Long:    "Run as a separate trusted service using a private fixed-destination config.\nEmpty scans send nothing. delivery_mode defaults to explicit_ack, requiring\n{\"ack\":\"BATCH_ID\"}. http_accepted accepts exactly HTTP 200 as host acceptance,\nnot processing completion; ambiguous outcomes stop until relay resolve.\nChoose durable JSON --state or lossy bounded-memory --ephemeral.\nscan_retry_limit and delivery_retry_limit override the shared retry_limit.\nStatus retains sanitized failure causes across restart; retries require explicit policy.\nUse a supervisor to renew\nbounded sessions; see docs/watching.md for Grok setup and worker claims.",
 		Example: "  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h\n  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json",
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -112,7 +112,7 @@ func (s *appState) relayCommand() *cobra.Command {
 			if err = validateRelayPage(p, st, scan); err != nil {
 				return err
 			}
-			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "retry_failed": retryFailed, "duration": duration.String(), "delivery_mode": cfg.Mode(), "durable": !ephemeral, "content": "metadata_only"})
+			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "scan_retry_limit": cfg.ScanRetries(), "delivery_retry_limit": cfg.DeliveryRetries(), "retry_failed": retryFailed, "duration": duration.String(), "delivery_mode": cfg.Mode(), "durable": !ephemeral, "content": "metadata_only"})
 		}
 		hook, err := relay.NewWebhook(cfg)
 		if err != nil {
@@ -177,10 +177,17 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 	started := false
 	// Always validate the live ledger/policy before dispatching saved work.
 	validated := false
+	if st.Coverage.Backend == "poll" {
+		interval = max(interval, time.Duration(st.Coverage.PollIntervalSeconds)*time.Second)
+	}
 	nextScan := time.Now()
 	fail := func(err error) error { notice("failed", st, e.Safe(err).Code); return err }
-	exhausted := func() error {
-		return e.New(e.CategoryConflict, "RELAY_RETRIES_EXHAUSTED", "The persisted relay retry budget is exhausted. Repair the service, then explicitly use --retry-failed with the same state and configuration.")
+	exhausted := func(phase string) error {
+		record := st.LastScanError
+		if phase == "delivery" {
+			record = st.LastDeliveryError
+		}
+		return e.New(e.CategoryConflict, "RELAY_RETRIES_EXHAUSTED", "The persisted relay retry budget is exhausted. Repair the service, then explicitly use --retry-failed with the same state and configuration.").WithDetails(map[string]any{"phase": phase, "last_error": record})
 	}
 	if cfg.Mode() == relay.HTTPAccepted && st.Inflight != nil {
 		if st.Inflight.Status == "sending" {
@@ -201,8 +208,11 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 			notice("stopped", st, "")
 			return nil
 		}
-		if st.ScanFailures > cfg.RetryLimit || (st.Inflight != nil && st.Inflight.Attempts > cfg.RetryLimit) {
-			return fail(exhausted())
+		if st.ScanFailures > cfg.ScanRetries() {
+			return fail(exhausted("scan"))
+		}
+		if st.Inflight != nil && st.Inflight.Attempts > cfg.DeliveryRetries() {
+			return fail(exhausted("delivery"))
 		}
 		now := time.Now()
 		scanDue := maxTime(nextScan, time.UnixMilli(st.NextScan))
@@ -218,16 +228,20 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					notice("stopped", st, "")
 					return nil
 				}
-				if !relay.Retryable(err) {
-					return fail(err)
+				now := time.Now()
+				st.LastScanError = relay.NewErrorRecord(err, "scan", st.ScanFailures+1, cfg.ScanRetries(), now)
+				if relay.ScanRetryable(err) {
+					st.ScanFailures++
+					st.NextScan = now.Add(relay.ScanRetryDelay(cfg, st.ScanFailures, interval, err)).UnixMilli()
 				}
-				st.ScanFailures++
-				st.NextScan = time.Now().Add(max(interval, relay.RetryDelay(cfg, st.ScanFailures))).UnixMilli()
 				if saveErr := save(st); saveErr != nil {
 					return fail(saveErr)
 				}
-				if st.ScanFailures > cfg.RetryLimit {
-					return fail(exhausted())
+				if !relay.ScanRetryable(err) {
+					return fail(err)
+				}
+				if st.ScanFailures > cfg.ScanRetries() {
+					return fail(exhausted("scan"))
 				}
 				notice("scan_retry", st, e.Safe(err).Code)
 			} else {
@@ -241,6 +255,10 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					}
 				} else {
 					st.ScanFailures, st.NextScan = 0, 0
+					st.LastScan = time.Now().UnixMilli()
+					if err = save(st); err != nil {
+						return fail(err)
+					}
 				}
 				validated = true
 				scan.FromNow = false
@@ -297,6 +315,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					}
 					continue
 				}
+				st.LastDeliveryError = relay.NewErrorRecord(err, "delivery", st.Inflight.Attempts, cfg.DeliveryRetries(), time.Now())
 				if !relay.Retryable(err) && e.Safe(err).Code != "RELAY_OUTCOME_UNKNOWN" {
 					st.Inflight.Failure = e.Safe(err).Code
 				}
@@ -320,8 +339,8 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 				if !relay.Retryable(err) {
 					return fail(err)
 				}
-				if st.Inflight.Attempts > cfg.RetryLimit {
-					return fail(exhausted())
+				if st.Inflight.Attempts > cfg.DeliveryRetries() {
+					return fail(exhausted("delivery"))
 				}
 				notice("delivery_retry", st, e.Safe(err).Code)
 			}
@@ -360,6 +379,32 @@ func minTime(a, b time.Time) time.Time {
 func relayStatus(st relay.State) map[string]any {
 	v := map[string]any{"identity": st.Identity, "coverage": st.Coverage, "collected_sequence": st.After, "collected_events": st.Collected, "filtered_events": st.Filtered, "queued_events": st.Depth(), "acknowledged_events": st.Acknowledged, "acknowledged_batches": st.AckedBatches, "last_scan_at": st.LastScan, "last_ack_at": st.LastAck, "scan_failures": st.ScanFailures, "next_scan_at": st.NextScan}
 	v["initialized"] = st.Binding != ""
+	if st.LastScanError != nil {
+		v["last_scan_error"] = st.LastScanError
+	}
+	if st.LastDeliveryError != nil {
+		v["last_delivery_error"] = st.LastDeliveryError
+	}
+	// Preserve enqueue age across sealing/retry. Legacy batches fall back to the
+	// broker's receipt time, an upper bound on their time in the sender queue.
+	oldest := st.PendingSince
+	if st.Inflight != nil {
+		queuedAt := st.Inflight.QueuedAt
+		if queuedAt == 0 {
+			for _, thread := range st.Inflight.Batch.Threads {
+				for _, record := range thread.Events {
+					at := record.Data.Received * 1000
+					if at > 0 && (queuedAt == 0 || at < queuedAt) {
+						queuedAt = at
+					}
+				}
+			}
+		}
+		if queuedAt > 0 && (oldest == 0 || queuedAt < oldest) {
+			oldest = queuedAt
+		}
+	}
+	v["oldest_queued_at"] = oldest
 	v["delivery_mode"] = relay.ExplicitAck
 	if st.DeliveryMode != "" {
 		v["delivery_mode"] = st.DeliveryMode
@@ -380,7 +425,7 @@ func relayStatus(st relay.State) map[string]any {
 
 func (s *appState) relayStatusCommand() *cobra.Command {
 	var path, consumerPath, id string
-	cmd := &cobra.Command{Use: "status", Short: "Read local delivery counts and timestamps; this does not probe process liveness", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := &cobra.Command{Use: "status", Short: "Read local delivery counts, timestamps and failure causes; this does not probe process liveness", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if (path == "") == (consumerPath == "") {
 			return e.New(e.CategoryUsage, "RELAY_STATUS", "Choose --state for sender delivery or --consumer-state for worker processing.")
 		}

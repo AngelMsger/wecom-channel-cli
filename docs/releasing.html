@@ -149,6 +149,15 @@ changes only WeCom Channel CLI; it does not modify sibling checkouts or the kit.
 <p>The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.</p>
+<h2 id="version-042">Version 0.4.2</h2>
+<p>Version 0.4.2 embeds companion Skill 0.1.12 and retains sanitized scan/delivery
+failure diagnostics across restart and recovery. Optional phase retry limits
+inherit the legacy shared limit when omitted. The Grok example now allows twenty
+scan retries with jitter/throttling waits and no delivery retries; existing bound
+configurations are not migrated automatically. Unknown outcomes, terminal delivery
+failures and worker deduplication keep their explicit recovery boundaries. See
+<a href="release-notes.md">release notes</a> and the
+<a href="watching.html#supervision-and-activation-checklist">supervision checklist</a>.</p>
 <h2 id="version-041">Version 0.4.1</h2>
 <p>Version 0.4.1 embeds companion Skill 0.1.11 and persists terminal delivery errors
 across restart in both modes. Existing 0.4.0 state remains readable; repair and

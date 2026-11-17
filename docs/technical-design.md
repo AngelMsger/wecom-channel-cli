@@ -225,6 +225,24 @@ the default `explicit_ack` mode dequeues only on a 2xx with the exact JSON `ack`
 and require explicit reset after repair. Permission, protocol, binding and gap
 errors stop; only known transient failures have opt-in bounded retries.
 
+Optional `scan_retry_limit` and `delivery_retry_limit` independently override the
+legacy `retry_limit`; omitted fields preserve legacy JSON/config digests. Before
+testing the scan budget, save a bounded `last_scan_error` with a fixed sanitized
+cause, phase, timestamp, attempt and effective limit. The same schema records
+`last_delivery_error` without replacing the terminal-error latch or uncertainty
+barrier. Retain this history after success/reset; counters and outcome state
+control recovery. Exhaustion errors and notices expose the original diagnosis,
+including after restart, without copying arbitrary messages or error details.
+
+Scan backoff uses equal jitter under the five-minute exponential cap, with the
+effective poll interval and validated Retry-After metadata as lower bounds.
+The upstream adapter accepts delta seconds or HTTP dates and hashes optional
+request correlation; the existing broker error details carry only this curated
+metadata. Local rate limits supply a conservative 60-second wait. No transport
+retry is introduced and delivery retry timing remains unchanged. CLI request
+and session contexts bound scans and waits. Status preserves queue age through
+sealing with `queued_at` on delivery metadata, outside the immutable batch digest.
+
 Explicit-ACK delivery is at least once. Its receiver must durably deduplicate
 before launching a model job. Acknowledgment means processing completed or
 responsibility passed to the receiver's durable queue, not proof that a Bot
@@ -258,12 +276,19 @@ fetch loop or shell runner. Empty scans make no request. Local claims cannot
 prevent duplicated paid wakeups that already happened at the host. See the
 [host contract and recovery guide](watching.md#direct-grok-routine-webhook).
 
-The sibling applicability table below remains unchanged: Jenkins/OpenObserve
-supply streaming/cancellation patterns, Calendar supplies durable-state precedent,
-and Confluence remote subscriptions plus Bitbucket/Jira/Prometheus bounded reads
-are intentionally different. None provides acknowledged channel dispatch. This
-single-project change reuses kit errors/output/transport without shared API,
-dependency, fx adapter or sibling command changes. The pinned kit lacks the newer
+The retry-diagnostics review is scoped to this repository:
+
+| Project | Applicability to this change |
+| --- | --- |
+| WeCom Channel | Implement durable scan diagnostics, independent retry limits and throttling waits here |
+| WeCom Chat | Its adapted relay has the same scan-exhaustion diagnostic gap; a follow-up port must preserve chat grants, epochs and deadlines. No sibling edits in this change |
+| Jenkins / OpenObserve | Streaming/cancellation patterns remain useful; no durable webhook retry policy to update |
+| WeCom Calendar | Durable-state precedent; mirror synchronization has different retry semantics |
+| Confluence | Remote watch subscriptions, not local durable dispatch |
+| Bitbucket / Jira / Prometheus | Bounded reads, not durable webhook dispatch |
+| Agent CLI Kit | Reuse errors/output/transport; no generic retry engine or dependency change |
+
+The pinned kit lacks the newer
 redirect-guidance helper described by the workspace standard; relay preserves
 this project's curated secret-free refusal without copying that helper locally.
 
