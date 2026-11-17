@@ -1,59 +1,54 @@
-# WeCom Channel CLI 0.4.2
+# WeCom Channel CLI 0.4.3
 
-Version 0.4.2 fixes the scan-diagnostic gap in Issue #13 and improves unattended
-relay resilience without increasing webhook delivery retries. Companion Skill
-0.1.12 documents the recovery and monitoring contract.
+Version 0.4.3 improves broker recovery and host supervision. Companion Skill
+0.1.13 distinguishes local availability, upstream authentication and uncertain
+writes without inventing a checksum-match gate for an authorized restart.
 
 ## Changes
 
-- Save sanitized scan failures before testing the retry budget. Even a zero-budget
-  stop retains the original error code/cause, phase, timestamp, attempt and budget
-  in exhaustion details, notices and `relay status`, including after restart.
-  Retain corresponding delivery error history without weakening terminal latches.
-- Add optional `scan_retry_limit` and `delivery_retry_limit`. Omitted/null fields
-  inherit `retry_limit`; explicit zero disables retries for that phase. The Grok
-  example now allows twenty scan retries and zero delivery retries.
-- Use capped exponential scan backoff with jitter, respect valid upstream
-  Retry-After guidance and keep the wait deadline across restart. Preserve hashed
-  request correlation when supplied. Retry temporary broker saturation and safely
-  discarded unstable snapshots; retain known polling intervals on restart.
-- Preserve queue age through batch sealing/retries and document ordinary process
-  supervision, exit/scan-staleness/queue-age alerts, safe shell exit capture and
-  authorized end-to-end acceptance checks.
+- UNSAFE_PATH now identifies the failing directory or ancestor and a stable
+  reason, retaining all ownership, permission and symlink checks. Diagnostics
+  contain no file contents or raw OS errors.
+- Bound broker restarts to five starts per 300 seconds with a 10-second delay.
+  Deterministic configuration/authentication/permission failures stop for repair.
+  Unexpected clean exits and panic exits use the bounded recovery budget.
+- Add independent systemd timers for local readiness and upstream authentication.
+  Each check has at most three attempts and hard process deadlines, and reports
+  only health metadata. The probes receive no Secret environment and never restart
+  services, reset state or replay a write.
+- Connect broker, relay and probe failures to a local journal/syslog alert unit.
+  Document installation, external-notification integration, maintenance and host
+  acceptance tests. Local alerts do not guarantee external delivery.
 
-The original reported incident's scan cause remains unknown: this release cannot
-recover diagnostics older binaries never recorded. A synthetic HTTP 200 alone is
-not evidence of a working scan → acceptance → worker-claim path.
-
-## Upgrade and recovery
+## Upgrade and deployment
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.4.2
+npm install -g @angelmsger/wecom-channel-cli@0.4.3
 wecom-channel-cli version
 wecom-channel-cli skill install
 wecom-channel-cli skill status
 ```
 
-Reload the agent's Skill after installation. Upgrade the broker as well as the
-relay CLI to obtain upstream throttling metadata. Existing configurations and
-saved state remain readable with their original settings; omitted phase limits
-preserve the consumer digest. The old Grok example's shared `retry_limit: 0` still
-stops on the first retryable scan failure. The new example is a provisioning
-choice, not an automatic edit to existing deployments.
+Reload the agent's Skill after installation. If installed content differs, inspect
+it before explicitly replacing it. Existing 0.4.2 policy, proposal and relay state
+remain compatible; no ledger migration or credential change is required. Preserve
+all state, terminal delivery latches and unknown outcomes across upgrades.
 
-Stop and reconcile saved work before changing a bound configuration or provisioning
-a new consumer. Do not delete state, strip diagnostic fields for a downgrade or
-replay history as automatic migration. Older binaries may reject newer snapshots.
-After repairing an exhausted budget, an operator may explicitly use `--retry-failed`
-once with the same configuration. Never put that flag in a supervisor restart loop.
+The deployment helper and systemd units are available in the tagged source under
+`deploy/`; the native/npm CLI upgrade does not install or activate them. Follow
+[the operator runbook](security.md#supervision-and-health-monitoring), provision
+its dedicated health account, and review fixed socket paths before activation.
+An existing running service needs a deliberate restart to apply changed settings.
+For multiple contexts provision a probe pair per context. Hosts without systemd
+need equivalent host-native supervision; model turns are not service monitors.
 
-Unknown HTTP outcomes and interrupted `sending` still stop before scanning or
-replaying; use `relay resolve` only with verified host evidence. Terminal delivery
-errors remain latched until explicit repair/reset. Worker claims never expire
-into automatic business-work replay. HTTP acceptance is not processing completion,
-and local deduplication cannot prevent a paid host run that already started.
+Readiness probes do not measure queue age or guarantee delivery. Preserve the
+0.4.2 scan diagnostics/retry budgets and monitor `relay status` separately; see
+[watching and recovery](watching.md). Repair unsafe deployment paths without
+changing shared parent permissions blindly. Verify local health, then upstream
+authentication. Reconcile uncertain proposals/deliveries before any further send.
 
-See [Grok deployment and monitoring](watching.md#supervision-and-activation-checklist)
-and [recovery](watching.md#resolve-uncertainty-and-preserve-recovery-evidence).
-Validation uses synthetic services and actual CLI processes; no live Grok routine,
-channel write or production supervision deployment is part of these checks.
+Validation uses synthetic credentials, local services and actual CLI processes,
+plus bounded health-helper fault tests and systemd static validation. A live
+Grokbot service restart, host reboot and external alert delivery require the
+operator's acceptance drill; this release does not attest those deployment facts.

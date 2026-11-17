@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-11-17
+
 - Bound broker restarts and stop deterministic configuration/auth failures; wire
   broker and relay failures to a local alert unit. Add independent, credential-free
   local/upstream health timers with finite probe budgets, hard deadlines and an
