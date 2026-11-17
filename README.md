@@ -8,12 +8,12 @@ An agent-facing connector for WeCom's grayscale channel APIs. It reads channel
 content, watches changes by polling or encrypted callbacks, and lets an agent
 propose text posts, replies or native emoji reactions for independent operator approval.
 
-**Status: [0.4.2 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.4.2), tested offline against synthetic services and
+**Status: [0.4.3 is published](https://www.npmjs.com/package/@angelmsger/wecom-channel-cli/v/0.4.3), tested offline against synthetic services and
 WeCom's published cryptographic vector. Live authentication, discovery, whole-channel
 and thread polling, filtering and checkpoint resume passed in one test tenant.
 Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
-Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.4.2).
+Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.4.3).
 
 The CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
@@ -27,7 +27,7 @@ Read the [security and deployment guide](docs/security.md) before connecting a b
 With Node.js 20 or newer, run this in a trusted operator setup session:
 
 ```sh
-npm install -g @angelmsger/wecom-channel-cli@0.4.2
+npm install -g @angelmsger/wecom-channel-cli@0.4.3
 wecom-channel-cli version
 wecom-channel-cli auth guide
 ```
@@ -352,3 +352,8 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 - [Official research and API coverage](docs/research.md)
 - [Generated command reference](docs/cli/README.md)
 - [Contributing](CONTRIBUTING.md)
+
+For unattended Linux deployments, use the [supervision and health-monitoring
+runbook](docs/security.md#supervision-and-health-monitoring): bounded restarts,
+separate local/upstream probes and local failure alerts, with an operator-owned
+integration point for external notification delivery.

@@ -153,3 +153,14 @@ the Linux service deployment is the production isolation reference.
 
 Do not latch HTTP outcome uncertainty as a terminal delivery error: reconciliation
 of verified non-acceptance resumes the remaining budget without a generic reset.
+
+Keep filesystem failures actionable with the first failing path and reason, not
+raw OS errors or file contents. Distinguish broker availability, authentication
+and uncertain writes; checksum drift alone is not a restart gate, and service
+credential loading is not disclosure.
+
+Keep host health probes outside model turns. Bound attempts and process lifetime,
+separate local readiness from upstream auth, and never load secrets or reset
+write state in a probe. Test transient recovery, persistent failure, hung children
+and service authority boundaries. Local journal alerts are not remote delivery;
+retain an explicit operator integration and host acceptance procedure.

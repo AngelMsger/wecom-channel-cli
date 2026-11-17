@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-11-17
+
+- Bound broker restarts and stop deterministic configuration/auth failures; wire
+  broker and relay failures to a local alert unit. Add independent, credential-free
+  local/upstream health timers with finite probe budgets, hard deadlines and an
+  operator guide for external alerts and recovery. Update the Skill to 0.1.13.
+
+- Report the failing path and reason in UNSAFE_PATH without weakening directory
+  checks or exposing file contents. Clarify broker recovery, checksum evidence
+  and service credential loading in the companion Skill.
+
 ## [0.4.2] — 2026-11-13
 
 - Preserve bounded, sanitized scan and delivery failure diagnostics across restart

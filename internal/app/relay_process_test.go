@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -177,9 +179,40 @@ func testCLIProcessRelay(t *testing.T, mode string) {
 	if code == 0 || out != "" || !strings.Contains(stderr, "READONLY_BLOCKED") {
 		t.Fatal(code, out, stderr)
 	}
-	out, stderr, code = runRelay(nil, append(append([]string{}, args...), "--after-sequence", "0")...)
-	if code != 0 || out != "" || !strings.Contains(stderr, "delivery_retry") {
-		t.Fatal(code, out, stderr)
+	// Stop only after the rejected delivery and its retry have been persisted.
+	// A short session deadline can cancel the HTTP exchange on a loaded runner,
+	// correctly producing an unknown outcome instead of the retry tested here.
+	firstArgs := append([]string{}, args...)
+	firstArgs[len(firstArgs)-3] = "1m"
+	firstArgs = append(firstArgs, "--after-sequence", "0")
+	bounded, stop := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stop()
+	process := exec.CommandContext(bounded, binary, firstArgs...)
+	process.Env = []string{"WECOM_CHANNEL_SOCKET=" + cfg.AgentSocket, "WECOM_CHANNEL_NO_SKILL_HINT=1", "TEST_GROK_TOKEN=synthetic"}
+	pipe, err := process.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstOut, firstErr bytes.Buffer
+	process.Stdout = &firstOut
+	if err = process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(pipe)
+	retryObserved := false
+	var signalErr error
+	for scanner.Scan() {
+		line := scanner.Text()
+		firstErr.WriteString(line + "\n")
+		if !retryObserved && strings.Contains(line, `"delivery_retry"`) {
+			retryObserved = true
+			signalErr = process.Process.Signal(syscall.SIGTERM)
+		}
+	}
+	waitErr := process.Wait()
+	stop()
+	if !retryObserved || signalErr != nil || scanner.Err() != nil || waitErr != nil || firstOut.Len() != 0 {
+		t.Fatal("relay did not stop cleanly after persisted retry", retryObserved, signalErr, scanner.Err(), waitErr, firstOut.String(), firstErr.String())
 	}
 	queued, exists, err := relay.Read(statePath)
 	if err != nil || !exists || queued.Depth() != 2 || queued.After != 2 || queued.Acknowledged != 0 {
