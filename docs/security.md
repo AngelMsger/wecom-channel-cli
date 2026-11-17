@@ -276,3 +276,163 @@ state/environment, secrets, policy writes, root escalation and external network
 access were denied. Worker effective capabilities were zero. Run the same fixture
 in Linux CI and repeat equivalent checks on the actual production deployment;
 this result does not attest an unrelated host or container configuration.
+
+## Broker recovery
+
+Separate local availability, upstream authentication and write outcomes. A missing
+process/socket or BROKER_UNREACHABLE proves unavailability, not a crash cause or
+invalid credentials. A changed configuration checksum proves only different bytes;
+compare available non-secret fields before claiming an authorization change.
+Do not invent a checksum-match prerequisite for an already authorized restart.
+
+In a trusted operator session, an authorized restart may reuse the existing
+reviewed service launcher and credential loader without printing secrets.
+Loading credentials into the service is not exposing them to the model. Channel
+workers must hand recovery to the operator; restart authorization does not grant
+worker credential access or operator-socket authority.
+
+For UNSAFE_PATH, inspect error.details.path and error.details.reason under the
+service identity. Older binaries only report a generic error: inspect policy,
+state and both socket parents, including every ancestor. A private leaf cannot
+fix a writable or foreign-owned ancestor. Repair only deployment-owned paths or
+use an operator-controlled migration that preserves the ledger and its binding.
+Never chmod shared parents blindly, delete state or disable checks.
+
+After restart, verify sustained process/socket readiness with doctor, then use
+operator-only auth check to test upstream authentication separately. Report
+what passed and the exact remaining failure. Recovery never authorizes replaying
+a post or resolving an uncertain write without evidence.
+
+The local UNSAFE_PATH details contain a path and a reason, never file contents
+or raw OS errors. Reasons are path_not_absolute_or_clean, directory_missing,
+directory_inspection_failed, symlink, not_directory, untrusted_owner,
+group_or_world_writable, leaf_owner_mismatch and private_directory_permissions.
+
+## Supervision and health monitoring
+
+The Linux deployment references provide process supervision, two independent
+bounded probes and a local failure alert. They require systemd, Python 3 and an
+operator-provisioned broker; they do not install themselves or create a remote
+notification subscription. A cloud host without systemd must provide equivalent
+supervision and schedules outside model turns. A terminal background process is
+not durable host supervision.
+
+### Restart policy
+
+The broker restarts after crashes and unexpected clean exits with a fixed
+10-second delay, limited to five starts per 300 seconds. An explicit
+`systemctl stop` does not restart it. Configuration (including UNSAFE_PATH),
+authentication, permission, not-found, parse and conflict exits stop immediately
+for operator repair. Usage/internal exits remain retryable because Go panics
+also exit 2; the start limit bounds them and other failures. The
+limit is not an automatic cooldown retry: after exhaustion, repair the cause
+and deliberately reset the failed unit before starting it.
+
+Both relay units retain their existing structured-error stop rule, durable retry
+budgets and uncertain-send protection. Normal bounded relay sessions renew;
+restarting cannot clear a terminal delivery error or authorize replay. Broker and
+relay failures route to `wecom-channel-alert@.service`. StateDirectory and the
+ledger survive process restarts; never delete them as a recovery shortcut.
+
+### Independent probes and alerts
+
+| Probe | Identity and endpoint | Schedule | Failure threshold and bounds |
+| --- | --- | --- | --- |
+| Local readiness | Dedicated `wecom-health` account, agent socket, `doctor` | 45 seconds after boot, then 60 seconds after each completed check | Three consecutive failures within one check; 5-second CLI deadline, 10-second hard process deadline, 5-second gaps; 50-second unit deadline |
+| Upstream authentication | Trusted broker account, operator socket, `auth check` | Two minutes after boot, then 15 minutes after each completed check | Three consecutive failures within one check; 30-second CLI deadline, 35-second hard process deadline, 10-second gaps; 135-second unit deadline |
+
+Timers add up to five seconds of jitter and five seconds of scheduling accuracy.
+A successful attempt ends that check; failure counts do not carry between timer
+runs. A failed check exits nonzero and triggers the alert unit. Every check emits
+only layer, status, attempts, reason and final CLI exit code to the journal;
+healthy results have priority info, unhealthy results priority error. No raw
+response, credential environment or channel content is recorded. A hard timeout
+kills and waits for the CLI child; systemd also bounds the complete process group.
+The helper only invokes the fixed installed CLI and supplies an isolated environment.
+Neither probe receives the broker EnvironmentFile or can restart a service.
+
+The local probe has no operator socket access. The upstream probe is trusted
+operator software running as the broker identity; it must never be exposed as a
+worker tool. It needs no Secret because the broker performs authentication. Its
+own process is restricted to Unix sockets. `doctor` success proves only local
+readiness, not WeCom authentication, disk capacity, queue freshness or end-to-end
+message delivery. An `auth check` failure may be network, permission or rate-limit
+related; it is not automatically an invalid credential diagnosis.
+
+Probe services deliberately have no `Requires=broker`, existence condition or
+`PartOf=broker`: a stopped broker still produces failed checks instead of silently
+skipping monitoring. For planned maintenance, stop the timers first. A recovered
+broker produces a healthy journal result on the next check. A hung broker is
+reported, not automatically killed: a probe failure alone cannot distinguish a
+hang from wrong socket coordinates or local permission trouble.
+
+The default alert handler writes an error-priority journal/syslog event naming
+the failed unit. It is a **local alert**, not email, paging or webhook delivery.
+Use the host's journal collector, or an operator-owned systemd drop-in replacing
+its ExecStart with a fixed notification executable to connect the chosen alert
+service. Keep notification credentials in that service, never in the worker,
+probe or broker interface. No destination is inferred from channel content.
+Repeated failed probe runs generate at most one alert activation per completed
+run; there is no durable incident deduplication or guaranteed remote delivery.
+Monitor the host and timers externally as well: a dead host cannot alert locally.
+For relay backlog and stale collection, monitor `relay status` timestamps and
+queue counts separately as described in [watching](watching.md).
+
+### Install on a provisioned Linux host
+
+Run these commands as the trusted host administrator after provisioning the
+broker accounts, policy, secret environment, binary and directory ownership
+from the Linux deployment reference above. Review the unit files first. The
+commands are examples for this repository checkout, not actions taken by an agent
+worker. Create a system account `wecom-health` with no login shell or home and
+primary group `wecom-channel-agents` using the host's account-management tools.
+It must not have access to the admin socket, credentials or ledger.
+
+```sh
+install -d -m 0755 /usr/local/libexec
+install -m 0644 deploy/check-health.py /usr/local/libexec/wecom-channel-check-health.py
+install -m 0644 deploy/wecom-channel-broker.service /etc/systemd/system/
+install -m 0644 deploy/wecom-channel-alert@.service /etc/systemd/system/
+install -m 0644 deploy/wecom-channel-health-*.service /etc/systemd/system/
+install -m 0644 deploy/wecom-channel-health-*.timer /etc/systemd/system/
+systemd-analyze verify /etc/systemd/system/wecom-channel-broker.service /etc/systemd/system/wecom-channel-health-*.service /etc/systemd/system/wecom-channel-health-*.timer /etc/systemd/system/wecom-channel-alert@probe.service
+systemctl daemon-reload
+systemctl enable --now wecom-channel-broker.service
+systemctl enable --now wecom-channel-health-local.timer wecom-channel-health-upstream.timer
+systemctl list-timers 'wecom-channel-health-*'
+```
+
+Install the updated relay unit and alert template together if a relay is used.
+On an existing running deployment, enable does not load changed process settings;
+schedule a deliberate service restart after reviewing in-flight operations.
+The sample socket coordinates match the single-context broker template. For a
+version 2 deployment, provision a separate pair of probe units and timers per
+context with fixed socket paths; probing one context does not cover every ledger.
+Do not feed context names or paths from channel events into service definitions.
+
+Inspect evidence before recovery:
+
+```sh
+systemctl status wecom-channel-broker.service wecom-channel-health-local.service wecom-channel-health-upstream.service
+journalctl -u wecom-channel-broker.service -n 50 --no-pager
+journalctl -u wecom-channel-health-local.service -u wecom-channel-health-upstream.service -n 50 --no-pager
+journalctl -t wecom-channel-alert -n 50 --no-pager
+```
+
+For UNSAFE_PATH, fix the exact deployment-owned path reported by the CLI under
+the real service identity. For upstream failure, check network, host time and
+operator credentials without printing secrets; restarting is not an auth repair.
+After fixing a stopped broker, use `systemctl reset-failed wecom-channel-broker.service`
+then `systemctl start wecom-channel-broker.service`, and run both probe services
+once to verify recovery. This does not reset or replay any proposal or relay batch.
+Use the proposal/relay reconciliation workflows for uncertain sends separately.
+
+Before relying on unattended operation, perform a staging drill with synthetic
+credentials and a local test backend: crash the broker and observe a bounded
+restart, introduce an unsafe deployment path and observe one terminal failure,
+stop the broker and observe local alerts, restore it and observe healthy checks,
+then block the test upstream and confirm only the upstream layer fails. Verify
+that a receiver's unknown outcome remains blocked across a restart. Test the
+chosen external alert route and host reboot recovery on the actual host. Repository
+unit/process tests cover probes and CLI recovery, not a live systemd deployment
+or external notification delivery.

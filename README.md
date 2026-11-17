@@ -352,3 +352,8 @@ prompt-injection detector and cannot make a privileged host agent safe by itself
 - [Official research and API coverage](docs/research.md)
 - [Generated command reference](docs/cli/README.md)
 - [Contributing](CONTRIBUTING.md)
+
+For unattended Linux deployments, use the [supervision and health-monitoring
+runbook](docs/security.md#supervision-and-health-monitoring): bounded restarts,
+separate local/upstream probes and local failure alerts, with an operator-owned
+integration point for external notification delivery.

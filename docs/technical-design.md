@@ -435,3 +435,27 @@ Terminal relay delivery failures also persist their error code in the inflight
 record. A process restart cannot retry a permission, redirect or invalid-ACK
 failure merely because attempts remain. Explicit `--retry-failed` after repair
 clears that latch; uncertain HTTP acceptance still requires evidence first.
+
+### Filesystem failure diagnosis
+
+`internal/securefs.Directory` preserves its acceptance rules and reports the first
+failing path and stable reason using the kit error details envelope. It exposes
+no file contents or raw OS errors. This broker-specific check has no equivalent
+in the sibling direct-service CLIs; no shared kit API or sibling changes are needed.
+See [broker recovery](security.md#broker-recovery) for operational guidance.
+
+### Host supervision
+
+Deployment-only Python probes invoke the existing doctor/auth-check primitives
+with a fixed binary, explicit socket, isolated environment and finite budgets.
+They suppress child output and emit only health metadata; no CLI command, broker
+endpoint, credential resolver or approval authority is added. Systemd bounds
+crash recovery and owns timers and failure notifications. Local readiness never
+implies upstream health. Probe failures do not restart services or reset durable
+state. See [supervision](security.md#supervision-and-health-monitoring).
+
+These deployment units are specific to the channel broker/relay. The sibling
+CLIs are direct service clients, so their transport/retry contracts and the kit
+remain unchanged. Python tests exercise fault sequences and real child timeouts;
+existing CLI process tests exercise state recovery. Live systemd lifecycle and
+external alert routing require the documented host acceptance drill.

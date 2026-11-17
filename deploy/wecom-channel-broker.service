@@ -2,6 +2,9 @@
 Description=WeCom channel credential broker
 Wants=network-online.target
 After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=wecom-channel-alert@%n.service
 
 [Service]
 Type=simple
@@ -36,7 +39,11 @@ LimitCORE=0
 MemoryMax=256M
 TasksMax=64
 TimeoutStopSec=70
-Restart=on-failure
+# Explicit systemctl stop never restarts. Configuration/auth/policy failures
+# need repair; crash and unexpected clean exit recovery remain bounded above.
+Restart=always
+# Go panics also exit 2, so usage/internal exits use the bounded retry budget.
+RestartPreventExitStatus=3 4 5 6 10 11
 RestartSec=10
 
 [Install]

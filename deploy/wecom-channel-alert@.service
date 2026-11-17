@@ -1,0 +1,14 @@
+[Unit]
+Description=Record WeCom channel service failure for %i
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+ExecStart=/usr/bin/logger --priority daemon.err --tag wecom-channel-alert -- "Unit %i failed; inspect its journal and the operator recovery guide."
+TimeoutStartSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_UNIX

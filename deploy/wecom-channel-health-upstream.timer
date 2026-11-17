@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically check WeCom channel upstream health without model turns
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=15min
+AccuracySec=5s
+RandomizedDelaySec=5s
+Unit=wecom-channel-health-upstream.service
+
+[Install]
+WantedBy=timers.target
