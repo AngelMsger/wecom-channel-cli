@@ -333,9 +333,20 @@ The operator must read the entire proposal, provide its digest and confirm with
 `sending` durably before token/network I/O. Concurrency is serialized around
 approval, while an exclusive state lock prevents another process using the same
 ledger. A returned remote ID is retained on success; a later persistence failure
-reports it explicitly. Any request failure is conservatively uncertain, even
-when the underlying failure may have occurred before sending. Reconciliation
-records evidence; it never resends.
+reports it explicitly. A failed approval retains the replay barrier and returns
+`WRITE_UNCERTAIN`. Its `details.failure` and the proposal's optional `failure`
+record carry the same evidence:
+
+| Phase | What is known about the business request |
+| --- | --- |
+| `prepare` | Local request preparation failed before dispatch. |
+| `token_bootstrap` | Token acquisition failed before dispatch. |
+| `business_request` | The request reached the transport. Its remote outcome is unconfirmed. |
+
+The record contains the normalized `code` and, when the client decoded a WeCom result,
+the numeric `upstream_errcode` (including zero for an incomplete success result). The existing proposal `error_code` remains
+available. Older records and interrupted sends can lack `failure`; their phase
+is unknown. Reconciliation records the operator's verified outcome.
 
 Each context has an event/proposal ledger: a single versioned JSON snapshot with 0600 atomic
 replacement, file and directory fsync, a private 0700 state directory and an

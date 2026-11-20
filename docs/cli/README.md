@@ -676,7 +676,7 @@ Usage:
 
 Available Commands:
   approve     Operator-only: approve and execute one exact pending proposal
-  get         Read a proposal, including an uncertain send outcome
+  get         Read a proposal, including the failure phase and WeCom error code when available
   list        Operator-only: list retained proposals in all states
   reject      Operator-only: reject one pending proposal without sending
   resolve     Operator-only: record a verified uncertain outcome; never resend
@@ -717,7 +717,7 @@ Global Flags:
 
 ## wecom-channel-cli proposal get
 
-Read a proposal, including an uncertain send outcome
+Read a proposal, including the failure phase and WeCom error code when available
 
 ```text
 Usage:

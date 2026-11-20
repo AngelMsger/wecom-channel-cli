@@ -21,16 +21,17 @@ import (
 )
 
 type Proposal struct {
-	ID        string                 `json:"id"`
-	Digest    string                 `json:"digest"`
-	Policy    string                 `json:"policy"`
-	Request   apiclient.WriteRequest `json:"request"`
-	Plan      apiclient.Plan         `json:"plan"`
-	Created   int64                  `json:"created_at"`
-	Expires   int64                  `json:"expires_at"`
-	Status    string                 `json:"status"`
-	RemoteID  string                 `json:"remote_id,omitempty"`
-	ErrorCode string                 `json:"error_code,omitempty"`
+	ID        string                    `json:"id"`
+	Digest    string                    `json:"digest"`
+	Policy    string                    `json:"policy"`
+	Request   apiclient.WriteRequest    `json:"request"`
+	Plan      apiclient.Plan            `json:"plan"`
+	Created   int64                     `json:"created_at"`
+	Expires   int64                     `json:"expires_at"`
+	Status    string                    `json:"status"`
+	RemoteID  string                    `json:"remote_id,omitempty"`
+	ErrorCode string                    `json:"error_code,omitempty"`
+	Failure   *apiclient.RequestFailure `json:"failure,omitempty"`
 }
 
 type Snapshot struct {

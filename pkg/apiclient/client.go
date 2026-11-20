@@ -47,12 +47,12 @@ func (c *HTTPClient) authorization(ctx context.Context) (string, error) {
 	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return "", e.New(e.CategoryInternal, "RANDOM_FAILED", "Secure randomness is unavailable.")
+		return "", PhaseTokenBootstrap.failed(e.New(e.CategoryInternal, "RANDOM_FAILED", "Secure randomness is unavailable."), nil)
 	}
 	n := hex.EncodeToString(nonce[:])
 	stamp := c.now().Unix()
 	sig := sha256.Sum256([]byte(c.secret + c.bot + strconv.FormatInt(stamp, 10) + n))
-	data, err := c.call(ctx, "/cgi-bin/aibot/get_token", "", map[string]any{"bot_id": c.bot, "time": stamp, "nonce": n, "signature": hex.EncodeToString(sig[:])})
+	data, err := c.call(ctx, PhaseTokenBootstrap, "/cgi-bin/aibot/get_token", "", map[string]any{"bot_id": c.bot, "time": stamp, "nonce": n, "signature": hex.EncodeToString(sig[:])})
 	if err != nil {
 		return "", err
 	}
@@ -60,14 +60,29 @@ func (c *HTTPClient) authorization(ctx context.Context) (string, error) {
 		Token string `json:"access_token"`
 	}
 	if safejson.Decode(data, &v, false) != nil || !Identifier(v.Token, 4096) {
-		return "", e.New(e.CategoryParse, "BAD_TOKEN", "WeCom returned no valid access token.")
+		return "", PhaseTokenBootstrap.failed(e.New(e.CategoryParse, "BAD_TOKEN", "WeCom returned no valid access token."), new(int))
 	}
 	c.token = v.Token
 	c.expires = c.now().Add(24*time.Hour - time.Minute)
 	return c.token, nil
 }
 
-func (c *HTTPClient) call(ctx context.Context, path, token string, body any) ([]byte, error) {
+func (c *HTTPClient) call(ctx context.Context, phase RequestPhase, path, token string, body any) ([]byte, error) {
+	req, err := newRequest(ctx, path, token, body)
+	if err != nil {
+		if phase == PhaseBusinessRequest {
+			phase = PhasePrepare
+		}
+		return nil, phase.failed(err, nil)
+	}
+	data, upstreamCode, err := c.exchange(req)
+	if err != nil {
+		return nil, phase.failed(err, upstreamCode)
+	}
+	return data, nil
+}
+
+func newRequest(ctx context.Context, path, token string, body any) (*http.Request, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, e.New(e.CategoryInternal, "ENCODE_FAILED", "Cannot encode request.")
@@ -81,23 +96,28 @@ func (c *HTTPClient) call(ctx context.Context, path, token string, body any) ([]
 		return nil, e.New(e.CategoryInternal, "REQUEST_FAILED", "Cannot construct request.")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(ctx, req)
+	return req, nil
+}
+
+// exchange returns the WeCom code when it can decode the response envelope.
+func (c *HTTPClient) exchange(req *http.Request) ([]byte, *int, error) {
+	resp, err := c.http.Do(req.Context(), req)
 	if err != nil {
-		return nil, e.New(e.CategoryNetwork, "REQUEST_UNCERTAIN", "The WeCom request did not return a reliable result.")
+		return nil, nil, e.New(e.CategoryNetwork, "REQUEST_UNCERTAIN", "The WeCom request did not return a reliable result.")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, e.New(e.CategoryServer, "HTTP_REJECTED", "WeCom returned a non-success HTTP status.").WithHTTPStatus(resp.StatusCode).WithDetails(failureMetadata(resp.Header, c.now()))
+		return nil, nil, e.New(e.CategoryServer, "HTTP_REJECTED", "WeCom returned a non-success HTTP status.").WithHTTPStatus(resp.StatusCode).WithDetails(failureMetadata(resp.Header, c.now()))
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil || len(data) > maxResponse {
-		return nil, e.New(e.CategoryParse, "RESPONSE_LIMIT", "The response was unreadable or exceeded 2 MiB.")
+		return nil, nil, e.New(e.CategoryParse, "RESPONSE_LIMIT", "The response was unreadable or exceeded 2 MiB.")
 	}
 	var result struct {
 		Code *int `json:"errcode"`
 	}
 	if safejson.Decode(data, &result, false) != nil || result.Code == nil {
-		return nil, e.New(e.CategoryParse, "BAD_RESPONSE", "WeCom returned an invalid result envelope.")
+		return nil, nil, e.New(e.CategoryParse, "BAD_RESPONSE", "WeCom returned an invalid result envelope.")
 	}
 	if *result.Code != 0 {
 		cat := e.CategoryServer
@@ -117,9 +137,9 @@ func (c *HTTPClient) call(ctx context.Context, path, token string, body any) ([]
 		}
 		x := e.New(cat, code, fmt.Sprintf("WeCom rejected the request (code %d).", *result.Code)).WithHint(hint).WithDetails(failureMetadata(resp.Header, c.now()))
 		x.Retryable = false
-		return nil, x
+		return nil, result.Code, x
 	}
-	return data, nil
+	return data, result.Code, nil
 }
 
 func (c *HTTPClient) request(ctx context.Context, path string, body any) ([]byte, error) {
@@ -127,7 +147,7 @@ func (c *HTTPClient) request(ctx context.Context, path string, body any) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	data, err := c.call(ctx, path, token, body)
+	data, err := c.call(ctx, PhaseBusinessRequest, path, token, body)
 	if ce, ok := err.(*e.CLIError); ok && ce.Code == "AUTH_REJECTED" {
 		c.mu.Lock()
 		if c.token == token {
@@ -141,7 +161,7 @@ func (c *HTTPClient) request(ctx context.Context, path string, body any) ([]byte
 func (c *HTTPClient) Send(ctx context.Context, r WriteRequest) (SendResult, error) {
 	p, err := BuildWrite(r)
 	if err != nil {
-		return SendResult{}, err
+		return SendResult{}, PhasePrepare.failed(err, nil)
 	}
 	b, err := c.request(ctx, p.Path, p.Body)
 	if err != nil {
@@ -156,14 +176,14 @@ func (c *HTTPClient) Send(ctx context.Context, r WriteRequest) (SendResult, erro
 		Reply string `json:"reply_id"`
 	}
 	if safejson.Decode(b, &v, false) != nil {
-		return SendResult{}, e.New(e.CategoryParse, "BAD_WRITE_RESULT", "The write result could not be decoded; reconcile before retrying.")
+		return SendResult{}, PhaseBusinessRequest.failed(e.New(e.CategoryParse, "BAD_WRITE_RESULT", "The write result could not be decoded; reconcile before retrying."), new(int))
 	}
 	id := v.Post
 	if r.Kind == "reply" {
 		id = v.Reply
 	}
 	if !Identifier(id, 128) {
-		return SendResult{}, e.New(e.CategoryParse, "BAD_WRITE_RESULT", "The write returned no resource ID; reconcile before retrying.")
+		return SendResult{}, PhaseBusinessRequest.failed(e.New(e.CategoryParse, "BAD_WRITE_RESULT", "The write returned no resource ID; reconcile before retrying."), new(int))
 	}
 	return SendResult{id, r.Kind}, nil
 }

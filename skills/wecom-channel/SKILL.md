@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.13
+version: 0.1.14
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.13` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.14` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -249,8 +249,10 @@ An agent-side `--allow-writes` never bypasses broker policy or approval.
 
 Report `pending` as awaiting review, not sent. `sent` includes the remote ID.
 For `sending`, `uncertain`, or a lost approval response, inspect `proposal get`;
-do not replay or create a replacement proposal. The operator reconciles with
-WeCom and records `proposal resolve`; resolution never resends anything.
+report `failure.phase` and `failure.upstream_errcode` when available.
+`prepare` and `token_bootstrap` mean the business request was never sent.
+`business_request` or missing evidence leaves the remote outcome unconfirmed.
+Keep the original proposal for operator reconciliation through `proposal resolve`.
 
 ## Limits and deployment
 

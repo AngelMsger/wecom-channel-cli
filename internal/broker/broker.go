@@ -4,6 +4,7 @@ package broker
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -447,12 +448,7 @@ func (b *Broker) approve(ctx context.Context, r Request) (Response, error) {
 	}
 	result, sendErr := b.API.Send(ctx, p.Request)
 	if sendErr != nil {
-		p.Status = "uncertain"
-		p.ErrorCode = e.Safe(sendErr).Code
-		_, saveErr := b.saveProposal(p)
-		x := e.New(e.CategoryConflict, "WRITE_UNCERTAIN", "The write may have reached WeCom; automatic replay is blocked.").WithDetails(map[string]any{"proposal_id": p.ID, "status": p.Status, "state_persisted": saveErr == nil}).WithNextSteps("wecom-channel-cli proposal get --id " + p.ID)
-		x.Retryable = false
-		return Response{}, x
+		return Response{}, b.recordWriteFailure(p, sendErr)
 	}
 	p.Status = "sent"
 	p.RemoteID = result.ID
@@ -461,6 +457,24 @@ func (b *Broker) approve(ctx context.Context, r Request) (Response, error) {
 		return Response{}, e.New(e.CategoryConflict, "WRITE_COMMITTED_STATE_FAILED", "WeCom returned success, but the final state could not be persisted. Do not resend.").WithDetails(map[string]any{"proposal_id": p.ID, "remote_id": result.ID}).WithNextSteps("wecom-channel-cli proposal get --id " + p.ID)
 	}
 	return out, nil
+}
+
+func (b *Broker) recordWriteFailure(p state.Proposal, err error) *e.CLIError {
+	p.Status = "uncertain"
+	details := map[string]any{"proposal_id": p.ID, "status": p.Status}
+	message := "The write may have reached WeCom; automatic replay is blocked."
+	if errors.As(err, &p.Failure) {
+		p.ErrorCode = p.Failure.Code
+		details["failure"] = p.Failure
+		if p.Failure.Unsubmitted() {
+			message = "The business request was never sent. The proposal is blocked from replay."
+		}
+	} else {
+		p.ErrorCode = e.Safe(err).Code
+	}
+	_, saveErr := b.saveProposal(p)
+	details["state_persisted"] = saveErr == nil
+	return e.New(e.CategoryConflict, "WRITE_UNCERTAIN", message).WithDetails(details).WithNextSteps("wecom-channel-cli proposal get --id " + p.ID)
 }
 
 func (b *Broker) saveProposal(p state.Proposal) (Response, error) {
