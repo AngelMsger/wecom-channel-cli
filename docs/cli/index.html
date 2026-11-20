@@ -435,7 +435,7 @@ Global Flags:
 
 Available Commands:
   approve     Operator-only: approve and execute one exact pending proposal
-  get         Read a proposal, including an uncertain send outcome
+  get         Read a proposal, including the failure phase and WeCom error code when available
   list        Operator-only: list retained proposals in all states
   reject      Operator-only: reject one pending proposal without sending
   resolve     Operator-only: record a verified uncertain outcome; never resend
@@ -463,7 +463,7 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
-      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-proposal-get"><h2>wecom-channel-cli proposal get</h2><p>Read a proposal, including an uncertain send outcome</p><pre><code>Usage:
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-proposal-get"><h2>wecom-channel-cli proposal get</h2><p>Read a proposal, including the failure phase and WeCom error code when available</p><pre><code>Usage:
   wecom-channel-cli proposal get [flags]
 
 Flags:

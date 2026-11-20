@@ -194,7 +194,7 @@ func (s *appState) proposeCommand(kind string) *cobra.Command {
 func (s *appState) proposalCommands() *cobra.Command {
 	g := &cobra.Command{Use: "proposal", Short: "Inspect immutable proposals; operator-only actions approve, reject or reconcile them"}
 	var id string
-	c := &cobra.Command{Use: "get", Short: "Read a proposal, including an uncertain send outcome", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	c := &cobra.Command{Use: "get", Short: "Read a proposal, including the failure phase and WeCom error code when available", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.call(cmd, broker.Request{Operation: "proposal.get", ID: id})
 	}}
 	c.Flags().StringVar(&id, "id", "", "Proposal ID from post/reply/reaction propose or proposal list")

@@ -37,7 +37,7 @@ func TestFailureMetadataThroughUpstreamErrors(t *testing.T) {
 			r.Header.Set("X-Request-ID", "secret-context-id")
 			return r, nil
 		})})
-		_, err := c.call(context.Background(), "/synthetic", "synthetic-token", nil)
+		_, err := c.call(context.Background(), PhaseBusinessRequest, "/synthetic", "synthetic-token", nil)
 		if err == nil {
 			t.Fatal("missing error")
 		}

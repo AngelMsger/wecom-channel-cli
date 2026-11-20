@@ -169,5 +169,5 @@ var _ Client = (*readOnly)(nil)
 func NewReadOnly(c Client) Client { return &readOnly{c} }
 
 func (*readOnly) Send(context.Context, WriteRequest) (SendResult, error) {
-	return SendResult{}, e.New(e.CategoryPermission, "READONLY_BLOCKED", "The broker is read-only.").WithHint("Only the operator can change the broker's read-only policy.")
+	return SendResult{}, PhasePrepare.failed(e.New(e.CategoryPermission, "READONLY_BLOCKED", "The broker is read-only.").WithHint("Only the operator can change the broker's read-only policy."), nil)
 }

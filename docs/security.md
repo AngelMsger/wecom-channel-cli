@@ -243,6 +243,12 @@ authentication token. There is no approve-all or auto-approve mode. Pending
 proposals expire after one hour by default (configurable down to 60 seconds).
 Policy changes invalidate existing proposals. Rejection is terminal.
 
+The approval diagnostic records only the failure phase, normalized code and
+optional numeric WeCom error. A `token_bootstrap` or `prepare` failure proves
+the business request was never sent. A business-endpoint authentication error
+leaves the remote outcome unconfirmed. A subsequent successful `auth check`
+verifies that read only.
+
 For an interrupted or uncertain send, retain the ledger, inspect the remote
 thread through a read or WeCom's UI, and record the verified result with
 `proposal resolve`. Do not approve a new key as a workaround. A success followed

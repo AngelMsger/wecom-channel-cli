@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	kit "github.com/angelmsger/agent-cli-kit/transport"
@@ -192,5 +193,58 @@ func TestRejectIncompletePaginationAndSpoofedApprovalText(t *testing.T) {
 		if _, err := BuildWrite(WriteRequest{Kind: "post", Channel: "c", Key: "k", Content: content}); err == nil {
 			t.Fatal("unsafe presentation accepted")
 		}
+	}
+}
+
+// NewTestClient lets external package tests exercise the real client with
+// synthetic responses. Production callers always use the pinned transport.
+func NewTestClient(t *testing.T, do func(*http.Request) (*http.Response, error)) *HTTPClient {
+	t.Helper()
+	c, err := New("test-bot", "synthetic-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.http = kit.New(kit.Options{Doer: doerFunc(do)})
+	return c
+}
+
+func TestLateAuthRejectionKeepsRefreshedToken(t *testing.T) {
+	staleInFlight := make(chan struct{})
+	releaseStale := make(chan struct{})
+	var tokens atomic.Int32
+	c := NewTestClient(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/cgi-bin/aibot/get_token" {
+			return response(fmt.Sprintf(`{"errcode":0,"access_token":"token-%d"}`, tokens.Add(1))), nil
+		}
+		if r.URL.Query().Get("access_token") == "token-1" {
+			if strings.HasSuffix(r.URL.Path, "/send_post") {
+				close(staleInFlight)
+				<-releaseStale
+			}
+			return response(`{"errcode":853004}`), nil
+		}
+		return response(`{"errcode":0,"topic_list":[],"has_more":false}`), nil
+	})
+	ctx := t.Context()
+	post := WriteRequest{Kind: "post", Channel: "channel", Content: "reviewed", Key: "once"}
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Send(ctx, post)
+		done <- err
+	}()
+	<-staleInFlight
+	// auth check uses channel.list. The first read evicts the old token;
+	// the next read obtains a replacement while the write is still in flight.
+	check := func() error {
+		_, err := c.Read(ctx, Query{Operation: "channel.list", Limit: 1})
+		return err
+	}
+	rejected := check()
+	refreshed := check()
+	close(releaseStale)
+	writeErr := <-done
+	reused := check()
+	if rejected == nil || refreshed != nil || writeErr == nil || reused != nil || tokens.Load() != 2 {
+		t.Fatalf("rejection=%v refresh=%v late write=%v reuse=%v token calls=%d", rejected, refreshed, writeErr, reused, tokens.Load())
 	}
 }

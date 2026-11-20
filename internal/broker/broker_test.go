@@ -222,6 +222,9 @@ func TestUncertainWriteSurvivesRestart(t *testing.T) {
 	b2.Now = b.Now
 	_, err = b2.Handle(context.Background(), r, true)
 	assertCode(t, err, "PROPOSAL_TERMINAL")
+	if saved := st.View().Proposals[p.ID]; saved.Failure != nil || saved.ErrorCode != "INTERNAL" {
+		t.Fatalf("unexpected evidence for an unclassified failure: %+v", saved.Failure)
+	}
 	if api.sends != 1 {
 		t.Fatal("uncertain send replayed")
 	}
@@ -383,6 +386,9 @@ func TestCrashMarkerAndKnownSuccessPersistenceFailure(t *testing.T) {
 		b2.Now = b.Now
 		_, err = b2.Handle(context.Background(), Request{Operation: "approval.approve", ID: p.ID, Digest: p.Digest, Yes: true}, true)
 		assertCode(t, err, "PROPOSAL_TERMINAL")
+		if st.View().Proposals[p.ID].Failure != nil {
+			t.Fatal("crash marker acquired submission evidence")
+		}
 		if api.sends != 0 {
 			t.Fatal("crash marker replayed")
 		}
