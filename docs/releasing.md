@@ -135,6 +135,13 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
+## Version 0.4.4
+
+Version 0.4.4 embeds companion Skill 0.1.14. Failed approvals now report
+where the request stopped and retain the WeCom result code when available.
+The same record is available after restart through `proposal get`.
+See the [release notes](release-notes.md).
+
 ## Version 0.4.3
 
 Version 0.4.3 embeds companion Skill 0.1.13, makes UNSAFE_PATH actionable and
@@ -142,7 +149,7 @@ adds bounded broker supervision, independent health probes and local failure
 alerts. Existing policy and ledger schemas are unchanged. Deploy the reviewed
 host units separately; upgrading the CLI does not install or activate them.
 See [supervision](security.md#supervision-and-health-monitoring) and
-[release notes](release-notes.md).
+the [0.4.3 release notes](https://github.com/AngelMsger/wecom-channel-cli/blob/v0.4.3/docs/release-notes.md).
 
 ## Version 0.4.2
 

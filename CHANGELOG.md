@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-11-20
+
 - Show where an approved write failed and preserve the numeric WeCom error in
   the approval response and proposal ledger. Token acquisition failures now
   report that the business request was never sent. Update the Skill to 0.1.14.
