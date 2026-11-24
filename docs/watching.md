@@ -759,8 +759,11 @@ The broker defaults to a 30-second minimum interval per scope, configurable from
 5 to 3600 seconds. `--interval` cannot shorten it. Concurrent watches of the same
 scope share one refresh; overlapping scopes share resource fingerprints and
 deduplicate changes. The per-context `requests_per_minute` also bounds remote
-reads across scopes. Failures stop the consumer; retrying the same scope before
-the minimum interval returns its cached failure rather than another remote attempt.
+reads across scopes. The broker saves each upstream request reservation before
+the read. A restart preserves the remaining minute allowance even when a
+different watch runs first or the previous pass already completed. Within the
+minimum interval a bounded watch sees the cached failure. A durable relay gets
+the next eligible time and can wait without charging another failed read.
 
 At most 32 distinct polling scopes and `poll_max_records` indexed resources are
 retained per context/policy. The defaults permit 100 data requests per snapshot

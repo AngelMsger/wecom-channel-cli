@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-24
+
 - Add a per-instance listener health timer, bounded scan-only read recovery,
   durable stop reasons and a scan-only repair flag. Resume whole-channel relay
   snapshots across rate windows and broker restarts while preserving the total
