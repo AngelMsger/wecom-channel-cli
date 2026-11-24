@@ -421,7 +421,10 @@ systemctl list-timers 'wecom-channel-health-*'
 
 For each expected listener, enable the independently provisioned timer, for
 example `systemctl enable --now wecom-channel-health-relay@engineering.timer`.
-Adapt the paths if using a custom supervisor or a non-template relay. The check
+For the standalone `wecom-channel-relay.service`, use a health instance such
+as `standalone` and override its service's `ExecStart` with the same command
+plus `--single`. This selects the standalone unit and its private sender path.
+Adapt the supervisor query for a custom supervisor. The check
 runs under the sender identity to read its private snapshot with a read-only
 filesystem and receives no credential environment. The monitor needs only the
 sanitized journal result. Keep the sender state directory private. Configure

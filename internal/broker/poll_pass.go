@@ -43,7 +43,13 @@ type pollPass struct {
 }
 
 func (p *pollPass) valid(ledger string) bool {
-	if p.Ledger != ledger || len(p.Policy) != 64 || len(p.Scope) != 64 || p.Started <= 0 || p.Requests < 1 || p.Requests > 1000 || p.Window.Start.IsZero() || p.Window.Count < 1 || p.Observations == nil || p.Seen == nil || (p.Replies && len(p.Remaining) == 0) || (!p.Replies && len(p.Remaining) != 0) {
+	if p.Ledger != ledger || len(p.Policy) != 64 || len(p.Scope) != 64 {
+		return false
+	}
+	if p.Started <= 0 || p.Requests < 1 || p.Requests > 1000 || p.Window.Start.IsZero() || p.Window.Count < 1 {
+		return false
+	}
+	if p.Seen == nil || p.Observations == nil || p.Replies != (len(p.Remaining) > 0) {
 		return false
 	}
 	if p.Cursor != "" && (!apiclient.Identifier(p.Cursor, 256) || !p.Seen[p.Cursor]) {

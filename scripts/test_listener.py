@@ -62,3 +62,15 @@ class ListenerTest(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         record = json.loads(output.getvalue().removeprefix("<3>"))
         self.assertEqual(record, {"ok": False, "instance": "engineering", "reason": "relay_down", "restarts": 0})
+
+    def test_active_standalone_unit_reads_its_own_state(self):
+        import contextlib
+        import io
+        import json
+        unit = b"LoadState=loaded\nActiveState=active\nSubState=running\nNRestarts=0\nActiveEnterTimestampMonotonic=1000000\n"
+        with patch("sys.argv", ["check-listener.py", "standalone", "--single"]), \
+                patch.object(listener, "read", side_effect=[unit, json.dumps(self.state)]) as run, \
+                patch("time.time", return_value=1000), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(listener.main(), 0)
+        self.assertIn("wecom-channel-relay.service", run.call_args_list[0].args[0])
+        self.assertEqual(run.call_args_list[1].args[0][-1], "/var/lib/wecom-relay/state.json")

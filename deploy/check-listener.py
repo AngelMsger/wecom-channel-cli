@@ -67,6 +67,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("instance")
     parser.add_argument("--paused", action="store_true")
+    parser.add_argument("--single", action="store_true", help="check the standalone relay service and state path")
     for name, default in [("interval", 30), ("timeout", 65), ("grace", 60), ("startup", 300),
                           ("queue-age", 300), ("queue-limit", 1000), ("snapshot-age", 300),
                           ("outage", 600)]:
@@ -75,10 +76,14 @@ def main():
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", args.instance) or any(
             value <= 0 for value in vars(args).values() if type(value) is int):
         parser.error("invalid listener name or probe bound")
+    service = "wecom-channel-relay@" + args.instance + ".service"
+    path = "/var/lib/wecom-relay-" + args.instance + "/state.json"
+    if args.single:
+        service, path = "wecom-channel-relay.service", "/var/lib/wecom-relay/state.json"
     reason, restarts = "probe_failed", None
     try:
         unit = dict(line.split("=", 1) for line in read([
-            "/usr/bin/systemctl", "show", "wecom-channel-relay@" + args.instance + ".service",
+            "/usr/bin/systemctl", "show", service,
             "--property=LoadState,ActiveState,SubState,ActiveEnterTimestampMonotonic,NRestarts"
         ]).decode().splitlines())
         if unit["LoadState"] != "loaded":
@@ -88,7 +93,7 @@ def main():
         if not args.paused and unit["ActiveState"] == "active":
             try:
                 state = json.loads(read(["/usr/local/bin/wecom-channel-cli", "relay", "status",
-                                         "--state", "/var/lib/wecom-relay-" + args.instance + "/state.json"]))
+                                         "--state", path]))
             except subprocess.CalledProcessError:
                 pass
         reason = assess(unit, state, args, time.time())
