@@ -10,6 +10,7 @@ import (
 )
 
 type ScanRequest struct {
+	ResumePoll   bool     `json:"resume_poll,omitempty"`
 	Preview      bool     `json:"-"`
 	WholeChannel bool     `json:"whole_channel"`
 	Posts        []string `json:"posts,omitempty"`
@@ -37,6 +38,8 @@ type WatchCoverage struct {
 	Note                string   `json:"note"`
 }
 type ScanPage struct {
+	Progress      *PollProgress      `json:"poll_progress,omitempty"`
+	LastSnapshot  int64              `json:"last_snapshot_at,omitempty"`
 	Items         []apiclient.Record `json:"items"`
 	After         int64              `json:"after_sequence"`
 	HighWatermark int64              `json:"high_watermark"`
@@ -104,8 +107,10 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 	if r.After > high {
 		return ScanPage{}, e.New(e.CategoryConflict, "SEQUENCE_AHEAD", "The checkpoint is ahead of this inbox.")
 	}
+	var progress *PollProgress
 	if backend == "poll" && !r.Preview && (r.FromNow || r.After == high) {
-		if err := b.poll(ctx, r); err != nil {
+		progress, err = b.poll(ctx, r)
+		if err != nil {
 			return ScanPage{}, err
 		}
 		_, high, events = b.Store.Inbox()
@@ -121,6 +126,15 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		coverage.Note = "Snapshot observations of resources authored by other users/bots; this bot's posts/replies are excluded, but other authors' replies to its posts remain eligible. Missing or ambiguous creators stop the snapshot. Change actors remain unknown. First snapshot is a baseline; edits may coalesce; absence is not deletion; recall requires a returned flag. Only fingerprints and event metadata persist. Polling runs only while a watch requests scans."
 	}
 	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: coverage}
+	if r.ResumePoll && backend == "poll" {
+		last, _ := b.Store.PollStatus(pollScope(b.Config, r))
+		p.LastSnapshot = last * 1000
+		if progress != nil {
+			p.Progress = progress
+			p.HasMore = p.After < high
+			return p, nil
+		}
+	}
 	if r.FromNow {
 		p.After = high
 		return p, nil

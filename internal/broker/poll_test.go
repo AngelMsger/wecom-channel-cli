@@ -138,6 +138,22 @@ func TestPollingBaselineChangesRecallAndRestart(t *testing.T) {
 	}
 }
 
+// These fixtures stay in one rate window. Failed reads must spend exactly one
+// credit each while leaving every other ledger field untouched.
+func ledgerAfterReads(t *testing.T, b *Broker, f *pollAPI) string {
+	t.Helper()
+	snapshot := b.Store.View()
+	charged := 0
+	if snapshot.PollWindow != nil {
+		charged = snapshot.PollWindow.Count
+	}
+	if charged != len(f.reads) {
+		t.Fatalf("charged %d requests for %d upstream reads", charged, len(f.reads))
+	}
+	snapshot.PollWindow = nil
+	return apiclient.Digest(snapshot)
+}
+
 func TestPollingFailureDoesNotAdvanceSnapshot(t *testing.T) {
 	b, f := pollFixture(t)
 	setPosts(f, polled("old", "", "before", false))
@@ -145,14 +161,14 @@ func TestPollingFailureDoesNotAdvanceSnapshot(t *testing.T) {
 	if _, err := b.scan(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
-	before := apiclient.Digest(b.Store.View())
+	before := ledgerAfterReads(t, b, f)
 	setPosts(f, polled("old", "", "after", false))
 	f.fail = "reply.list/old/"
 	tick(b)
 	if _, err := b.scan(context.Background(), r); err == nil {
 		t.Fatal("missing read error")
 	}
-	if apiclient.Digest(b.Store.View()) != before {
+	if ledgerAfterReads(t, b, f) != before {
 		t.Fatal("partial snapshot committed")
 	}
 	reads := len(f.reads)
@@ -244,14 +260,14 @@ func TestPollingPaginationBoundsAndCancellation(t *testing.T) {
 				ctx, cancel = context.WithTimeout(ctx, 20*time.Millisecond)
 				defer cancel()
 			}
-			before := apiclient.Digest(b.Store.View())
+			before := ledgerAfterReads(t, b, f)
 			_, err := b.scan(ctx, r)
 			if want != "" {
 				assertCode(t, err, want)
 			} else if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
-			if apiclient.Digest(b.Store.View()) != before {
+			if ledgerAfterReads(t, b, f) != before {
 				t.Fatal("failed poll advanced baseline")
 			}
 		})
@@ -307,13 +323,13 @@ func TestPollingCompletePaginationAndAtomicInboxCapacity(t *testing.T) {
 	if p, err := b.scan(context.Background(), r); err != nil || p.After != 0 || len(f.reads) != 5 {
 		t.Fatal(p, err, f.reads)
 	}
-	before := apiclient.Digest(b.Store.View())
+	before := ledgerAfterReads(t, b, f)
 	f.pages["post.list//"] = apiclient.Page{Items: []apiclient.Record{polled("a", "", "new-a", false)}, HasMore: true, Next: "next"}
 	f.pages["post.list//next"] = apiclient.Page{Items: []apiclient.Record{polled("b", "", "new-b", false)}}
 	tick(b)
 	_, err := b.scan(context.Background(), r)
 	assertCode(t, err, "INBOX_FULL")
-	if apiclient.Digest(b.Store.View()) != before {
+	if ledgerAfterReads(t, b, f) != before {
 		t.Fatal("capacity failure committed a partial diff")
 	}
 }

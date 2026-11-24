@@ -1,6 +1,8 @@
 package state
 
 import (
+	"bytes"
+	"encoding/json"
 	"slices"
 	"time"
 
@@ -14,6 +16,7 @@ type PollResource struct {
 	Digest string `json:"digest"`
 }
 type PollState struct {
+	Revision  uint64                  `json:"revision,omitempty"`
 	Policy    string                  `json:"policy"`
 	Scopes    map[string]PollScope    `json:"scopes"`
 	Resources map[string]PollResource `json:"resources"`
@@ -48,6 +51,7 @@ func (s *Store) CommitPoll(policy, scope string, whole bool, posts []string, obs
 			st.Polling = p
 		}
 		_, initialized := p.Scopes[scope]
+		changed := !initialized
 		if !initialized && len(p.Scopes) >= 32 {
 			return e.New(e.CategoryRateLimit, "POLL_SCOPE_LIMIT", "This context already tracks 32 polling scopes. Reuse an existing scope or ask the operator to provision another context.")
 		}
@@ -64,6 +68,7 @@ func (s *Store) CommitPoll(policy, scope string, whole bool, posts []string, obs
 			if !exists && len(p.Resources) >= maxRecords {
 				return e.New(e.CategoryRateLimit, "POLL_CAPACITY", "The persistent polling index reached poll_max_records; narrow the scope or ask the operator to review capacity. No partial snapshot was committed.")
 			}
+			changed = true
 			p.Resources[observation.Key] = PollResource{Digest: observation.Digest}
 			if observation.Event.IsSelf() {
 				continue // Keep comparison progress, but never enqueue our own content.
@@ -90,7 +95,53 @@ func (s *Store) CommitPoll(policy, scope string, whole bool, posts []string, obs
 			v.ID = apiclient.Digest([]any{"poll", st.ID, v.Sequence, observation.Key, observation.Digest})
 			st.Events[v.ID] = v
 		}
+		if changed {
+			p.Revision++
+		}
+		if whole {
+			st.StagedPoll = nil
+		}
 		p.Scopes[scope] = PollScope{LastSuccess: now.Unix(), Whole: whole, Posts: slices.Clone(posts)}
+		return nil
+	})
+}
+
+func (s *Store) StagedPoll() (json.RawMessage, uint64, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var rev uint64
+	if s.snapshot.Polling != nil {
+		rev = s.snapshot.Polling.Revision
+	}
+	return bytes.Clone(s.snapshot.StagedPoll), rev, s.snapshot.ID
+}
+
+func (s *Store) SavePollStage(data json.RawMessage) error {
+	return s.Update(func(st *Snapshot) error { st.StagedPoll = data; return nil })
+}
+
+// RateWindow tracks reserved requests in a fixed one-minute window.
+type RateWindow struct {
+	Start time.Time `json:"start"`
+	Count int       `json:"count"`
+}
+
+func (s *Store) PollRateWindow() RateWindow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snapshot.PollWindow == nil {
+		return RateWindow{}
+	}
+	return *s.snapshot.PollWindow
+}
+
+// A plain watch reserves a rate credit without changing another listener's pass.
+func (s *Store) ReservePollRead(window RateWindow, stage json.RawMessage) error {
+	return s.Update(func(st *Snapshot) error {
+		st.PollWindow = &window
+		if stage != nil {
+			st.StagedPoll = stage
+		}
 		return nil
 	})
 }

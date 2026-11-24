@@ -29,5 +29,12 @@ func (f *RequestFailure) Unsubmitted() bool {
 // Keep the CLI error and its transport details available to existing readers.
 func (phase RequestPhase) failed(err error, upstreamCode *int) *e.CLIError {
 	cause := e.Safe(err)
+	if cause.Code == "AUTH_REJECTED" && upstreamCode != nil {
+		m := ReadFailureMetadata(cause.Details)
+		m.Phase, m.UpstreamCode = phase, *upstreamCode
+		if m.Valid() {
+			cause = cause.WithDetails(m)
+		}
+	}
 	return cause.WithCause(&RequestFailure{Phase: phase, Code: cause.Code, UpstreamErrcode: upstreamCode})
 }

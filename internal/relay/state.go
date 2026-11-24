@@ -62,6 +62,15 @@ type Receipt struct {
 }
 
 type State struct {
+	StartedAt         int64                `json:"started_at,omitempty"`
+	ScanBlocked       e.Category           `json:"scan_blocked,omitempty"`
+	AuthRecovery      bool                 `json:"auth_recovery,omitempty"`
+	RetryStarted      bool                 `json:"scan_retry_started,omitempty"`
+	FirstFailure      int64                `json:"first_scan_failure_at,omitempty"`
+	ScanHistory       []ErrorRecord        `json:"scan_history,omitempty"`
+	QueueLimit        int                  `json:"queue_limit,omitempty"`
+	LastSnapshot      int64                `json:"last_snapshot_at,omitempty"`
+	Progress          *broker.PollProgress `json:"poll_progress,omitempty"`
 	Version           int                  `json:"relay_version"`
 	Consumer          string               `json:"consumer"`
 	Identity          broker.WatchIdentity `json:"identity"`
@@ -267,6 +276,14 @@ func Read(path string) (State, bool, error) {
 }
 
 func (s State) Validate() error {
+	if len(s.ScanHistory) > 8 || s.QueueLimit < 0 || s.QueueLimit > 10000 || s.LastSnapshot < 0 || s.FirstFailure < 0 || (s.ScanBlocked != "" && s.LastScanError == nil) || (s.RetryStarted && s.ScanFailures == 0) || (s.Progress != nil && !s.Progress.Valid()) {
+		return stateError()
+	}
+	for i := range s.ScanHistory {
+		if !s.ScanHistory[i].valid("scan") {
+			return stateError()
+		}
+	}
 	if !s.LastScanError.valid("scan") || !s.LastDeliveryError.valid("delivery") {
 		return stateError()
 	}

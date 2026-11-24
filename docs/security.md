@@ -407,6 +407,7 @@ It must not have access to the admin socket, credentials or ledger.
 ```sh
 install -d -m 0755 /usr/local/libexec
 install -m 0644 deploy/check-health.py /usr/local/libexec/wecom-channel-check-health.py
+install -m 0644 deploy/check-listener.py /usr/local/libexec/wecom-channel-check-listener.py
 install -m 0644 deploy/wecom-channel-broker.service /etc/systemd/system/
 install -m 0644 deploy/wecom-channel-alert@.service /etc/systemd/system/
 install -m 0644 deploy/wecom-channel-health-*.service /etc/systemd/system/
@@ -417,6 +418,18 @@ systemctl enable --now wecom-channel-broker.service
 systemctl enable --now wecom-channel-health-local.timer wecom-channel-health-upstream.timer
 systemctl list-timers 'wecom-channel-health-*'
 ```
+
+For each expected listener, enable the independently provisioned timer, for
+example `systemctl enable --now wecom-channel-health-relay@engineering.timer`.
+For the standalone `wecom-channel-relay.service`, use a health instance such
+as `standalone` and override its service's `ExecStart` with the same command
+plus `--single`. This selects the standalone unit and its private sender path.
+Adapt the supervisor query for a custom supervisor. The check
+runs under the sender identity to read its private snapshot with a read-only
+filesystem and receives no credential environment. The monitor needs only the
+sanitized journal result. Keep the sender state directory private. Configure
+the external notification receiver and verify a test incident and recovery.
+See [listener monitoring](watching.md#monitor-each-expected-listener) for deadlines.
 
 Install the updated relay unit and alert template together if a relay is used.
 On an existing running deployment, enable does not load changed process settings;

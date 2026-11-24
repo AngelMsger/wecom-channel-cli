@@ -35,6 +35,8 @@ type Proposal struct {
 }
 
 type Snapshot struct {
+	PollWindow        *RateWindow               `json:"poll_rate_window,omitempty"`
+	StagedPoll        json.RawMessage           `json:"staged_poll,omitempty"`
 	ID                string                    `json:"ledger_id,omitempty"`
 	Scope             string                    `json:"scope,omitempty"`
 	NextEventSequence int64                     `json:"next_event_sequence"`

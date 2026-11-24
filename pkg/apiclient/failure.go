@@ -13,11 +13,23 @@ import (
 // FailureMetadata is the only upstream error context passed to scan consumers.
 // Correlation is hashed; no header, body, URL or resource identifier is retained.
 type FailureMetadata struct {
-	RetryAfterSeconds int64  `json:"retry_after_seconds,omitempty"`
-	RequestIDDigest   string `json:"request_id_digest,omitempty"`
+	RequestsUsed      int          `json:"requests_used,omitempty"`
+	RequestLimit      int          `json:"request_limit,omitempty"`
+	RecordsSeen       int          `json:"records_seen,omitempty"`
+	RecordLimit       int          `json:"record_limit,omitempty"`
+	Phase             RequestPhase `json:"request_phase,omitempty"`
+	UpstreamCode      int          `json:"upstream_errcode,omitempty"`
+	RetryAfterSeconds int64        `json:"retry_after_seconds,omitempty"`
+	RequestIDDigest   string       `json:"request_id_digest,omitempty"`
 }
 
 func (m FailureMetadata) Valid() bool {
+	if m.RequestsUsed < 0 || m.RequestsUsed > 1000 || m.RequestLimit < 0 || m.RequestLimit > 1000 || m.RecordsSeen < 0 || m.RecordsSeen > 100001 || m.RecordLimit < 0 || m.RecordLimit > 100000 {
+		return false
+	}
+	if m.Phase != "" && m.Phase != PhaseBusinessRequest && m.Phase != PhaseTokenBootstrap || m.UpstreamCode < 0 || m.UpstreamCode > 1<<31-1 {
+		return false
+	}
 	if m.RetryAfterSeconds < 0 || m.RetryAfterSeconds > 1<<31-1 {
 		return false
 	}
@@ -39,23 +51,21 @@ func ReadFailureMetadata(details any) FailureMetadata {
 	case FailureMetadata:
 		m = v
 	case map[string]any:
-		switch n := v["retry_after_seconds"].(type) {
-		case json.Number:
-			if seconds, err := n.Int64(); err == nil {
-				m.RetryAfterSeconds = seconds
-			}
-		case float64:
-			if n >= 0 && n <= 1<<31-1 && n == float64(int64(n)) {
-				m.RetryAfterSeconds = int64(n)
-			}
-		}
+		m.RetryAfterSeconds = int64(diagnosticNumber(v["retry_after_seconds"]))
+		phase, _ := v["request_phase"].(string)
+		m.Phase = RequestPhase(phase)
+		m.UpstreamCode = diagnosticNumber(v["upstream_errcode"])
+		m.RequestsUsed = diagnosticNumber(v["requests_used"])
+		m.RequestLimit = diagnosticNumber(v["request_limit"])
+		m.RecordsSeen = diagnosticNumber(v["records_seen"])
+		m.RecordLimit = diagnosticNumber(v["record_limit"])
 		m.RequestIDDigest, _ = v["request_id_digest"].(string)
 	}
 	if m.RetryAfterSeconds < 0 || m.RetryAfterSeconds > 1<<31-1 {
 		m.RetryAfterSeconds = 0
 	}
 	if !m.Valid() {
-		m.RequestIDDigest = ""
+		return FailureMetadata{RetryAfterSeconds: m.RetryAfterSeconds}
 	}
 	return m
 }
@@ -78,4 +88,19 @@ func failureMetadata(h http.Header, now time.Time) FailureMetadata {
 		m.RequestIDDigest = hex.EncodeToString(sum[:])
 	}
 	return ReadFailureMetadata(m)
+}
+
+func diagnosticNumber(value any) int {
+	switch n := value.(type) {
+	case json.Number:
+		i, err := strconv.ParseInt(string(n), 10, 32)
+		if err == nil && i >= 0 {
+			return int(i)
+		}
+	case float64:
+		if n >= 0 && n <= 1<<31-1 && n == float64(int(n)) {
+			return int(n)
+		}
+	}
+	return 0
 }

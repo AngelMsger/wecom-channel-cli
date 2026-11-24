@@ -135,12 +135,19 @@ The environment identity described above does not add a step or an approval.
 The stronger checksum installer and the connector's Unix-only platform boundary
 remain product-specific requirements.
 
+## Version 0.5.0
+
+Version 0.5.0 embeds companion Skill 0.1.15. Durable relays can resume
+whole-channel scans across rate windows and broker restarts. Linux hosts can
+monitor each expected listener independently of the broker. See the
+[upgrade and rollout notes](release-notes.md).
+
 ## Version 0.4.4
 
 Version 0.4.4 embeds companion Skill 0.1.14. Failed approvals now report
 where the request stopped and retain the WeCom result code when available.
 The same record is available after restart through `proposal get`.
-See the [release notes](release-notes.md).
+See the [0.4.4 release notes](https://github.com/AngelMsger/wecom-channel-cli/blob/v0.4.4/docs/release-notes.md).
 
 ## Version 0.4.3
 
