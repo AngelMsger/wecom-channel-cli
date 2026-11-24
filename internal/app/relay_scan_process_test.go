@@ -116,3 +116,81 @@ func TestCLIProcessRelayScanDeadlineRestartAndRecovery(t *testing.T) {
 		t.Fatal(err, saved)
 	}
 }
+
+func TestCLIProcessRelayKilledDuringScanBackoff(t *testing.T) {
+	binary := os.Getenv("WECOM_CHANNEL_TEST_BINARY")
+	if binary == "" {
+		t.Skip("make e2e supplies the executable")
+	}
+	dir, err := os.MkdirTemp("/tmp", "wck-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(dir, "b.sock")
+	listener, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scans atomic.Int32
+	server := http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scans.Add(1)
+		cause := e.New(e.CategoryNetwork, "RESPONSE_INTERRUPTED", "synthetic").WithDetails(map[string]int{"retry_after_seconds": 60})
+		w.WriteHeader(503)
+		_ = json.NewEncoder(w).Encode(cause.Payload())
+	})}
+	go server.Serve(listener)
+	defer server.Close()
+	cfg := relay.DefaultConfig()
+	cfg.URL = "http://127.0.0.1:1/unused"
+	cfg.RetryLimit = 2
+	data, _ := json.Marshal(cfg)
+	conf, stPath := filepath.Join(dir, "relay.json"), filepath.Join(dir, "state.json")
+	if err = os.WriteFile(conf, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := func(duration string) *exec.Cmd {
+		cmd := exec.Command(binary, "--socket", sock, "relay", "run", "--whole-channel", "--state", stPath, "--config", conf, "--duration", duration)
+		cmd.Env = []string{"WECOM_CHANNEL_NO_SKILL_HINT=1"}
+		return cmd
+	}
+	cmd := command("20s")
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cmd.ProcessState == nil {
+			cmd.Process.Kill()
+			cmd.Wait()
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	var before relay.State
+	for time.Now().Before(deadline) {
+		before, _, err = relay.Read(stPath)
+		if err == nil && before.ScanFailures == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if before.NextScan == 0 || before.LastScanError == nil || scans.Load() != 1 {
+		t.Fatal("backoff was not saved", before)
+	}
+	if err = cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Wait() == nil {
+		t.Fatal("expected interrupted process")
+	}
+	if out, err := command("100ms").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	after, _, err := relay.Read(stPath)
+	if err != nil || after.NextScan != before.NextScan || after.ScanFailures != 1 || scans.Load() != 1 || after.Depth() != 0 {
+		t.Fatal(err, after, scans.Load())
+	}
+}

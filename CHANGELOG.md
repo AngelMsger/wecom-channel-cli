@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Add a per-instance listener health timer, bounded scan-only read recovery,
+  durable stop reasons and a scan-only repair flag. Resume whole-channel relay
+  snapshots across rate windows and broker restarts while preserving the total
+  budget and quiet baseline. Update the companion Skill to 0.1.15.
+
 ## [0.4.4] — 2026-11-20
 
 - Show where an approved write failed and preserve the numeric WeCom error in

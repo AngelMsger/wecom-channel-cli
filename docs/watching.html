@@ -196,7 +196,7 @@ inflight batches fall back to broker receipt time, an upper bound on queue age.
 <code>last_scan_error</code> and <code>last_delivery_error</code>, when present, retain the most recent
 failure even after recovery. Each includes a bounded code, fixed sanitized cause,
 phase, <code>at</code> timestamp, attempt, effective retry limit, retryability and HTTP status.
-Metadata contains only validated retry guidance and, when available, a SHA-256
+Metadata can include bounded scan capacity counts, authentication phase/code, validated retry guidance and a SHA-256
 digest of <code>X-Request-ID</code>; it contains no raw error text, headers, payload, URL,
 credential or context ID. A diagnostic is history, not an active failure latch;
 compare it with current counters, <code>terminal_error</code> and success timestamps.
@@ -206,6 +206,29 @@ already durable in that state. Status cannot prove
 process liveness; compare timestamps with the configured scan interval and use
 the supervisor for exit/liveness checks. Normal relay stdout is empty; structured
 startup, retry, acknowledgment, stop and failure notices go to stderr.</p>
+<h3 id="monitor-each-expected-listener">Monitor each expected listener</h3>
+<p>Install the listener probe and timer from <a href="security.html">the Linux deployment guide</a>.
+Enable <code>wecom-channel-health-relay@NAME.timer</code> for each expected relay instance,
+including instances whose service has exited. The timer runs independently of
+the relay and the broker. Under the relay identity the probe reads systemd and
+<code>relay status</code>. It prints a bounded JSON result with the instance, reason,
+restart count and <code>ok</code>. Exit 1 signals failure. Route these results to an
+external monitor, group incidents by host, instance and reason, and close the
+incident on recovery. Alert on restart bursts and missing probe results there.
+Test with a mock listener stopped while its broker stays up, then verify receipt
+at the deployment's actual notification destination.</p>
+<p>The supplied timer runs about once a minute. Startup allows 300 seconds. With
+the default 30-second scan interval, 65-second request timeout and 60-second
+grace, an active listener with no scheduled retry becomes stale after 155 seconds.
+A scheduled retry reports <code>retry_wait</code> and gets its deadline plus grace, with a
+separate 600-second outage bound. A full queue, a blocked scan, an unknown
+delivery, or queued work over 300 seconds old fails the check. Empty scans keep
+a quiet callback listener healthy. For polling, the last fully committed snapshot
+has its own 300-second age limit. Partial pages and inbox draining cannot refresh
+that timestamp. Use a per-instance service drop-in to adjust probe arguments
+to the provisioned rate, scope, queue limit, and freshness objective. For a
+deliberately paused relay, add <code>--paused</code> to the probe arguments and keep its
+timer enabled. An unexpectedly running paused service also fails the check.</p>
 <h3 id="filters-and-batching">Filters and batching</h3>
 <table>
 <thead>
@@ -349,9 +372,16 @@ known rate limits. HTTP acceptance mode never automatically retries a transport
 error; only a received 408/429/5xx is eligible under the documented host contract.
 They do not apply to permissions/authentication, redirects, malformed acknowledgments,
 protocol errors, snapshot capacity/budget limits, missing history or changed bindings.
-Read-only scans additionally retry <code>BUSY</code> (temporary broker concurrency saturation)
+Read-only scans additionally retry interrupted sub-cap response bodies, <code>BUSY</code> (temporary broker concurrency saturation)
 and <code>POLL_UNSTABLE</code> (a snapshot discarded because a resource changed during paging).
-Those scan-only cases do not authorize another webhook attempt. A successful scan
+After an expired-token rejection on a business read (853004 or 42001),
+one subsequent scan can use a freshly acquired token within the configured scan
+budget. Rejected bootstrap credentials, repeated rejection, an unknown auth code
+and a confirmed response over 2 MiB stop the scan. A blocked sender retains its
+cause, up to eight sanitized scan failures, and its independent delivery budget.
+Use <code>relay run --retry-scan</code> with the original state and arguments after repair.
+Normal restarts preserve the block. Those scan-only cases cannot authorize
+another webhook attempt. A successful scan
 resets consecutive scan failures automatically; delivery counters remain separate.
 The existing <code>watch</code> still stops without reconnecting. Relay scan and delivery
 counters and effective limits are independent; an upstream transient failure can coexist with draining
@@ -719,10 +749,30 @@ remain excluded by the HTTP client's existing projection.</p>
 Selected-thread polling reads only the selected posts and their replies. Creation
 time is not a modification cursor: each cycle revisits the visible snapshot,
 using a fixed creation-time window from Unix second 1 to that cycle's start plus
-one second. This includes replies and edits on old posts. All pages must complete
+one second. This includes replies and edits on old posts. For a bounded watch all pages must complete
 within the scan timeout and configured request/record budgets; exhaustion or a
 failed page stops the watch without committing a partial baseline. Large channels
 may require selected threads, a longer <code>--timeout</code>, or an operator-reviewed budget.</p>
+<p>A durable whole-channel relay requests resumable scans. Upgrade its broker first.
+The broker fixes the creation cutoff, reserves each read against the total cap,
+and saves the next post/reply cursor and metadata after validating a page.
+It releases the poll gate after at most eight reads, spaces slices against the
+context RPM, and yields at a rate window or approaching request deadline.
+Progress in <code>relay status</code> includes counts, the last saved page time, and the
+next eligible scan. A broker restart may reread the one reserved page.
+Only the final transaction publishes events, sets the scope's completion time
+and removes staging. A first complete pass establishes a quiet baseline.
+A changed baseline from another scope, inconsistent repeated record, expired
+pass or invalid cursor discards unsafe progress. At most one whole-channel pass
+is staged per context, bounded to 8 MiB and one hour of age on use.</p>
+<p>The default 100-request cap applies across all continuations and restarts.
+A scope requiring 102 requests needs a reviewed larger budget or an explicitly
+provisioned narrower scope. The budget diagnostic includes usage and limits.
+Review existing bindings and pending batches before changing policy. Back up
+broker and sender state before upgrading. Older binaries can reject upgraded
+state. For rollback, stop the relay, reconcile work since backup and restore a
+compatible, consistent set through the operator's recovery procedure. Installing
+the binary or probe alone does not resume a paused consumer.</p>
 <p>The broker defaults to a 30-second minimum interval per scope, configurable from
 5 to 3600 seconds. <code>--interval</code> cannot shorten it. Concurrent watches of the same
 scope share one refresh; overlapping scopes share resource fingerprints and

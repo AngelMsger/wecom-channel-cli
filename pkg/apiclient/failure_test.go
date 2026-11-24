@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	kit "github.com/angelmsger/agent-cli-kit/transport"
@@ -54,6 +56,27 @@ func TestFailureMetadataThroughUpstreamErrors(t *testing.T) {
 		b, _ = json.Marshal(m)
 		if json.Unmarshal(b, &decoded) != nil || ReadFailureMetadata(decoded) != m {
 			t.Fatal("lost socket metadata", decoded)
+		}
+	}
+}
+
+func TestInterruptedBodyAndConfirmedOversize(t *testing.T) {
+	for _, tt := range []struct {
+		reader io.Reader
+		code   string
+	}{
+		{io.MultiReader(strings.NewReader("{"), iotest.ErrReader(io.ErrUnexpectedEOF)), "RESPONSE_INTERRUPTED"},
+		{strings.NewReader(strings.Repeat("x", maxResponse+1)), "RESPONSE_LIMIT"},
+	} {
+		c, _ := New("bot", "secret")
+		c.http = kit.New(kit.Options{Doer: doerFunc(func(*http.Request) (*http.Response, error) {
+			r := response("")
+			r.Body = io.NopCloser(tt.reader)
+			return r, nil
+		})})
+		_, err := c.call(context.Background(), PhaseBusinessRequest, "/synthetic", "", nil)
+		if e.Safe(err).Code != tt.code {
+			t.Fatal(err)
 		}
 	}
 }

@@ -176,10 +176,18 @@ and replies are revisited. The request and record budgets fail explicitly when
 the snapshot is too large. Retained inbox pages can drain without remote I/O.
 
 `internal/state/poll.go` atomically commits scope baselines, resource fingerprints
-and derived events in the existing ledger transaction. Overlapping scopes share
+and derived events in the existing ledger transaction. Durable whole-channel
+relays request sliced pagination. A broker-owned staging record holds the
+policy, scope, revision, fixed creation cutoff, reserved request count, rate
+window, continuation cursor and metadata-only observations. The poll gate covers
+one slice. A competing commit that changes indexed resources or establishes
+coverage invalidates older staged observations. The final transaction also
+removes staging. Progress responses carry only counters and timestamps.
+The sender persists bounded scan recovery independently of delivery, including
+the single-use expired-token recovery and a terminal scan latch. Overlapping scopes share
 fingerprints, including when a new scope observes a resource for an already
 initialized scope. Initial snapshots suppress historical records; failed pages,
-cursor cycles, capacity errors and cancellation commit nothing. A failed disk
+cursor cycles, capacity errors and cancellation leave the published baseline intact. A failed disk
 fsync after rename retains the committed in-memory state, as for existing events.
 
 Polling records are observation-only and never become mention authorization.

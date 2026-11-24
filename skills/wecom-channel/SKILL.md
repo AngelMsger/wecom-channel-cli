@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.14
+version: 0.1.15
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.14` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.15` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -171,6 +171,13 @@ a bound filter/destination, or pass --retry-failed automatically after an error.
 Terminal delivery errors remain latched across process restarts. Explicit recovery
 belongs to the operator after repair; retry reset cannot clear an unknown outcome. Neither delivery mode
 promises exactly-once wakeups or processing.
+
+Durable whole-channel scans can yield between pages. Only a completed snapshot
+advances upstream freshness. Monitor each expected listener with the host relay
+probe and an external notification route. After an operator repairs a blocked
+scan, `--retry-scan` resets only scan recovery. Never automate that flag.
+Interrupted read bodies may retry and an expired business-read token gets at
+most one budgeted recovery. A confirmed oversize response stops the scan.
 
 Optional `scan_retry_limit` and `delivery_retry_limit` independently override
 `retry_limit`; omitted/null fields inherit it and explicit zero disables retries

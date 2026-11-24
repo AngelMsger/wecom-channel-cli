@@ -1020,6 +1020,7 @@ Flags:
       --max-batches int      Stop after this many acknowledged or HTTP-accepted batches in this session (default 1000)
       --post stringArray     Observe this post and its replies; repeat for up to 32 IDs
       --retry-failed         Explicitly reset persisted retry budgets after repairing a failed receiver or scan
+      --retry-scan           Resume a repaired scan with a fresh scan allowance and preserve delivery attempts
       --state string         Durable JSON queue in an existing private service-owned directory; mutually exclusive with --ephemeral
       --whole-channel        Observe the selected channel
 

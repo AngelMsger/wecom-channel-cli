@@ -110,8 +110,11 @@ func (c *HTTPClient) exchange(req *http.Request) ([]byte, *int, error) {
 		return nil, nil, e.New(e.CategoryServer, "HTTP_REJECTED", "WeCom returned a non-success HTTP status.").WithHTTPStatus(resp.StatusCode).WithDetails(failureMetadata(resp.Header, c.now()))
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
-	if err != nil || len(data) > maxResponse {
-		return nil, nil, e.New(e.CategoryParse, "RESPONSE_LIMIT", "The response was unreadable or exceeded 2 MiB.")
+	if len(data) > maxResponse {
+		return nil, nil, e.New(e.CategoryParse, "RESPONSE_LIMIT", "The WeCom response exceeded 2 MiB.")
+	}
+	if err != nil {
+		return nil, nil, e.New(e.CategoryNetwork, "RESPONSE_INTERRUPTED", "The WeCom response body was interrupted.")
 	}
 	var result struct {
 		Code *int `json:"errcode"`

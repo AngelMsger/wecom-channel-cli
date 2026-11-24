@@ -76,7 +76,11 @@ func ScanRetryable(err error) bool {
 		return true
 	}
 	x := e.Safe(err)
-	return x.Code == "BUSY" || x.Code == "POLL_UNSTABLE"
+	if x.Code == "AUTH_REJECTED" {
+		m := apiclient.ReadFailureMetadata(x.Details)
+		return m.Phase == apiclient.PhaseBusinessRequest && (m.UpstreamCode == 853004 || m.UpstreamCode == 42001)
+	}
+	return x.Code == "RESPONSE_INTERRUPTED" || x.Code == "BUSY" || x.Code == "POLL_UNSTABLE"
 }
 
 func (r *ErrorRecord) valid(phase string) bool {
@@ -91,4 +95,53 @@ func ScanRetryDelay(c Config, failures int, interval time.Duration, err error) t
 	delay := base/2 + time.Duration(rand.Int64N(int64(base-base/2)+1))
 	metadata := apiclient.ReadFailureMetadata(e.Safe(err).Details)
 	return max(interval, delay, time.Duration(metadata.RetryAfterSeconds)*time.Second)
+}
+
+// ResetScan clears only active recovery state. Historical causes and delivery
+// attempts remain visible after a successful scan or an operator repair.
+func (s *State) ResetScan() {
+	s.ScanFailures, s.NextScan, s.FirstFailure = 0, 0, 0
+	s.ScanBlocked, s.AuthRecovery, s.RetryStarted = "", false, false
+	s.Progress = nil
+}
+
+func (s *State) RecordScanFailure(err error, cfg Config, interval time.Duration, now time.Time) bool {
+	record := NewErrorRecord(err, "scan", s.ScanFailures+1, cfg.ScanRetries(), now)
+	retry := record.Retryable
+	if record.Code == "AUTH_REJECTED" && retry {
+		retry = !s.AuthRecovery
+		s.AuthRecovery = true
+	}
+	record.Retryable = retry
+	s.LastScanError = record
+	s.ScanHistory = append(s.ScanHistory, *record)
+	if len(s.ScanHistory) > 8 {
+		s.ScanHistory = s.ScanHistory[len(s.ScanHistory)-8:]
+	}
+	if s.FirstFailure == 0 {
+		s.FirstFailure = now.UnixMilli()
+	}
+	s.Progress = nil
+	if retry {
+		s.ScanFailures++
+		s.NextScan = now.Add(ScanRetryDelay(cfg, s.ScanFailures, interval, err)).UnixMilli()
+	} else {
+		s.ScanBlocked = e.Safe(err).Category
+		s.NextScan = 0
+	}
+	return retry
+}
+func (s State) ScanState() string {
+	switch {
+	case s.ScanBlocked != "" || s.LastScanError != nil && s.ScanFailures > s.LastScanError.RetryLimit:
+		return "blocked"
+	case s.Progress != nil:
+		return "in_progress"
+	case s.ScanFailures > 0:
+		return "retry_wait"
+	case s.Binding == "":
+		return "starting"
+	default:
+		return "current"
+	}
 }

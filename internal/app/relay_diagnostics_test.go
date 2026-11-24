@@ -221,3 +221,63 @@ func TestRelayRestartRetainsKnownPollingIntervalOnFailure(t *testing.T) {
 		t.Fatal(err, saved)
 	}
 }
+
+func TestRelayScanAuthRecoveryAndTerminalRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		phase    apiclient.RequestPhase
+		code     int
+		eventual bool
+		want     int
+	}{
+		{"expired then healthy", apiclient.PhaseBusinessRequest, 853004, true, 2},
+		{"expired twice", apiclient.PhaseBusinessRequest, 853004, false, 2},
+		{"unknown rejection", apiclient.PhaseBusinessRequest, 853000, false, 1},
+		{"bootstrap rejection", apiclient.PhaseTokenBootstrap, 853004, false, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, page, cfg := relayFixture()
+			st = relay.State{Version: 1, Consumer: st.Consumer, FromNow: true}
+			page.Items = nil
+			page.After = 0
+			page.HighWatermark = 0
+			cfg.RetryLimit = 3
+			cfg.RetryBaseSeconds = 1
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			n := 0
+			fetch := func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+				n++
+				if n == 2 && tc.eventual {
+					return page, nil
+				}
+				return broker.ScanPage{}, e.New(e.CategoryAuth, "AUTH_REJECTED", "fixture").WithDetails(apiclient.FailureMetadata{Phase: tc.phase, UpstreamCode: tc.code})
+			}
+			save := func(s relay.State) error {
+				st = copyRelayState(t, s)
+				if s.LastScan != 0 {
+					cancel()
+				}
+				return st.Validate()
+			}
+			notice := func(string, relay.State, string) {}
+			err := pumpRelay(ctx, cfg, broker.ScanRequest{WholeChannel: true, FromNow: true}, st, time.Millisecond, 1, fetch, nil, save, notice)
+			if n != tc.want || (err == nil) != tc.eventual {
+				t.Fatal(n, err, st)
+			}
+			if tc.eventual {
+				if st.ScanState() != "current" || len(st.ScanHistory) != 1 {
+					t.Fatal(st)
+				}
+				return
+			}
+			if st.ScanState() != "blocked" || st.LastScanError.Metadata.UpstreamCode != tc.code {
+				t.Fatal(st)
+			}
+			err = pumpRelay(ctx, cfg, broker.ScanRequest{WholeChannel: true}, st, time.Millisecond, 1, fetch, nil, save, notice)
+			if e.Safe(err).Category != e.CategoryAuth || n != tc.want {
+				t.Fatal(n, err)
+			}
+		})
+	}
+}

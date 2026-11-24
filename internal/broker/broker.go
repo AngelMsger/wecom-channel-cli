@@ -75,19 +75,29 @@ func item(v any, ch, post, event string) Response {
 func page(p apiclient.Page) Response { return Response{Page: &p} }
 
 func (b *Broker) rateAllowed(key string) bool {
+	_, allowed := b.reserveRate(key, rateWindow{})
+	return allowed
+}
+
+// Restore a saved polling window after a broker restart. Concurrent scopes share
+// the live bucket and can only increase its use.
+func (b *Broker) reserveRate(key string, saved rateWindow) (rateWindow, bool) {
 	b.rateMu.Lock()
 	defer b.rateMu.Unlock()
 	now := b.Now()
-	r := b.rate[key]
-	if now.Sub(r.Start) >= time.Minute || now.Before(r.Start) {
-		r = rateWindow{Start: now}
+	w := b.rate[key]
+	if saved.Start.After(w.Start) || (saved.Start.Equal(w.Start) && saved.Count > w.Count) {
+		w = saved
 	}
-	if r.Count >= b.Config.RequestsPerMinute {
-		return false
+	if w.Start.IsZero() || now.Before(w.Start) || now.Sub(w.Start) >= time.Minute {
+		w = rateWindow{Start: now}
 	}
-	r.Count++
-	b.rate[key] = r
-	return true
+	ok := w.Count < b.Config.RequestsPerMinute
+	if ok {
+		w.Count++
+	}
+	b.rate[key] = w
+	return w, ok
 }
 
 func (b *Broker) event(id string) (callback.Event, error) {
