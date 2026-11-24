@@ -119,3 +119,29 @@ func (s *Store) StagedPoll() (json.RawMessage, uint64, string) {
 func (s *Store) SavePollStage(data json.RawMessage) error {
 	return s.Update(func(st *Snapshot) error { st.StagedPoll = data; return nil })
 }
+
+// RateWindow tracks reserved requests in a fixed one-minute window.
+type RateWindow struct {
+	Start time.Time `json:"start"`
+	Count int       `json:"count"`
+}
+
+func (s *Store) PollRateWindow() RateWindow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snapshot.PollWindow == nil {
+		return RateWindow{}
+	}
+	return *s.snapshot.PollWindow
+}
+
+// A plain watch reserves a rate credit without changing another listener's pass.
+func (s *Store) ReservePollRead(window RateWindow, stage json.RawMessage) error {
+	return s.Update(func(st *Snapshot) error {
+		st.PollWindow = &window
+		if stage != nil {
+			st.StagedPoll = stage
+		}
+		return nil
+	})
+}

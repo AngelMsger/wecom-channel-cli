@@ -32,7 +32,6 @@ type pollPass struct {
 	Revision              uint64
 	Started               int64
 	Requests              int
-	Window                rateWindow
 	EligibleAt            int64
 	PageAt                int64
 	Cursor                string
@@ -46,7 +45,7 @@ func (p *pollPass) valid(ledger string) bool {
 	if p.Ledger != ledger || len(p.Policy) != 64 || len(p.Scope) != 64 {
 		return false
 	}
-	if p.Started <= 0 || p.Requests < 1 || p.Requests > 1000 || p.Window.Start.IsZero() || p.Window.Count < 1 {
+	if p.Started <= 0 || p.Requests < 1 || p.Requests > 1000 {
 		return false
 	}
 	if p.Seen == nil || p.Observations == nil || p.Replies != (len(p.Remaining) > 0) {
@@ -65,12 +64,29 @@ func (p *pollPass) valid(ledger string) bool {
 
 const maxPassBytes = 8 << 20
 
-func (b *Broker) savePass(p *pollPass) error {
+func (p *pollPass) encode() (json.RawMessage, error) {
 	raw, err := json.Marshal(p)
 	if err != nil || len(raw) > maxPassBytes {
-		return e.New(e.CategoryRateLimit, "POLL_STAGE_CAPACITY", "The staged scan exceeds its 8 MiB storage limit.")
+		return nil, e.New(e.CategoryRateLimit, "POLL_STAGE_CAPACITY", "The staged scan exceeds its 8 MiB storage limit.")
 	}
-	return b.Store.SavePollStage(raw)
+	return raw, nil
+}
+
+// pollGate serializes these reservations across all scopes and watch modes.
+func (b *Broker) reservePollRead(p *pollPass) (time.Time, error) {
+	w, allowed := b.reserveRate(b.Store.PollRateWindow())
+	if !allowed {
+		return w.Start.Add(time.Minute), nil
+	}
+	var raw json.RawMessage
+	if p != nil {
+		p.Requests++
+		var err error
+		if raw, err = p.encode(); err != nil {
+			return time.Time{}, err
+		}
+	}
+	return time.Time{}, b.Store.ReservePollRead(w, raw)
 }
 
 func (b *Broker) discardPass(err error) error {
@@ -151,15 +167,13 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		if deadline, ok := ctx.Deadline(); i > 0 && ok && time.Until(deadline) < 5*time.Second {
 			return progress(b.Now().Add(time.Second)), nil
 		}
-		w, allowed := b.reserveRate("poll-upstream", p.Window)
-		if !allowed {
-			return progress(w.Start.Add(time.Minute)), nil
-		}
-		p.Window = w
-		p.Requests++
-		// A crash after reservation can waste one credit but cannot issue an uncharged read.
-		if err := b.savePass(&p); err != nil {
+		// A crash can waste one credit but cannot issue an uncharged read.
+		eligible, err := b.reservePollRead(&p)
+		if err != nil {
 			return nil, err
+		}
+		if !eligible.IsZero() {
+			return progress(eligible), nil
 		}
 		q := apiclient.Query{Channel: b.Config.Channels[0].ID, Operation: "post.list", Limit: 50, From: 1, To: time.UnixMilli(p.Started).Unix() + 1, Cursor: p.Cursor}
 		if p.Replies {
@@ -190,7 +204,11 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		if i == 7 {
 			p.EligibleAt = b.Now().Add(max(time.Second, 8*time.Minute/time.Duration(b.Config.RequestsPerMinute))).UnixMilli()
 		}
-		if err = b.savePass(&p); err != nil {
+		raw, err := p.encode()
+		if err != nil {
+			return nil, err
+		}
+		if err = b.Store.SavePollStage(raw); err != nil {
 			return nil, err
 		}
 	}

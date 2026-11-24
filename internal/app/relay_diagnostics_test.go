@@ -281,3 +281,38 @@ func TestRelayScanAuthRecoveryAndTerminalRestart(t *testing.T) {
 		})
 	}
 }
+
+func TestRelayRestartDuringContinuationDoesNotRepeatAuthRecovery(t *testing.T) {
+	cfg := relay.DefaultConfig()
+	st := relay.State{Version: 1, Consumer: apiclient.Digest("consumer"), FromNow: true}
+	cfg.RetryLimit = 2
+	expired := e.New(e.CategoryAuth, "AUTH_REJECTED", "fixture").WithDetails(apiclient.FailureMetadata{
+		Phase: apiclient.PhaseBusinessRequest, UpstreamCode: 42001,
+	})
+	now := time.Now()
+	st.RecordScanFailure(expired, cfg, time.Second, now.Add(-time.Minute))
+	// The broker yielded a continuation after the failure without completing the pass.
+	st.Progress = &broker.PollProgress{NextAt: now.Add(-time.Second).UnixMilli(), Requests: 8}
+	var saved, atRead relay.State
+	save := func(s relay.State) error { saved = copyRelayState(t, s); return s.Validate() }
+	notice := func(string, relay.State, string) {}
+	scan := broker.ScanRequest{WholeChannel: true, ResumePoll: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fetch := func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+		atRead = saved
+		cancel()
+		return broker.ScanPage{}, context.Canceled
+	}
+	if err := pumpRelay(ctx, cfg, scan, st, time.Millisecond, 1, fetch, nil, save, notice); err != nil || !atRead.RetryStarted {
+		t.Fatal("missing durable reservation before the continuation", err)
+	}
+	calls := 0
+	err := pumpRelay(context.Background(), cfg, scan, atRead, time.Millisecond, 1, func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+		calls++
+		return broker.ScanPage{}, expired
+	}, nil, save, notice)
+	if e.Safe(err).Code != "AUTH_REJECTED" || calls != 0 || saved.ScanState() != "blocked" {
+		t.Fatal(err, calls, saved)
+	}
+}

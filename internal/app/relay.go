@@ -194,10 +194,12 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 	fail := func(err error) error { notice("failed", st, e.Safe(err).Code); return err }
 	exhausted := func(phase string) error {
 		record := st.LastScanError
+		repair := "--retry-scan"
 		if phase == "delivery" {
 			record = st.LastDeliveryError
+			repair = "--retry-failed"
 		}
-		return e.New(e.CategoryConflict, "RELAY_RETRIES_EXHAUSTED", "The persisted relay retry budget is exhausted. Repair the service, then explicitly use --retry-failed with the same state and configuration.").WithDetails(map[string]any{"phase": phase, "last_error": record})
+		return e.New(e.CategoryConflict, "RELAY_RETRIES_EXHAUSTED", "The persisted relay retry budget is exhausted. Repair the service, then explicitly use "+repair+" with the same state and configuration.").WithDetails(map[string]any{"phase": phase, "last_error": record})
 	}
 	if cfg.Mode() == relay.HTTPAccepted && st.Inflight != nil {
 		if st.Inflight.Status == "sending" {
@@ -246,7 +248,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 		if (!validated || st.Depth() < cfg.QueueLimit) && !now.Before(scanDue) {
 			scan.After, scan.Binding = st.After, st.Binding
 			scan.Limit = max(1, min(100, cfg.QueueLimit-st.Depth()))
-			if st.ScanFailures > 0 && st.Progress == nil {
+			if st.ScanFailures > 0 {
 				st.RetryStarted = true
 				if err := save(st); err != nil {
 					return fail(err)

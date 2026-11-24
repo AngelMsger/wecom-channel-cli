@@ -46,20 +46,16 @@ type Broker struct {
 	Now          func() time.Time
 	approvalMu   sync.Mutex
 	rateMu       sync.Mutex
-	rate         map[string]rateWindow
+	rate         map[string]state.RateWindow
 	pollGate     chan struct{}
 	pollAttempts map[string]pollAttempt
-}
-type rateWindow struct {
-	Start time.Time
-	Count int
 }
 
 func New(cfg config.Config, st *state.Store, api apiclient.Client, v *callback.Verifier) *Broker {
 	if cfg.ReadOnly {
 		api = apiclient.NewReadOnly(api)
 	}
-	return &Broker{Config: cfg, Store: st, API: api, Verifier: v, Now: time.Now, rate: map[string]rateWindow{}, pollGate: make(chan struct{}, 1), pollAttempts: map[string]pollAttempt{}}
+	return &Broker{Config: cfg, Store: st, API: api, Verifier: v, Now: time.Now, rate: map[string]state.RateWindow{}, pollGate: make(chan struct{}, 1), pollAttempts: map[string]pollAttempt{}}
 }
 
 func denied() error {
@@ -75,29 +71,23 @@ func item(v any, ch, post, event string) Response {
 func page(p apiclient.Page) Response { return Response{Page: &p} }
 
 func (b *Broker) rateAllowed(key string) bool {
-	_, allowed := b.reserveRate(key, rateWindow{})
+	b.rateMu.Lock()
+	defer b.rateMu.Unlock()
+	window, allowed := b.reserveRate(b.rate[key])
+	b.rate[key] = window
 	return allowed
 }
 
-// Restore a saved polling window after a broker restart. Concurrent scopes share
-// the live bucket and can only increase its use.
-func (b *Broker) reserveRate(key string, saved rateWindow) (rateWindow, bool) {
-	b.rateMu.Lock()
-	defer b.rateMu.Unlock()
+func (b *Broker) reserveRate(w state.RateWindow) (state.RateWindow, bool) {
 	now := b.Now()
-	w := b.rate[key]
-	if saved.Start.After(w.Start) || (saved.Start.Equal(w.Start) && saved.Count > w.Count) {
-		w = saved
-	}
 	if w.Start.IsZero() || now.Before(w.Start) || now.Sub(w.Start) >= time.Minute {
-		w = rateWindow{Start: now}
+		w = state.RateWindow{Start: now}
 	}
-	ok := w.Count < b.Config.RequestsPerMinute
-	if ok {
-		w.Count++
+	if w.Count >= b.Config.RequestsPerMinute {
+		return w, false
 	}
-	b.rate[key] = w
-	return w, ok
+	w.Count++
+	return w, true
 }
 
 func (b *Broker) event(id string) (callback.Event, error) {

@@ -182,3 +182,50 @@ func TestPassRejectsRepeatedCursorAndExpiresUnusedStage(t *testing.T) {
 		t.Fatal("expired stage published")
 	}
 }
+
+func TestAllScopesKeepOnePollRateWindowAcrossRestart(t *testing.T) {
+	for _, staged := range []bool{false, true} {
+		t.Run(fmt.Sprintf("staged-%t", staged), func(t *testing.T) {
+			b, f := pollFixture(t)
+			b.Config.RequestsPerMinute = 8
+			if staged {
+				pagedPosts(f, 59)
+			}
+			whole := ScanRequest{WholeChannel: true, ResumePoll: true, Limit: 10}
+			first, err := b.scan(context.Background(), whole)
+			if err != nil || (first.Progress != nil) != staged {
+				t.Fatal(first.Progress, err)
+			}
+			now := b.Now()
+			dir, bot := b.Config.StateDir, b.Config.Bot
+			if err := b.Store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			st, err := state.Open(dir, bot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { st.Close() })
+			b = New(b.Config, st, f, nil)
+			b.Now = func() time.Time { return now }
+			selected := ScanRequest{Posts: []string{"old"}, FromNow: true, Limit: 10}
+			f.pages["post.get/old/"] = apiclient.Page{Items: []apiclient.Record{polled("old", "", "text", false)}}
+			if !staged {
+				// One request completed the empty baseline. Seven remain for all scopes.
+				for range 3 {
+					if _, err = b.scan(context.Background(), selected); err != nil {
+						t.Fatal(err)
+					}
+					now = now.Add(6 * time.Second)
+				}
+			}
+			if _, err := b.scan(context.Background(), selected); e.Safe(err).Code != "POLL_RATE_LIMIT" || len(f.reads) != 8 {
+				t.Fatal("the selected watch exceeded or lost the original allowance", len(f.reads), err)
+			}
+			now = now.Add(time.Minute)
+			if _, err := b.scan(context.Background(), selected); err != nil || len(f.reads) != 10 {
+				t.Fatal("the new window did not reopen", len(f.reads), err)
+			}
+		})
+	}
+}

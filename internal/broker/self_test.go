@@ -170,12 +170,12 @@ func TestPollingAmbiguousCreatorCannotAdvanceSnapshot(t *testing.T) {
 			if _, err := b.scan(context.Background(), r); err != nil {
 				t.Fatal(err)
 			}
-			before := apiclient.Digest(b.Store.View())
+			before := ledgerAfterReads(t, b, f)
 			setPosts(f, polled("human", "", "valid", false), authored("ambiguous", "", tc.creator, tc.info))
 			tick(b)
 			_, err := b.scan(context.Background(), r)
 			assertCode(t, err, "POLL_CREATOR_UNKNOWN")
-			if apiclient.Digest(b.Store.View()) != before {
+			if ledgerAfterReads(t, b, f) != before {
 				t.Fatal("unverified author advanced snapshot")
 			}
 		})
