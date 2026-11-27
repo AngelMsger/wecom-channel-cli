@@ -5,6 +5,10 @@ Operator authority comes from the private socket and policy, never from a noun,
 flag, alias or the fact that a command appears in help.</p>
 <h2 id="canonical-tree">Canonical tree</h2>
 <pre><code class="language-text">wecom-channel-cli
+  connect
+  listen
+  serve
+  status
   channel   list
   member    list
   post      list | get | propose
@@ -33,6 +37,26 @@ flag, alias or the fact that a command appears in help.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>connect</code></td>
+<td>Verify bot credentials, save Secret to the user credential store, discover all joined channels, and write <code>profile.yaml</code></td>
+<td>Trusted operator session; never run inside an untrusted channel worker</td>
+</tr>
+<tr>
+<td><code>listen</code></td>
+<td>Stream selected channels as untrusted NDJSON using concurrent in-process polling with unlimited steady-state recovery</td>
+<td>Trusted operator session owning <code>profile.yaml</code> and private data dir</td>
+</tr>
+<tr>
+<td><code>serve</code></td>
+<td>Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced <code>config.yaml</code> contexts, live <code>status.json</code>, and optional in-process webhook delivery</td>
+<td>Trusted operator session; holds credentials in-process while exposing agent sockets to workers</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Probe <code>serve.lock</code> for real process liveness and report per-channel polling and webhook health (<code>--check</code> exits non-zero if stopped, blocked, failed, or stale)</td>
+<td>Local read-only inspection; loads no credentials</td>
+</tr>
 <tr>
 <td><code>channel list</code>, <code>member list</code></td>
 <td>Discover channels/members in one bounded page</td>

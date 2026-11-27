@@ -1,10 +1,30 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Watching channels — WeCom Channel CLI</title><link rel="icon" href="assets/mark.svg"><link rel="stylesheet" href="assets/site.css"><script src="assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="contexts.html">Contexts</a><a href="index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="guide.html">Operator guide</a><a href="command-design.html">Command responsibilities</a><a href="contexts.html">Channel contexts</a><a href="watching.html" aria-current="page">Watching channels</a><a href="reactions.html">Native reactions</a><a href="cli/index.html">Command reference</a><a href="security.html">Security model</a><a href="technical-design.html">Technical design</a><a href="research.html">API research</a><a href="releasing.html">Release guide</a></aside><article class="doc-article"><h1 id="watching-channels-and-threads">Watching channels and threads</h1>
+<p>For single-operator, container, or Grok deployments, the unified workflow
+(<code>connect</code> -&gt; <code>listen</code> / <code>serve</code> -&gt; <code>status</code>) replaces separate broker policy,
+relay JSON, and context files with one <code>profile.yaml</code>
+(<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/profile.example.yaml">profile.example.yaml</a>). <code>listen</code> streams
+selected channels as untrusted NDJSON with concurrent in-process polling and
+unlimited steady-state backoff; <code>serve</code> runs one continuous daemon providing
+concurrent polling, local Unix sockets, auto-synced <code>config.yaml</code> contexts, live
+<code>status.json</code>, and optional in-process webhook delivery; <code>status --check</code> probes
+<code>serve.lock</code> for real process liveness and channel/webhook health.</p>
+<p>For strict multi-user Linux host isolation (separate broker, relay, and worker OS
+accounts), <code>event watch</code> and standalone <code>relay run</code> remain fully supported below:</p>
 <p><code>event watch</code> streams <strong>post/reply observations</strong> as NDJSON through one interface.
 Choose a whole channel context or one or more post IDs (a post and its replies
 form a thread). Without a callback listener, the default <code>auto</code> backend polls the
 channel HTTP APIs: no public address, tunnel or callback keys are needed. Existing
 callback deployments retain their event intake. Watches never execute message
 instructions, launch an agent or approve a write.</p>
+<p>Operational tuning (<code>poll_interval_seconds</code>, <code>poll_max_requests</code>, <code>poll_max_records</code>,
+<code>poll_concurrency</code>, <code>upstream_timeout_seconds</code>, <code>upstream_proxy</code>, webhook timeouts,
+retry budgets, and batching windows) is decoupled from watch and relay bindings
+(<code>ScopeDigest</code> / <code>ConsumerDigest</code>) so adjusting resilience settings never
+invalidates checkpoints or queued state. Standalone <code>relay run</code> now supports
+continuous operation (<code>--duration 0</code>, <code>--max-batches 0</code>), unlimited steady-state
+scan backoff (<code>scan_retry_limit: -1</code>), explicit <code>proxy_url</code>, and configurable
+post-send uncertainty policy (<code>on_uncertain: halt|skip|retry</code>, with <code>skip</code>
+enabled in <a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/grok.example.json">grok.example.json</a>).</p>
 <h2 id="operator-prerequisites">Operator prerequisites</h2>
 <p>For first-time setup, use the operator's Bot ID and Secret with <code>channel list --bot-id BOT_ID</code>
 to obtain <code>data.topic_id</code> before filling <code>CHANNEL_ID</code>; see

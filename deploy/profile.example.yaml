@@ -1,0 +1,59 @@
+# Unified single-file profile for `wecom-channel-cli serve` / `listen` / `status`.
+# Generated and refreshed by `wecom-channel-cli connect --bot-id BOT_ID`.
+# Contains no secrets: the Bot Secret lives in the OS credential store (or
+# WECOM_CHANNEL_BOT_SECRET), and the webhook Bearer token is read from token_env.
+version: 1
+bot_id: BOT_ID
+
+# Optional explicit data directory for sockets, state ledgers, and status.json.
+# Defaults to <config-dir>/data.
+# data_dir: /var/lib/wecom-channel-data
+
+# Cross-region resilient upstream transport tuning (never invalidates checkpoints).
+network:
+  timeout_seconds: 45
+  read_retries: 3
+  # Optional explicit proxy (http, https, socks5, socks5h); ambient env proxies are ignored.
+  # proxy: socks5h://127.0.0.1:1080
+
+# Concurrent in-process polling tuning (never invalidates checkpoints).
+polling:
+  interval_seconds: 30
+  max_requests: 256
+  max_records: 5000
+  requests_per_minute: 60
+  concurrency: 4
+
+# Optional in-process webhook delivery (e.g. Grok routine webhook).
+# Omit or leave url empty to run local sockets + polling without webhooks.
+webhook:
+  url: https://grok.example.invalid/routines/ROUTINE_ID/webhook
+  token_env: GROK_ROUTINE_SENDER_KEY
+  delivery_mode: http_accepted
+  # skip (default for serve): record post-send timeouts as uncertain receipts and keep listening.
+  # retry: retry up to retry_limit before recording uncertain.
+  # halt: stop until manual operator reconciliation.
+  on_uncertain: skip
+  batch_window_seconds: 15
+  batch_size: 50
+  queue_limit: 1000
+  min_delivery_interval_seconds: 60
+  timeout_seconds: 45
+  retry_limit: 3
+  retry_base_seconds: 5
+  kinds:
+    - topic_event
+    - topic_reply_event
+  changes:
+    - 1
+    - 2
+    - 3
+
+# Discovered channel catalog populated by `connect`.
+# Select channels via `serve --channel NAME --save` or `selected: true`.
+channels:
+  - id: CHANNEL_ID_1
+    name: Engineering
+    context: engineering
+    selected: true
+    read_only: true

@@ -100,7 +100,7 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		Posts    []string
 		Partial  bool
 		Filter   string
-	}{identity, apiclient.Digest(b.Config), r.WholeChannel, r.Posts, r.AllowPartial, "exclude-self-v1"})
+	}{identity, b.Config.ScopeDigest(), r.WholeChannel, r.Posts, r.AllowPartial, "exclude-self-v1"})
 	if r.Binding != "" && r.Binding != binding {
 		return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
 	}

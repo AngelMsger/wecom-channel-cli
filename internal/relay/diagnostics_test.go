@@ -30,7 +30,8 @@ func TestIndependentRetryConfig(t *testing.T) {
 		{`,"retry_limit":3,"scan_retry_limit":0`, 0, 3, true},
 		{`,"retry_limit":3,"delivery_retry_limit":0`, 3, 0, true},
 		{`,"scan_retry_limit":20,"delivery_retry_limit":0`, 20, 0, true},
-		{`,"scan_retry_limit":-1`, 0, 0, false},
+		{`,"scan_retry_limit":-1,"delivery_retry_limit":0`, -1, 0, true},
+		{`,"scan_retry_limit":-2`, 0, 0, false},
 		{`,"delivery_retry_limit":21`, 0, 0, false},
 	} {
 		t.Run(test.fields, func(t *testing.T) {
@@ -83,7 +84,7 @@ func TestDiagnosticRecordRejectsRawContextAndCorruption(t *testing.T) {
 		func(r *ErrorRecord) { r.Cause = "secret" },
 		func(r *ErrorRecord) { r.Phase = "delivery" },
 		func(r *ErrorRecord) { r.Attempt = 22 },
-		func(r *ErrorRecord) { r.RetryLimit = -1 },
+		func(r *ErrorRecord) { r.RetryLimit = -2 },
 		func(r *ErrorRecord) { r.Metadata.RequestIDDigest = "raw-id" },
 	} {
 		x := *r

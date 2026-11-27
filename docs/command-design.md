@@ -9,6 +9,10 @@ flag, alias or the fact that a command appears in help.
 
 ```text
 wecom-channel-cli
+  connect
+  listen
+  serve
+  status
   channel   list
   member    list
   post      list | get | propose
@@ -32,6 +36,10 @@ This inventory omits Cobra's built-in help/completion. The
 
 | Surface | Primitive and result | Authority / state owner |
 | --- | --- | --- |
+| `connect` | Verify bot credentials, save Secret to the user credential store, discover all joined channels, and write `profile.yaml` | Trusted operator session; never run inside an untrusted channel worker |
+| `listen` | Stream selected channels as untrusted NDJSON using concurrent in-process polling with unlimited steady-state recovery | Trusted operator session owning `profile.yaml` and private data dir |
+| `serve` | Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced `config.yaml` contexts, live `status.json`, and optional in-process webhook delivery | Trusted operator session; holds credentials in-process while exposing agent sockets to workers |
+| `status` | Probe `serve.lock` for real process liveness and report per-channel polling and webhook health (`--check` exits non-zero if stopped, blocked, failed, or stale) | Local read-only inspection; loads no credentials |
 | `channel list`, `member list` | Discover channels/members in one bounded page | Broker policy; explicit `channel list --bot-id` is credential-based operator bootstrap |
 | `post/reply list` | Retrieve a bounded page of current content | Broker read scope |
 | `post/reply get` | Retrieve current content for an exact known ID | Broker read scope |

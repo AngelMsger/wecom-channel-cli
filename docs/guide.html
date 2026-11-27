@@ -40,6 +40,36 @@ make lint test e2e docs-check site-check
 <p>Inside the fx workspace, <code>go.work</code> uses the local kit. Use <code>GOWORK=off make test</code>
 to verify the <code>agent-cli-kit</code> version pinned in <code>go.mod</code>. <code>make cross</code> builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.</p>
+<h2 id="quick-start-single-profile-workflow">Quick start (single-profile workflow)</h2>
+<p>For personal, container, or Grok routine deployments where one trusted operator
+controls the service, start with three commands and a single <code>profile.yaml</code>
+(<a href="https://github.com/AngelMsger/wecom-channel-cli/blob/main/deploy/profile.example.yaml">profile.example.yaml</a>):</p>
+<pre><code class="language-sh"># 1. Authenticate once, save Secret in the OS credential store, and discover channels
+wecom-channel-cli connect --bot-id BOT_ID
+# Optional explicit proxy for cross-region links (ambient env proxies are never inherited):
+# wecom-channel-cli connect --bot-id BOT_ID --proxy socks5h://127.0.0.1:1080
+
+# 2a. Stream observations in the foreground as untrusted NDJSON (auto-recovers on transient network drops)
+wecom-channel-cli listen --channel Engineering
+
+# 2b. Or run the unified single-process daemon (concurrent polling + local CLI sockets + optional Grok webhook)
+wecom-channel-cli serve --channel Engineering \
+  --webhook-url https://grok.example.invalid/routines/ID/webhook \
+  --webhook-token-env GROK_ROUTINE_SENDER_KEY --save
+
+# 3. Inspect real daemon liveness (flock probe), per-channel health, and webhook counters
+wecom-channel-cli status
+wecom-channel-cli status --check --max-stale 10m
+</code></pre>
+<p><code>serve</code> runs continuously until interrupted, cleans stale Unix sockets on restart,
+auto-syncs client contexts into <code>config.yaml</code> (so <code>post list</code> / <code>reply list</code> work
+immediately), retries transient cross-region read drops automatically with idle-pool
+eviction and unlimited steady-state backoff, and keeps tuning changes (intervals,
+timeouts, budgets, proxy URL) from invalidating saved checkpoints. Pass <code>--strict-fs</code>
+when strict ancestor-to-<code>/</code> directory ownership checks are desired.</p>
+<p>For strict multi-user Linux host isolation (separate <code>wecom-channel</code>, <code>wecom-relay</code>,
+and sandboxed worker OS accounts), continue with <a href="#operator-setup">Operator setup</a>
+and <a href="security.html">Security and deployment</a>.</p>
 <h2 id="operator-setup">Operator setup</h2>
 <p>The <code>channel list --bot-id</code> mode and template flags below are available in 0.2.0.</p>
 <p>Start with the API-mode bot's <strong>Bot ID and Secret</strong>, not a channel ID. The WeCom

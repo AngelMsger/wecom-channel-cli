@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/angelmsger/wecom-channel-cli/pkg/transport"
 )
 
 // FailureMetadata is the only upstream error context passed to scan consumers.
@@ -21,16 +23,20 @@ type FailureMetadata struct {
 	UpstreamCode      int          `json:"upstream_errcode,omitempty"`
 	RetryAfterSeconds int64        `json:"retry_after_seconds,omitempty"`
 	RequestIDDigest   string       `json:"request_id_digest,omitempty"`
+	NetworkReason     string       `json:"network_reason,omitempty"`
 }
 
 func (m FailureMetadata) Valid() bool {
-	if m.RequestsUsed < 0 || m.RequestsUsed > 1000 || m.RequestLimit < 0 || m.RequestLimit > 1000 || m.RecordsSeen < 0 || m.RecordsSeen > 100001 || m.RecordLimit < 0 || m.RecordLimit > 100000 {
+	if m.RequestsUsed < 0 || m.RequestsUsed > 5000 || m.RequestLimit < 0 || m.RequestLimit > 5000 || m.RecordsSeen < 0 || m.RecordsSeen > 100001 || m.RecordLimit < 0 || m.RecordLimit > 100000 {
 		return false
 	}
 	if m.Phase != "" && m.Phase != PhaseBusinessRequest && m.Phase != PhaseTokenBootstrap || m.UpstreamCode < 0 || m.UpstreamCode > 1<<31-1 {
 		return false
 	}
 	if m.RetryAfterSeconds < 0 || m.RetryAfterSeconds > 1<<31-1 {
+		return false
+	}
+	if !transport.ValidNetworkReason(m.NetworkReason) {
 		return false
 	}
 	if m.RequestIDDigest == "" {
@@ -60,6 +66,7 @@ func ReadFailureMetadata(details any) FailureMetadata {
 		m.RecordsSeen = diagnosticNumber(v["records_seen"])
 		m.RecordLimit = diagnosticNumber(v["record_limit"])
 		m.RequestIDDigest, _ = v["request_id_digest"].(string)
+		m.NetworkReason, _ = v["network_reason"].(string)
 	}
 	if m.RetryAfterSeconds < 0 || m.RetryAfterSeconds > 1<<31-1 {
 		m.RetryAfterSeconds = 0

@@ -13,6 +13,7 @@ import (
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
+	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 )
 
 type pollAPI struct {
@@ -352,5 +353,27 @@ func TestPollingDrainsHistoryWithoutRemoteAccess(t *testing.T) {
 	p, err = b.scan(context.Background(), r)
 	if err != nil || len(p.Items) != 1 || len(f.reads) != before {
 		t.Fatal("offline retained-history replay attempted refresh", p, err)
+	}
+}
+
+func TestPollNowConcurrentAndTimeoutClassification(t *testing.T) {
+	b, f := pollFixture(t)
+	b.Config.PollConcurrency = 4
+	setPosts(f, polled("p1", "", "post 1", false), polled("p2", "", "post 2", false), polled("p3", "", "post 3", false), polled("p4", "", "post 4", false))
+	n, ts, err := b.PollNow(context.Background())
+	if err != nil || n != 0 || ts == 0 {
+		t.Fatalf("baseline PollNow failed: n=%d ts=%d err=%v", n, ts, err)
+	}
+	f.pages["reply.list/p3/"] = apiclient.Page{Items: []apiclient.Record{polled("p3", "r1", "new reply", false)}}
+	n, ts, err = b.PollNow(context.Background())
+	if err != nil || n != 1 || ts == 0 {
+		t.Fatalf("delta PollNow failed: n=%d ts=%d err=%v", n, ts, err)
+	}
+	f.block = true
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, _, err = b.PollNow(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) || e.Safe(err).Code != "SCAN_TIMEOUT" || !e.Safe(err).Retryable {
+		t.Fatalf("expected retryable SCAN_TIMEOUT wrapping DeadlineExceeded, got %v (%+v)", err, e.Safe(err))
 	}
 }

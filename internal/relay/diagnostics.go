@@ -31,6 +31,8 @@ func errorCause(code string) string {
 		return "The broker did not return a response."
 	case "REQUEST_UNCERTAIN":
 		return "The upstream request did not return a reliable result."
+	case "SCAN_TIMEOUT", "REQUEST_TIMEOUT":
+		return "The scan request timed out before completing."
 	case "POLL_RATE_LIMIT", "RATE_LIMITED":
 		return "The broker request rate limit was reached."
 	case "BUSY":
@@ -69,8 +71,9 @@ func NewErrorRecord(err error, phase string, attempt, limit int, now time.Time) 
 	return &ErrorRecord{Code: code, Cause: errorCause(code), Phase: phase, At: now.UnixMilli(), Attempt: attempt, RetryLimit: limit, Retryable: retryable, HTTPStatus: status, Metadata: apiclient.ReadFailureMetadata(x.Details)}
 }
 
-// A read-only scan can restart a discarded snapshot or wait for a busy broker.
-// These do not authorize another webhook delivery or soften binding/gap errors.
+// A read-only scan can restart a discarded snapshot, recover from timeouts, or
+// wait for a busy broker. These do not authorize another webhook delivery or
+// soften binding/gap errors.
 func ScanRetryable(err error) bool {
 	if Retryable(err) {
 		return true
@@ -78,13 +81,24 @@ func ScanRetryable(err error) bool {
 	x := e.Safe(err)
 	if x.Code == "AUTH_REJECTED" {
 		m := apiclient.ReadFailureMetadata(x.Details)
-		return m.Phase == apiclient.PhaseBusinessRequest && (m.UpstreamCode == 853004 || m.UpstreamCode == 42001)
+		return m.Phase == apiclient.PhaseBusinessRequest && (m.UpstreamCode == 853004 || m.UpstreamCode == 42001 || m.UpstreamCode == 40014)
 	}
-	return x.Code == "RESPONSE_INTERRUPTED" || x.Code == "BUSY" || x.Code == "POLL_UNSTABLE"
+	return x.Code == "RESPONSE_INTERRUPTED" || x.Code == "BUSY" || x.Code == "POLL_UNSTABLE" || x.Code == "SCAN_TIMEOUT" || x.Code == "REQUEST_TIMEOUT"
 }
 
 func (r *ErrorRecord) valid(phase string) bool {
-	return r == nil || (r.Phase == phase && diagnosticCode.MatchString(r.Code) && r.Cause == errorCause(r.Code) && r.At > 0 && r.Attempt >= 1 && r.Attempt <= 21 && r.RetryLimit >= 0 && r.RetryLimit <= 20 && (r.HTTPStatus == 0 || r.HTTPStatus >= 100 && r.HTTPStatus <= 599) && r.Metadata.Valid())
+	if r == nil {
+		return true
+	}
+	maxAttempt := 21
+	if phase == "scan" && r.RetryLimit < 0 {
+		maxAttempt = 1_000_000
+	}
+	minLimit := 0
+	if phase == "scan" {
+		minLimit = -1
+	}
+	return r.Phase == phase && diagnosticCode.MatchString(r.Code) && r.Cause == errorCause(r.Code) && r.At > 0 && r.Attempt >= 1 && r.Attempt <= maxAttempt && r.RetryLimit >= minLimit && r.RetryLimit <= 20 && (r.HTTPStatus == 0 || r.HTTPStatus >= 100 && r.HTTPStatus <= 599) && r.Metadata.Valid()
 }
 
 // Local scan backoff uses equal jitter, capped at five minutes. Operator polling
@@ -133,7 +147,7 @@ func (s *State) RecordScanFailure(err error, cfg Config, interval time.Duration,
 }
 func (s State) ScanState() string {
 	switch {
-	case s.ScanBlocked != "" || s.LastScanError != nil && s.ScanFailures > s.LastScanError.RetryLimit:
+	case s.ScanBlocked != "" || (s.LastScanError != nil && s.LastScanError.RetryLimit >= 0 && s.ScanFailures > s.LastScanError.RetryLimit):
 		return "blocked"
 	case s.Progress != nil:
 		return "in_progress"

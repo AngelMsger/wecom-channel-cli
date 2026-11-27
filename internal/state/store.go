@@ -65,11 +65,29 @@ func CheckDir(path string, private bool) error {
 }
 
 func Open(dir, bot string, scope ...string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, failure()
-	}
-	if err := CheckDir(dir, true); err != nil {
-		return nil, err
+	return openStore(dir, bot, true, scope...)
+}
+
+// OpenRelaxed opens or initializes state in a user-owned private 0700 directory
+// while tolerating symlinked ancestors (such as container mounts or macOS /var).
+func OpenRelaxed(dir, bot string, scope ...string) (*Store, error) {
+	return openStore(dir, bot, false, scope...)
+}
+
+func openStore(dir, bot string, strict bool, scope ...string) (*Store, error) {
+	if strict {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return nil, failure()
+		}
+		if err := CheckDir(dir, true); err != nil {
+			return nil, err
+		}
+	} else {
+		resolved, err := securefs.EnsurePrivateDir(dir, false)
+		if err != nil {
+			return nil, err
+		}
+		dir = resolved
 	}
 	fd, err := unix.Open(filepath.Join(dir, "broker.lock"), unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
 	if err != nil {

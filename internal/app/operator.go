@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"time"
 
 	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
@@ -10,6 +11,7 @@ import (
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
+	"github.com/angelmsger/wecom-channel-cli/pkg/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +31,12 @@ func (s *appState) brokerCommands() *cobra.Command {
 		if err := s.guard("broker serve"); err != nil {
 			return err
 		}
-		api, err := apiclient.New(deployment.Bot, os.Getenv("WECOM_CHANNEL_BOT_SECRET"))
+		tcfg := transport.DefaultConfig()
+		tcfg.ProxyURL = deployment.UpstreamProxy
+		if deployment.UpstreamTimeoutSeconds > 0 {
+			tcfg.Timeout = time.Duration(deployment.UpstreamTimeoutSeconds) * time.Second
+		}
+		api, err := apiclient.NewWithOptions(deployment.Bot, os.Getenv("WECOM_CHANNEL_BOT_SECRET"), apiclient.Options{Transport: tcfg})
 		if err != nil {
 			return err
 		}
@@ -126,7 +133,8 @@ func (s *appState) authCommands() *cobra.Command {
 			"credential_owner": "isolated broker operator", "required_broker_environment": []string{"WECOM_CHANNEL_BOT_SECRET"},
 			"callback_environment": []string{"WECOM_CHANNEL_CALLBACK_TOKEN", "WECOM_CHANNEL_ENCODING_AES_KEY"},
 			"watch_setup":          "Polling needs read_all and observe_all with post/reply events enabled; leave callback_listen empty. Callback environment variables are optional and required only when a callback listener is configured.",
-			"credential_guide":     "Obtain the API-mode bot ID and Secret from WeCom bot administration. In a trusted operator session, run channel list with --bot-id and supply WECOM_CHANNEL_BOT_SECRET through your secret manager. No channel ID is needed for channel list --bot-id; never send the Secret through chat or argv.",
+			"unified_setup":        "Run `wecom-channel-cli connect --bot-id BOT_ID` once to store the verified Secret and discover channels into profile.yaml, then run `wecom-channel-cli listen --channel NAME` (foreground NDJSON) or `wecom-channel-cli serve --channel NAME --save` (single-process daemon with local CLI sockets, optional webhook delivery, and `status` health checks).",
+			"credential_guide":     "Obtain the API-mode bot ID and Secret from WeCom bot administration. In a trusted operator session, run connect --bot-id BOT_ID (or channel list --bot-id BOT_ID for strict managed setup) and supply WECOM_CHANNEL_BOT_SECRET through your secret manager; never send the Secret through chat or argv.",
 			"channel_discovery":    "Run channel list --bot-id BOT_ID before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
 			"official_cli_reuse":   map[string]any{"supported": false, "reason": "The official CLI uses get_cli_config and a gateway Bearer token. Channel get_token credentials are a separate contract; encrypted private stores are not an integration API."},
 			"documentation":        "https://developer.work.weixin.qq.com/document/path/101910",

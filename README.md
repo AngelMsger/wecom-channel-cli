@@ -54,6 +54,42 @@ Inside the fx workspace, `go.work` uses the local kit. Use `GOWORK=off make test
 to verify the `agent-cli-kit` version pinned in `go.mod`. `make cross` builds Linux/macOS
 amd64/arm64 executables; cross-compilation is not native runtime verification.
 
+## Quick start (single-profile workflow)
+
+For personal, container, or Grok routine deployments where one trusted operator
+controls the service, start with three commands and a single `profile.yaml`
+([profile.example.yaml](deploy/profile.example.yaml)):
+
+```sh
+# 1. Authenticate once, save Secret in the OS credential store, and discover channels
+wecom-channel-cli connect --bot-id BOT_ID
+# Optional explicit proxy for cross-region links (ambient env proxies are never inherited):
+# wecom-channel-cli connect --bot-id BOT_ID --proxy socks5h://127.0.0.1:1080
+
+# 2a. Stream observations in the foreground as untrusted NDJSON (auto-recovers on transient network drops)
+wecom-channel-cli listen --channel Engineering
+
+# 2b. Or run the unified single-process daemon (concurrent polling + local CLI sockets + optional Grok webhook)
+wecom-channel-cli serve --channel Engineering \
+  --webhook-url https://grok.example.invalid/routines/ID/webhook \
+  --webhook-token-env GROK_ROUTINE_SENDER_KEY --save
+
+# 3. Inspect real daemon liveness (flock probe), per-channel health, and webhook counters
+wecom-channel-cli status
+wecom-channel-cli status --check --max-stale 10m
+```
+
+`serve` runs continuously until interrupted, cleans stale Unix sockets on restart,
+auto-syncs client contexts into `config.yaml` (so `post list` / `reply list` work
+immediately), retries transient cross-region read drops automatically with idle-pool
+eviction and unlimited steady-state backoff, and keeps tuning changes (intervals,
+timeouts, budgets, proxy URL) from invalidating saved checkpoints. Pass `--strict-fs`
+when strict ancestor-to-`/` directory ownership checks are desired.
+
+For strict multi-user Linux host isolation (separate `wecom-channel`, `wecom-relay`,
+and sandboxed worker OS accounts), continue with [Operator setup](#operator-setup)
+and [Security and deployment](docs/security.md).
+
 ## Operator setup
 
 The `channel list --bot-id` mode and template flags below are available in 0.2.0.

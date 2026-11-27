@@ -15,10 +15,12 @@ import (
 
 // Deployment shares one bot token and callback endpoint across isolated contexts.
 type Deployment struct {
-	Version        int      `json:"version"`
-	Bot            string   `json:"bot_id"`
-	CallbackListen string   `json:"callback_listen"`
-	Contexts       []Config `json:"contexts"`
+	Version                int      `json:"version"`
+	Bot                    string   `json:"bot_id"`
+	CallbackListen         string   `json:"callback_listen"`
+	UpstreamProxy          string   `json:"upstream_proxy,omitempty"`
+	UpstreamTimeoutSeconds int      `json:"upstream_timeout_seconds,omitempty"`
+	Contexts               []Config `json:"contexts"`
 }
 
 func LoadDeployment(path string) (Deployment, error) {
@@ -54,23 +56,27 @@ func LoadDeployment(path string) (Deployment, error) {
 		if err != nil {
 			return d, err
 		}
-		return Deployment{Version: 1, Bot: c.Bot, CallbackListen: c.CallbackListen, Contexts: []Config{c}}, nil
+		return Deployment{Version: 1, Bot: c.Bot, CallbackListen: c.CallbackListen, UpstreamProxy: c.UpstreamProxy, UpstreamTimeoutSeconds: c.UpstreamTimeoutSeconds, Contexts: []Config{c}}, nil
 	}
 	var raw struct {
-		Version        int               `json:"version"`
-		Bot            string            `json:"bot_id"`
-		CallbackListen string            `json:"callback_listen"`
-		Contexts       []json.RawMessage `json:"contexts"`
+		Version                int               `json:"version"`
+		Bot                    string            `json:"bot_id"`
+		CallbackListen         string            `json:"callback_listen"`
+		UpstreamProxy          string            `json:"upstream_proxy,omitempty"`
+		UpstreamTimeoutSeconds int               `json:"upstream_timeout_seconds,omitempty"`
+		Contexts               []json.RawMessage `json:"contexts"`
 	}
 	if header.Version != 2 || safejson.Decode(data, &raw, true) != nil || len(raw.Contexts) == 0 || len(raw.Contexts) > 32 || !apiclient.Identifier(raw.Bot, 256) {
 		return d, e.New(e.CategoryConfig, "CONFIG_INVALID", "A version 2 deployment requires one bot and 1–32 channel contexts.")
 	}
-	d = Deployment{Version: 2, Bot: raw.Bot, CallbackListen: raw.CallbackListen}
+	d = Deployment{Version: 2, Bot: raw.Bot, CallbackListen: raw.CallbackListen, UpstreamProxy: raw.UpstreamProxy, UpstreamTimeoutSeconds: raw.UpstreamTimeoutSeconds}
 	seen := map[string]bool{}
 	for _, data := range raw.Contexts {
 		c := Default()
 		c.Bot = raw.Bot
 		c.CallbackListen = raw.CallbackListen
+		c.UpstreamProxy = raw.UpstreamProxy
+		c.UpstreamTimeoutSeconds = raw.UpstreamTimeoutSeconds
 		if safejson.Decode(data, &c, true) != nil || c.Bot != raw.Bot || c.CallbackListen != raw.CallbackListen || len(c.Channels) != 1 {
 			return d, e.New(e.CategoryConfig, "CONTEXT_SCOPE", "Every context must contain exactly one channel and share the deployment's bot/callback.")
 		}

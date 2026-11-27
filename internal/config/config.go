@@ -6,12 +6,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/angelmsger/wecom-channel-cli/internal/securefs"
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
+	"github.com/angelmsger/wecom-channel-cli/pkg/transport"
 	"golang.org/x/sys/unix"
 )
 
@@ -27,25 +29,28 @@ type Channel struct {
 }
 
 type Config struct {
-	Name                string    `json:"name"`
-	Version             int       `json:"version"`
-	Bot                 string    `json:"bot_id"`
-	StateDir            string    `json:"state_dir"`
-	AgentSocket         string    `json:"agent_socket"`
-	AdminSocket         string    `json:"admin_socket"`
-	CallbackListen      string    `json:"callback_listen"`
-	ReadOnly            bool      `json:"read_only"`
-	Channels            []Channel `json:"channels"`
-	Events              []string  `json:"events"`
-	MaxEvents           int       `json:"max_events"`
-	MaxProposals        int       `json:"max_proposals"`
-	RetentionHours      int       `json:"retention_hours"`
-	ProposalTTLSeconds  int       `json:"proposal_ttl_seconds"`
-	RequestsPerMinute   int       `json:"requests_per_minute"`
-	WatchBackend        string    `json:"watch_backend"`
-	PollIntervalSeconds int       `json:"poll_interval_seconds"`
-	PollMaxRequests     int       `json:"poll_max_requests"`
-	PollMaxRecords      int       `json:"poll_max_records"`
+	Name                   string    `json:"name"`
+	Version                int       `json:"version"`
+	Bot                    string    `json:"bot_id"`
+	StateDir               string    `json:"state_dir"`
+	AgentSocket            string    `json:"agent_socket"`
+	AdminSocket            string    `json:"admin_socket"`
+	CallbackListen         string    `json:"callback_listen"`
+	ReadOnly               bool      `json:"read_only"`
+	Channels               []Channel `json:"channels"`
+	Events                 []string  `json:"events"`
+	MaxEvents              int       `json:"max_events"`
+	MaxProposals           int       `json:"max_proposals"`
+	RetentionHours         int       `json:"retention_hours"`
+	ProposalTTLSeconds     int       `json:"proposal_ttl_seconds"`
+	RequestsPerMinute      int       `json:"requests_per_minute"`
+	WatchBackend           string    `json:"watch_backend"`
+	PollIntervalSeconds    int       `json:"poll_interval_seconds"`
+	PollMaxRequests        int       `json:"poll_max_requests"`
+	PollMaxRecords         int       `json:"poll_max_records"`
+	PollConcurrency        int       `json:"poll_concurrency,omitempty"`
+	UpstreamProxy          string    `json:"upstream_proxy,omitempty"`
+	UpstreamTimeoutSeconds int       `json:"upstream_timeout_seconds,omitempty"`
 }
 
 func Default() Config {
@@ -87,8 +92,14 @@ func (c Config) Validate() error {
 	if c.Version != 1 || !apiclient.Identifier(c.Bot, 256) || c.MaxEvents < 1 || c.MaxEvents > 100000 || c.MaxProposals < 1 || c.MaxProposals > 10000 || c.RetentionHours < 24 || c.RetentionHours > 168 || c.ProposalTTLSeconds < 60 || c.ProposalTTLSeconds > 3600 || c.RequestsPerMinute < 1 || c.RequestsPerMinute > 600 {
 		return bad()
 	}
-	if (c.WatchBackend != "auto" && c.WatchBackend != "poll" && c.WatchBackend != "callback") || c.PollIntervalSeconds < 5 || c.PollIntervalSeconds > 3600 || c.PollMaxRequests < 1 || c.PollMaxRequests > 1000 || c.PollMaxRecords < 1 || c.PollMaxRecords > 100000 {
-		return e.New(e.CategoryConfig, "POLL_CONFIG", "Use watch_backend auto/poll/callback, poll_interval_seconds 5–3600, poll_max_requests 1–1000, and poll_max_records 1–100000.")
+	if (c.WatchBackend != "auto" && c.WatchBackend != "poll" && c.WatchBackend != "callback") || c.PollIntervalSeconds < 5 || c.PollIntervalSeconds > 3600 || c.PollMaxRequests < 1 || c.PollMaxRequests > 5000 || c.PollMaxRecords < 1 || c.PollMaxRecords > 100000 || c.PollConcurrency < 0 || c.PollConcurrency > 8 {
+		return e.New(e.CategoryConfig, "POLL_CONFIG", "Use watch_backend auto/poll/callback, poll_interval_seconds 5–3600, poll_max_requests 1–5000, poll_max_records 1–100000, and poll_concurrency 0–8.")
+	}
+	if c.UpstreamTimeoutSeconds != 0 && (c.UpstreamTimeoutSeconds < 5 || c.UpstreamTimeoutSeconds > 180) {
+		return e.New(e.CategoryConfig, "POLL_CONFIG", "upstream_timeout_seconds must be between 5 and 180.")
+	}
+	if _, err := transport.ValidateProxyURL(c.UpstreamProxy); err != nil {
+		return err
 	}
 	for _, p := range []string{c.StateDir, c.AgentSocket, c.AdminSocket} {
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p || strings.ContainsAny(p, "\r\n") {
@@ -144,6 +155,42 @@ func (c Config) EffectiveWatchBackend() string {
 		return "poll"
 	}
 	return "callback"
+}
+
+// EffectivePollConcurrency returns the bounded reply-fetch worker count (default 4).
+func (c Config) EffectivePollConcurrency() int {
+	if c.PollConcurrency >= 1 && c.PollConcurrency <= 8 {
+		return c.PollConcurrency
+	}
+	return 4
+}
+
+// ScopeDigest hashes only the observation security/coverage scope (bot, context,
+// backend, enabled event kinds, channel IDs and read/observe/sender rules).
+// Operational tuning such as poll intervals, request budgets, timeouts or proxy
+// URLs intentionally do not change this digest so tuning never breaks checkpoints.
+func (c Config) ScopeDigest() string {
+	events := slices.Clone(c.Events)
+	slices.Sort(events)
+	type channelScope struct {
+		ID         string   `json:"id"`
+		ReadAll    bool     `json:"read_all"`
+		ObserveAll bool     `json:"observe_all"`
+		Senders    []string `json:"senders"`
+	}
+	channels := make([]channelScope, 0, len(c.Channels))
+	for _, ch := range c.Channels {
+		senders := slices.Clone(ch.Senders)
+		slices.Sort(senders)
+		channels = append(channels, channelScope{ID: ch.ID, ReadAll: ch.ReadAll, ObserveAll: ch.ObserveAll, Senders: senders})
+	}
+	return apiclient.Digest(struct {
+		Name     string         `json:"name"`
+		Bot      string         `json:"bot_id"`
+		Backend  string         `json:"backend"`
+		Events   []string       `json:"events"`
+		Channels []channelScope `json:"channels"`
+	}{c.Name, c.Bot, c.EffectiveWatchBackend(), events, channels})
 }
 
 func (c Config) Channel(id string) (Channel, bool) {

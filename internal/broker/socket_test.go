@@ -72,3 +72,61 @@ func TestSocketSeparationAndShutdown(t *testing.T) {
 	_, err = Call(context.Background(), b.Config.AgentSocket, Request{Operation: "post.list", Query: apiclient.Query{Channel: "channel-a"}})
 	assertCode(t, err, "POLICY_DENIED")
 }
+
+func TestStaleSocketRecoveryAndFileProtection(t *testing.T) {
+	dir, err := os.MkdirTemp("/private/tmp", "wcc-stale-")
+	if err != nil {
+		dir, err = os.MkdirTemp("/tmp", "wcc-stale-")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Create a stale Unix socket (listening socket whose fd is closed without unlinking).
+	stalePath := filepath.Join(dir, "stale.sock")
+	l, err := unixListener(stalePath, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep the file on disk while closing the listener (simulating SIGKILL).
+	f, err := os.Create(filepath.Join(dir, "not-a-socket"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if _, err := unixListener(filepath.Join(dir, "not-a-socket"), true, true); err == nil {
+		t.Fatal("overwrote non-socket regular file")
+	}
+	// Active socket must still be refused.
+	if _, err := unixListener(stalePath, true, true); err == nil {
+		t.Fatal("replaced active listener socket")
+	}
+	_ = l.Close()
+
+	// Create a genuinely orphaned socket path via unix bind + syscall close (without Go unlink).
+	stalePath2 := filepath.Join(dir, "orphan.sock")
+	l2, err := unixListener(stalePath2, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// UnlinkOnClose(false) leaves the socket node on disk after Close(), matching SIGKILL.
+	if ul, ok := l2.(interface{ SetUnlinkOnClose(bool) }); ok {
+		ul.SetUnlinkOnClose(false)
+	}
+	_ = l2.Close()
+	if _, err := os.Lstat(stalePath2); err != nil {
+		t.Fatalf("expected stale socket node on disk: %v", err)
+	}
+	rebound, err := unixListener(stalePath2, true, true)
+	if err != nil {
+		t.Fatalf("failed to recover stale socket: %v", err)
+	}
+	_ = rebound.Close()
+}

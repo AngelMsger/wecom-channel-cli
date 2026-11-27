@@ -1,11 +1,34 @@
 # Watching channels and threads
 
+For single-operator, container, or Grok deployments, the unified workflow
+(`connect` -> `listen` / `serve` -> `status`) replaces separate broker policy,
+relay JSON, and context files with one `profile.yaml`
+([profile.example.yaml](../deploy/profile.example.yaml)). `listen` streams
+selected channels as untrusted NDJSON with concurrent in-process polling and
+unlimited steady-state backoff; `serve` runs one continuous daemon providing
+concurrent polling, local Unix sockets, auto-synced `config.yaml` contexts, live
+`status.json`, and optional in-process webhook delivery; `status --check` probes
+`serve.lock` for real process liveness and channel/webhook health.
+
+For strict multi-user Linux host isolation (separate broker, relay, and worker OS
+accounts), `event watch` and standalone `relay run` remain fully supported below:
+
 `event watch` streams **post/reply observations** as NDJSON through one interface.
 Choose a whole channel context or one or more post IDs (a post and its replies
 form a thread). Without a callback listener, the default `auto` backend polls the
 channel HTTP APIs: no public address, tunnel or callback keys are needed. Existing
 callback deployments retain their event intake. Watches never execute message
 instructions, launch an agent or approve a write.
+
+Operational tuning (`poll_interval_seconds`, `poll_max_requests`, `poll_max_records`,
+`poll_concurrency`, `upstream_timeout_seconds`, `upstream_proxy`, webhook timeouts,
+retry budgets, and batching windows) is decoupled from watch and relay bindings
+(`ScopeDigest` / `ConsumerDigest`) so adjusting resilience settings never
+invalidates checkpoints or queued state. Standalone `relay run` now supports
+continuous operation (`--duration 0`, `--max-batches 0`), unlimited steady-state
+scan backoff (`scan_retry_limit: -1`), explicit `proxy_url`, and configurable
+post-send uncertainty policy (`on_uncertain: halt|skip|retry`, with `skip`
+enabled in [grok.example.json](../deploy/grok.example.json)).
 
 ## Operator prerequisites
 
