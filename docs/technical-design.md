@@ -74,6 +74,16 @@ at most 24 hours old and at most five minutes in the future; mention reads and
 approvals are bounded by the event's 24-hour age. An event retained for audit
 does not extend WeCom's permission window.
 
+## Personal connection and listener
+
+The trusted personal commands compose the existing API reader, config defaults,
+read-only broker, resumable poller and watch output checkpoint in one process.
+`connect` atomically replaces a fully discovered catalog, preserving selections
+by bot and topic ID. Verified credentials use agent-cli-kit's credential store.
+A profile lock serializes setup and foreground sessions. Each selected channel
+has its own ledger, read-retry loop and checkpoint; it opens no server socket.
+Concurrent channels serialize output records. See [coverage and recovery](watching.md#personal-foreground-listening).
+
 ## Credential-first bootstrap
 
 `channel list` is the sole channel listing command. An explicit `--bot-id`

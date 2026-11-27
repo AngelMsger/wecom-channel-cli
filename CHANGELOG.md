@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Add personal `connect` and `listen` commands. Discover joined channels with a
+  Bot ID and Secret, select names, and resume foreground observations through
+  transient read failures using local checkpoints. Personal setup uses user
+  storage and requires no broker installation, policy file or sudo. Update the
+  companion Skill to 0.1.16.
+
 ## [0.5.0] — 2026-11-24
 
 - Add a per-instance listener health timer, bounded scan-only read recovery,

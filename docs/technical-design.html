@@ -61,6 +61,14 @@ callback timestamps have five-minute skew tolerance; event creation times are
 at most 24 hours old and at most five minutes in the future; mention reads and
 approvals are bounded by the event's 24-hour age. An event retained for audit
 does not extend WeCom's permission window.</p>
+<h2 id="personal-connection-and-listener">Personal connection and listener</h2>
+<p>The trusted personal commands compose the existing API reader, config defaults,
+read-only broker, resumable poller and watch output checkpoint in one process.
+<code>connect</code> atomically replaces a fully discovered catalog, preserving selections
+by bot and topic ID. Verified credentials use agent-cli-kit's credential store.
+A profile lock serializes setup and foreground sessions. Each selected channel
+has its own ledger, read-retry loop and checkpoint; it opens no server socket.
+Concurrent channels serialize output records. See <a href="watching.html#personal-foreground-listening">coverage and recovery</a>.</p>
 <h2 id="credential-first-bootstrap">Credential-first bootstrap</h2>
 <p><code>channel list</code> is the sole channel listing command. An explicit <code>--bot-id</code>
 selects the operator's <code>WECOM_CHANNEL_BOT_SECRET</code> environment for first-time setup.

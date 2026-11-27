@@ -1,5 +1,10 @@
 # Command responsibilities and migration
 
+Personal operator setup starts with `connect` (verify a bot and refresh its
+channel catalog) and `listen` (select names and stream read-only observations
+in the foreground). Managed `channel list`, `event watch` and `relay run` retain
+their socket, duration and delivery contracts.
+
 The public grammar is `wecom-channel-cli <resource> <action>`. A command's
 resource, state owner, output and side effects determine its place in the tree.
 Operator authority comes from the private socket and policy, never from a noun,

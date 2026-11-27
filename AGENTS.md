@@ -30,10 +30,18 @@ write goes on `Writer` with a blocking override on the read-only wrapper in
 Use agent-cli-kit for errors, rendering, argv normalization and transport.
 Policy and durable event/proposal state are channel-specific, not replacements
 for the family's configuration or credential libraries. Credentials are supplied
-only to operator setup and the broker service; the agent has no login or secret export path.
+only to trusted personal/operator sessions and the broker service; the agent has no login or secret export path.
 Do not read the official CLI's private credential files or reuse its gateway
 Bearer token as a channel access token.
-Initial setup must discover IDs before requiring them. Keep one channel listing
+Personal foreground use is a trusted operator workflow. Keep `connect` and
+`listen` independent of managed sockets and system services. Discover the full
+catalog before replacing it; preserve selection and checkpoints by stable ID.
+Generate read-only channel scope in process, use the kit credential store, and
+retry only recoverable reads. Test first use, partial discovery, name collisions,
+outages and restart through the command tree. Keep personal credentials and
+state outside worker identities.
+
+Managed setup must discover IDs before requiring them. Keep one channel listing
 command: `channel list --bot-id ID` explicitly uses operator credentials before a
 policy or service exists; `channel list` otherwise uses the selected broker socket.
 Never select direct access from ambient credentials or after a broker failure.

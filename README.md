@@ -15,7 +15,34 @@ Distinct-user isolation passed in a synthetic Linux container; actual production
 deployment and live sending remain unverified.** Linux and macOS are supported.
 Download native binaries from the [GitHub release](https://github.com/AngelMsger/wecom-channel-cli/releases/tag/v0.5.0).
 
-The CLI is a client of a small credential-holding broker. The agent gets a Unix
+## Personal quickstart
+
+On the development branch, build with `make build` and run the resulting CLI:
+
+```sh
+bin/wecom-channel-cli connect --bot-id BOT_ID
+bin/wecom-channel-cli listen --channel "Engineering" --channel "Announcements"
+```
+
+The first command prompts privately for the Bot Secret, discovers joined channels
+across pages and lists their names. In a noninteractive trusted session supply
+`WECOM_CHANNEL_BOT_SECRET` locally. A successful connection saves a newly supplied
+Secret using the OS keychain or the shared credential store's private file fallback.
+Run `connect` again to refresh the catalog. The existing published v0.5.0 release
+supports the managed workflow below.
+
+Run `listen` to choose from a terminal menu or resume your saved selection.
+Use `--all` for the current catalog or `--pick` with the displayed number for
+duplicate names. Stop with Ctrl-C, then select different names or use
+`listen --none` to clear the selection. New channels remain unselected on refresh.
+Listening uses a local read-only scanner, emits NDJSON observations, and saves a
+quiet baseline and output checkpoint in your personal configuration directory.
+The CLI installs no service and needs no sudo. See [personal listening](docs/watching.md#personal-foreground-listening)
+for recovery and limits.
+
+## Managed deployment
+
+For model workers and reviewed writes, the CLI is a client of a small credential-holding broker. The agent gets a Unix
 socket for bounded reads and proposals. A separate private socket approves the
 exact proposal digest. Credentials, callback keys, policy and the write ledger
 stay with the broker. This only forms a host security boundary when the agent
@@ -35,8 +62,7 @@ wecom-channel-cli auth guide
 The installer downloads the matching Linux/macOS binary and verifies its SHA-256
 checksum. If your npm policy blocks install scripts, review the package before
 allowing its `postinstall` script or download a native binary from GitHub.
-Agent commands never download a missing binary automatically. Configure the broker
-and context below before reading channel data.
+Agent commands never download a missing binary automatically. Follow the managed setup below when provisioning a worker.
 
 ## Build and inspect
 

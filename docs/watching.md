@@ -7,6 +7,41 @@ channel HTTP APIs: no public address, tunnel or callback keys are needed. Existi
 callback deployments retain their event intake. Watches never execute message
 instructions, launch an agent or approve a write.
 
+## Personal foreground listening
+
+Run `wecom-channel-cli connect --bot-id BOT_ID` in your own terminal. It verifies
+the supplied Secret and saves all discovered names and IDs only after the final
+page succeeds. Refresh the same connection with `connect`. The catalog and
+per-channel ledgers live under the client configuration directory in `personal/`.
+Use a separate `--config-dir` to keep an additional bot. The inactive channels
+in a refreshed catalog retain no monitoring authority. Previously selected
+visible channels remain selected by stable ID across renames.
+
+`listen --channel NAME` replaces the saved selection with the names supplied
+on this invocation. Repeat the flag, choose `--all`, or use the numbered picks
+reported by the latest discovery. With no flags, a terminal offers a menu if
+no selection exists. A session covers up to 32 channels. `--dry-run` previews
+a selection offline. Stop the foreground listener before refreshing or editing
+the selection. `listen --none` clears it and keeps old checkpoints. Sessions end
+on interruption or an explicit `--duration`. No login item or system daemon is
+installed. Managed broker contexts and relay state are independent.
+
+Each channel scans independently. Its first complete snapshot is quiet. Later
+observations from other authors reach stdout as NDJSON. A checkpoint records
+successful output; interruption can replay previously printed events. Snapshot
+polling can coalesce changes during downtime. The personal preset allows 256
+upstream read attempts per full pass, paced at 60/minute with the existing
+5000-record cap and 30-second minimum interval. Every failed page spends a
+request. A confirmed capacity, permission or history gap blocks that channel.
+
+Recoverable read failures reuse the current cursor and staged pages. The
+listener reports `retry_wait` on stderr, observes rate-limit waits and retries up
+to twenty times per logical scan with jitter and a five-minute local backoff cap.
+One confirmed expired business-read token may recover within that budget.
+A completed scan reports recovery. Only the foreground session owns these retry
+attempts; the broker ledger, rate reservations and output checkpoint survive exit.
+The listener never sends a webhook or posts to WeCom.
+
 ## Operator prerequisites
 
 For first-time setup, use the operator's Bot ID and Secret with `channel list --bot-id BOT_ID`

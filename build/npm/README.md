@@ -12,7 +12,12 @@ wecom-channel-cli auth guide
 wecom-channel-cli skill install
 ```
 
-For initial operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally and run
+Personal mode on the development branch starts with `connect --bot-id BOT_ID`
+and `listen --channel NAME`. It discovers joined channels and runs read-only
+in the foreground with user-owned credentials and checkpoints. Build that
+branch from source until a release includes the personal commands.
+
+For managed operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally and run
 `wecom-channel-cli channel list --bot-id BOT_ID` before configuring a channel.
 Choose `data.topic_id`, generate policy with `policy example --bot-id BOT_ID
 --channel CHANNEL_ID`, then provision the broker and matching client context.

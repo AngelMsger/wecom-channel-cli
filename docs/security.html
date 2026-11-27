@@ -4,6 +4,15 @@ A warning or system prompt alone cannot prevent a model with a shell from
 deleting files or reading credentials. This program does not intercept another
 agent's shell, filesystem, browser, network or MCP tools. Those capabilities
 must be restricted by the agent host, OS or container independently.</p>
+<h2 id="personal-operator-sessions">Personal operator sessions</h2>
+<p>A trusted user's explicit <code>connect</code> and <code>listen</code> commands read WeCom directly.
+The user's private personal directory holds the channel catalog, ledgers and
+checkpoints. The credential store keeps the Secret separate from that catalog.
+The foreground listener creates only a read-only in-process broker for each
+selected channel and exposes no sockets. No system account, policy file or
+privileged installation is required. Keep this user's home, keychain and
+credential environment outside model workers. Workers continue to use their
+provisioned agent socket. A denied broker request never selects personal mode.</p>
 <h2 id="trust-and-authority">Trust and authority</h2>
 <p>Command names are not an authorization boundary. The canonical <code>proposal</code>
 commands and legacy <code>approval</code> aliases send the same listener-checked operations;

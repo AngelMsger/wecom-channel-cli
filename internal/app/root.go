@@ -26,10 +26,12 @@ type appState struct {
 	allowWrites           bool
 }
 
-func NewRootCmd() *cobra.Command {
+func NewRootCmd() *cobra.Command { return newRootCmd(newPersonalRuntime()) }
+
+func newRootCmd(personal personalRuntime) *cobra.Command {
 	s := &appState{}
 	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
-	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nFirst-time setup: auth guide -> channel list --bot-id -> policy example -> broker serve -> config set-context.\nRead retained events with event list/get, stream observations with event watch,\nor run durable unattended delivery with relay run."
+	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nPersonal setup: connect --bot-id BOT_ID, then listen --channel NAME. Managed service setup: auth guide.\nRead retained events with event list/get, stream observations with event watch,\nor run durable unattended delivery with relay run."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")
 	root.PersistentFlags().StringVar(&s.configDir, "config-dir", "", "Client context directory (or WECOM_CHANNEL_CONFIG)")
 	root.PersistentFlags().StringVar(&s.useContext, "use-context", "", "Select a channel security context (or WECOM_CHANNEL_CONTEXT)")
@@ -48,6 +50,7 @@ func NewRootCmd() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, _ error) error {
 		return e.New(e.CategoryUsage, "BAD_FLAG", "Invalid or unsupported flag; inspect command help.")
 	})
+	root.AddCommand(s.connectCommand(personal), s.listenCommand(personal))
 	root.AddCommand(s.readCommands()...)
 	root.AddCommand(s.reactionCommands())
 	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(), s.skillCommands())

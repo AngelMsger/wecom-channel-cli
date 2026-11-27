@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.15
+version: 0.1.16
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.15` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.16` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -21,7 +21,18 @@ durable delivery. `doctor` checks local broker readiness; operator-only `auth ch
 tests upstream credentials. Old `approval`, `config example/validate`, `search result`
 and `auth status` paths are compatibility aliases, not alternative capabilities.
 
-For first-time setup, do not ask the user for a channel ID from the WeCom client;
+For a trusted person who asks to connect a bot or listen locally, start with
+`connect --bot-id BOT_ID`. The CLI prompts privately or uses the locally supplied
+Secret. It discovers all pages and stores the verified connection. Use the
+returned channel names with repeated `listen --channel NAME`, or `--pick` for
+a duplicate name. `--all` selects the current catalog. A bare `listen` resumes
+the saved selection or offers a terminal menu. Stop it before changing choices;
+`listen --none` clears them. Choose `--duration` for a bounded agent-requested
+session. Transient read failures report backoff and recover within the scan
+budget. Keep the Secret out of chat, argv and model workers. A broker denial
+never authorizes switching to the personal commands.
+
+For first-time managed setup, do not ask the user for a channel ID from the WeCom client;
 it is not displayed there. Start with `auth guide`. The trusted operator supplies
 Bot ID and Secret locally, then runs `channel list --bot-id ID` with
 `WECOM_CHANNEL_BOT_SECRET` from their secret manager. No channel policy, socket or

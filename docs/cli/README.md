@@ -16,8 +16,10 @@ Available Commands:
   broker      Run the isolated credential-holding broker
   channel     List channels during operator setup or through broker policy
   config      Manage local client contexts; authorization belongs to operator policy
+  connect     Connect a personal Bot and discover its channels by name
   doctor      Check broker readiness and policy; use auth check to verify upstream credentials
   event       Read or watch channel observations and authenticated callback events
+  listen      Listen to selected personal channels in the foreground
   member      Inspect member data through broker policy
   policy      Generate or validate the broker's operator-owned authorization policy offline
   post        Inspect post data through broker policy
@@ -323,6 +325,31 @@ Global Flags:
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 ```
 
+## wecom-channel-cli connect
+
+Connect a personal Bot and discover its channels by name
+
+```text
+Usage:
+  wecom-channel-cli connect [flags]
+
+Examples:
+  wecom-channel-cli connect --bot-id BOT_ID
+  wecom-channel-cli listen --channel Engineering
+
+Flags:
+      --bot-id string   Bot ID (prompted on first interactive use)
+      --dry-run         Preview discovery without reading credentials, making requests or writing state
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
 ## wecom-channel-cli doctor
 
 Check broker readiness and policy; use auth check to verify upstream credentials
@@ -450,6 +477,35 @@ Flags:
       --max-events int       Stop after this many matching emitted events (default 1000)
       --post stringArray     Watch this post and its replies; repeat for up to 32 post IDs
       --whole-channel        Watch post/reply changes throughout this channel context
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli listen
+
+Listen to selected personal channels in the foreground
+
+```text
+Usage:
+  wecom-channel-cli listen [flags]
+
+Examples:
+  wecom-channel-cli listen --channel Engineering --channel Announcements
+  wecom-channel-cli listen
+
+Flags:
+      --all                   Select all currently discovered channels
+      --channel stringArray   Select an exact discovered channel name; repeat to select several
+      --dry-run               Show the effective selection without saving or contacting WeCom
+      --duration duration     Optional foreground session deadline (default until interrupted)
+      --none                  Clear the saved selection
+      --pick ints             Select numbered entries from the last saved channel list (for duplicate names)
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
