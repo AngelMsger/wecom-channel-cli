@@ -25,7 +25,7 @@ wecom-channel-cli
   policy    example | validate
   broker    serve
   config    path | get-contexts | set-context | use-context | delete-context
-  auth      guide | check
+  auth      guide | check | logout
   skill     show | path | status | install
   doctor
   version
@@ -38,7 +38,7 @@ This inventory omits Cobra's built-in help/completion. The
 | --- | --- | --- |
 | `connect` | Verify bot credentials, save Secret to the user credential store, discover all joined channels, and write `profile.yaml` | Trusted operator session; never run inside an untrusted channel worker |
 | `listen` | Stream selected channels as untrusted NDJSON using concurrent in-process polling with unlimited steady-state recovery | Trusted operator session owning `profile.yaml` and private data dir |
-| `serve` | Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced `config.yaml` contexts, live `status.json`, and optional in-process webhook delivery | Trusted operator session; holds credentials in-process while exposing agent sockets to workers |
+| `serve` | Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced `config.yaml` contexts, live `status.json`, and optional in-process webhook delivery (`--retry-failed` for explicit recovery) | Trusted operator session; holds credentials in-process while exposing agent sockets to workers |
 | `status` | Probe `serve.lock` for real process liveness and report per-channel polling and webhook health (`--check` exits non-zero if stopped, blocked, failed, or stale) | Local read-only inspection; loads no credentials |
 | `channel list`, `member list` | Discover channels/members in one bounded page | Broker policy; explicit `channel list --bot-id` is credential-based operator bootstrap |
 | `post/reply list` | Retrieve a bounded page of current content | Broker read scope |
@@ -63,6 +63,7 @@ This inventory omits Cobra's built-in help/completion. The
 | `config ...` | Manage local connection coordinates and selected context | Client configuration; never changes broker permissions |
 | `auth guide` | Explain credential ownership and bootstrap | Offline |
 | `auth check` | Perform a bounded upstream authentication check | Private operator socket; remote I/O |
+| `auth logout` | Idempotently remove a saved Bot Secret from the user credential store while preserving `profile.yaml` and ledgers | Trusted operator session; rejects managed socket/context env |
 | `doctor` | Check local broker readiness and read-only policy | Does not verify upstream authentication |
 | `skill ...`, `version` | Inspect/install agent guidance and report build identity | Local software metadata; installation is an explicit local write |
 

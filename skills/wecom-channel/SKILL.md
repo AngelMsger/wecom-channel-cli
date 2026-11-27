@@ -29,12 +29,19 @@ manual JSON policy assembly: in a trusted operator session, run
 `connect --bot-id ID` (optionally `--proxy URL` and `--upstream-timeout 45s`)
 with `WECOM_CHANNEL_BOT_SECRET` supplied locally or via interactive prompt to
 verify credentials, store the Secret in the OS credential store, discover all
-joined channels and write `profile.yaml`. Then run `listen --channel NAME`
+joined channels and write `profile.yaml`. Remove stored credentials anytime with
+`auth logout` (preserving `profile.yaml` and ledgers). Run `listen --channel NAME`
 (foreground resilient NDJSON stream) or `serve --channel NAME --save` (single-process
 daemon serving local Unix sockets, auto-synced `config.yaml` contexts, concurrent
 background polling and optional in-process `--webhook-url` delivery), and monitor
-liveness with `status` / `status --check`. Only trusted operator sessions may run
-`connect`, `listen`, or `serve`; channel workers still use only their agent socket.
+liveness with `status` / `status --check`. After fixing a terminal webhook error,
+restart with `serve --retry-failed` (unknown outcomes under `on_uncertain: halt`
+still require operator reconciliation using the `delivery_state` path shown in
+`status`). When a profile channel sets `read_only: false`, agent proposals for
+posts, replies and native reactions work through the agent socket while operator
+approval stays on `admin_socket` shown in `status`. Only trusted operator sessions
+(without `WECOM_CHANNEL_SOCKET` / `WECOM_CHANNEL_CONTEXT`) may run `connect`,
+`listen`, `serve`, or `auth logout`; channel workers still use only their agent socket.
 
 For strict multi-user Linux host isolation, do not ask the user for a channel ID
 from the WeCom client; it is not displayed there. Start with `auth guide`. The

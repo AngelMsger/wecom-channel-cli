@@ -165,20 +165,25 @@ write state in a probe. Test transient recovery, persistent failure, hung childr
 and service authority boundaries. Local journal alerts are not remote delivery;
 retain an explicit operator integration and host acceptance procedure.
 
-The unified single-profile workflow (`connect`, `listen`, `serve`, `status`) uses
-one `profile.yaml` and `agent-cli-kit/credstore` while sharing the same broker,
-self-exclusion, untrusted-envelope, and relay primitives. `decodeTopic` must decode
-both real JSON-redacted `map[string]any` records from `HTTPClient.Read` and typed
-`apiclient.Topic` values. Read-only protocol POSTs (`get_token`, `Reader` calls)
-use `transport.AsRead` with idle-pool eviction on transport error; never mark
-writes (`Send` or webhook POSTs) with `AsRead`, and never inherit ambient proxy
-environment variables (explicit validated proxy URLs only). Keep operational
-tuning (timeouts, retries, poll intervals, concurrency, budgets, batching, proxy)
-out of `ScopeDigest` and `ConsumerDigest` so tuning edits never break bindings.
-Broker socket bind may unlink only verified dead stale Unix sockets, never live
-sockets or non-socket files. `status` probes `serve.lock` with non-blocking
-`flock` for real liveness and surfaces blocked channels and failed webhooks under
-`--check`. Strict ancestor checks remain mandatory for multi-user `broker serve`
-and standalone `relay run`; `connect`/`listen`/`serve` default to relaxed
-ancestor resolution with strict non-symlink 0700 leaf enforcement and support
-`--strict-fs`.
+The unified single-profile workflow (`connect`, `listen`, `serve`, `status`,
+`auth logout`) uses one `profile.yaml` and `agent-cli-kit/credstore` while
+sharing the same broker, self-exclusion, untrusted-envelope, and relay
+primitives. Credential-holding operator commands (`connect`, `listen`, `serve`,
+`auth logout`) reject managed worker environments (`WECOM_CHANNEL_SOCKET`,
+`WECOM_CHANNEL_CONTEXT`) and acquire `profile.lock` before saving `profile.yaml`.
+`decodeTopic` must decode both real JSON-redacted `map[string]any` records from
+`HTTPClient.Read` and typed `apiclient.Topic` values. Read-only protocol POSTs
+(`get_token`, `Reader` calls) use `transport.AsRead` with idle-pool eviction on
+transport error; never mark writes (`Send` or webhook POSTs) with `AsRead`, and
+never inherit ambient proxy environment variables (explicit validated proxy URLs
+only). Keep operational tuning (timeouts, retries, poll intervals, concurrency,
+budgets, batching, proxy) out of `ScopeDigest` and `ConsumerDigest` so tuning
+edits never break bindings. Broker socket bind may unlink only verified dead
+stale Unix sockets, never live sockets or non-socket files. `status` probes
+`serve.lock` with non-blocking `flock` for real liveness, exposes `admin_socket`
+and `delivery_state`, and surfaces blocked channels and failed webhooks under
+`--check`. `serve --retry-failed` resets terminal delivery failures while still
+refusing to clear `unknown` outcomes under `on_uncertain: halt`. Strict ancestor
+checks remain mandatory for multi-user `broker serve` and standalone `relay run`;
+`connect`/`listen`/`serve` default to relaxed ancestor resolution with strict
+non-symlink 0700 leaf enforcement and support `--strict-fs`.

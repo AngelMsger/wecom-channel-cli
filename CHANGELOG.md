@@ -4,10 +4,11 @@
 
 ### Added
 
-- Add the unified single-profile workflow (`connect`, `listen`, `serve`, `status`) backed by a single `profile.yaml` ([deploy/profile.example.yaml](deploy/profile.example.yaml)) and `agent-cli-kit/credstore`:
+- Add the unified single-profile workflow (`connect`, `listen`, `serve`, `status`, `auth logout`) backed by a single `profile.yaml` ([deploy/profile.example.yaml](deploy/profile.example.yaml)) and `agent-cli-kit/credstore`:
   - `connect` verifies Bot ID/Secret, saves the verified Secret to the user credential store, discovers all joined channel pages, preserves selections across channel renames, and supports explicit `--proxy` and `--upstream-timeout`.
+  - `auth logout` idempotently removes a saved Bot Secret from the credential store while preserving `profile.yaml` and ledgers.
   - `listen` streams selected channels as untrusted NDJSON with concurrent in-process polling (`Broker.PollNow`), automatic cross-region read retries, unlimited steady-state exponential backoff, and tuning-invariant checkpoints.
-  - `serve` consolidates polling, local agent/admin Unix sockets (with automatic stale-socket cleanup and synced `config.yaml` contexts), live `status.json`, and optional in-process Grok/explicit-ACK webhook delivery into one continuous daemon.
+  - `serve` consolidates polling, local agent/admin Unix sockets (with automatic stale-socket cleanup, synced `config.yaml` contexts, and full post/reply/reaction proposal support when `read_only: false`), live `status.json` (including `delivery_state` paths), and optional in-process Grok/explicit-ACK webhook delivery (with explicit `--retry-failed` recovery) into one continuous daemon.
   - `status` performs real `flock`-based liveness probing on `serve.lock`, reports per-channel health and webhook counters, and supports `--check --max-stale` for host supervision.
 - Add explicit proxy support (`upstream_proxy` / `proxy_url` / `--proxy` supporting `http`, `https`, `socks5`, `socks5h`) without inheriting ambient `HTTP_PROXY`/`HTTPS_PROXY` environment variables.
 - Add configurable `scan_retry_limit: -1` (unlimited steady-state exponential backoff capped at 5m), `on_uncertain: skip|retry|halt` for `http_accepted` webhooks, bounded `network_reason` failure diagnostics, and concurrent reply fetching (`poll_concurrency`, default 4).

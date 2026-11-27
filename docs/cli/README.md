@@ -12,7 +12,7 @@ Usage:
   wecom-channel-cli [command]
 
 Available Commands:
-  auth        Explain credential ownership and verify through the broker
+  auth        Explain credential ownership, manage stored secrets, and verify through the broker
   broker      Run the isolated credential-holding broker
   channel     List channels during operator setup or through broker policy
   config      Manage local client contexts; authorization belongs to operator policy
@@ -46,7 +46,7 @@ Use "wecom-channel-cli [command] --help" for more information about a command.
 
 ## wecom-channel-cli auth
 
-Explain credential ownership and verify through the broker
+Explain credential ownership, manage stored secrets, and verify through the broker
 
 ```text
 Usage:
@@ -56,6 +56,7 @@ Usage:
 Available Commands:
   check       Operator-only: verify authentication with a bounded channel-list request
   guide       Read offline authentication and official CLI compatibility guidance
+  logout      Remove the saved Bot Secret from the user credential store
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -92,6 +93,32 @@ Read offline authentication and official CLI compatibility guidance
 ```text
 Usage:
   wecom-channel-cli auth guide [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli auth logout
+
+Remove the saved Bot Secret from the user credential store
+
+```text
+Usage:
+  wecom-channel-cli auth logout [flags]
+
+Examples:
+  wecom-channel-cli auth logout
+  wecom-channel-cli auth logout --bot-id BOT_ID --dry-run
+
+Flags:
+      --bot-id string   Bot ID to forget (defaults to bot_id in profile.yaml)
+      --dry-run         Preview credential removal without modifying the credential store
+      --strict-fs       Enforce full ancestor directory checks up to /
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -1307,6 +1334,7 @@ Usage:
 Examples:
   wecom-channel-cli serve
   wecom-channel-cli serve --channel Engineering --webhook-url https://... --webhook-token-env GROK_ROUTINE_SENDER_KEY --save
+  wecom-channel-cli serve --retry-failed
   wecom-channel-cli status
 
 Flags:
@@ -1320,6 +1348,7 @@ Flags:
       --on-uncertain string        Action on post-send uncertain webhook outcome: skip (default), retry, or halt
       --pick ints                  Select numbered entries from the last connect list (for duplicate names)
       --proxy string               Optional explicit proxy URL (http/https/socks5/socks5h)
+      --retry-failed               Explicitly reset persisted webhook delivery failures after repairing the receiver or token
       --save                       Persist flag overrides back into profile.yaml before starting
       --strict-fs                  Enforce full ancestor directory checks up to /
       --webhook-token-env string   Environment variable name holding the webhook Bearer token (e.g. GROK_ROUTINE_SENDER_KEY)

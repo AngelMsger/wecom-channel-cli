@@ -63,6 +63,7 @@ type ChannelWebhookStatus struct {
 	State             string `json:"state,omitempty"`
 	Mode              string `json:"delivery_mode"`
 	OnUncertain       string `json:"on_uncertain"`
+	DeliveryState     string `json:"delivery_state,omitempty"`
 	QueuedEvents      int    `json:"queued_events"`
 	DeliveredBatches  int64  `json:"delivered_batches"`
 	UncertainBatches  int64  `json:"uncertain_batches,omitempty"`
@@ -202,7 +203,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 	var selection channelSelection
 	var webhookURL, webhookTokenEnv, deliveryMode, onUncertain, proxy, dataDir string
 	var interval time.Duration
-	var saveFlags, strictFS, dry bool
+	var saveFlags, retryFailed, strictFS, dry bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -217,6 +218,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			"Runs continuously until SIGINT/SIGTERM (no 24-hour forced exit).",
 		Example: "  wecom-channel-cli serve\n" +
 			"  wecom-channel-cli serve --channel Engineering --webhook-url https://... --webhook-token-env GROK_ROUTINE_SENDER_KEY --save\n" +
+			"  wecom-channel-cli serve --retry-failed\n" +
 			"  wecom-channel-cli status",
 	}
 	selection.bindFlags(cmd)
@@ -228,11 +230,12 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Optional private data directory override")
 	cmd.Flags().DurationVar(&interval, "interval", 0, "Optional poll interval override (5s–1h)")
 	cmd.Flags().BoolVar(&saveFlags, "save", false, "Persist flag overrides back into profile.yaml before starting")
+	cmd.Flags().BoolVar(&retryFailed, "retry-failed", false, "Explicitly reset persisted webhook delivery failures after repairing the receiver or token")
 	cmd.Flags().BoolVar(&strictFS, "strict-fs", false, "Enforce full ancestor directory checks up to /")
 	cmd.Flags().BoolVar(&dry, "dry-run", false, "Preview resolved channels, sockets and webhook config without starting")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		dir, err := s.profileDir(cmd)
+		dir, err := s.profileOperatorDir(cmd)
 		if err != nil {
 			return err
 		}
@@ -249,6 +252,23 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		var profileLock *os.File
+		if !dry && (saveFlags || selection.explicit()) {
+			if dir, err = securefs.EnsurePrivateDir(dir, strictFS); err != nil {
+				return err
+			}
+			if profileLock, err = lockProfile(dir); err != nil {
+				return err
+			}
+		}
+		releaseProfileLock := func() {
+			if profileLock != nil {
+				_ = profileLock.Close()
+				profileLock = nil
+			}
+		}
+		defer releaseProfileLock()
+
 		p, exists, err := config.LoadProfile(dir, strictFS)
 		if err != nil {
 			return err
@@ -323,6 +343,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			}
 			if webhookEnabled {
 				cs.Webhook = &ChannelWebhookStatus{
+					State:       "active",
 					Mode:        rcfg.Mode(),
 					OnUncertain: rcfg.UncertainPolicy(),
 				}
@@ -345,6 +366,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		releaseProfileLock()
 		var hook *relay.Webhook
 		if webhookEnabled {
 			hook, err = relay.NewWebhook(rcfg)
@@ -505,9 +527,10 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			// initial FromNow baselines never race against newly polled events.
 			var rstore *relay.Store
 			var rst relay.State
+			var deliveryPath string
 			if webhookEnabled {
 				wakeCh = make(chan struct{}, 1)
-				deliveryPath := filepath.Join(chDir, "delivery.json")
+				deliveryPath = filepath.Join(chDir, "delivery.json")
 				if strictFS {
 					rstore, err = relay.Open(deliveryPath)
 				} else {
@@ -565,12 +588,29 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 						<-serverErr
 						return err
 					}
+				} else if retryFailed && rst.Inflight != nil {
+					if rcfg.Mode() == relay.HTTPAccepted && rcfg.UncertainPolicy() == relay.UncertainHalt && (rst.Inflight.Status == "unknown" || rst.Inflight.Status == "sending") {
+						cancel()
+						wg.Wait()
+						<-serverErr
+						return relay.UnknownOutcome()
+					}
+					rst.Inflight.Attempts, rst.Inflight.NextAttempt = 0, 0
+					rst.Inflight.Status, rst.Inflight.HTTPStatus, rst.Inflight.Failure = "", 0, ""
+					rst.NextDelivery = 0
+					if err = rstore.Save(rst); err != nil {
+						cancel()
+						wg.Wait()
+						<-serverErr
+						return err
+					}
 				}
 				tracker.updateChannel(idx, func(cs *ChannelStatus) {
 					cs.Webhook = &ChannelWebhookStatus{
 						State:            "active",
 						Mode:             rcfg.Mode(),
 						OnUncertain:      rcfg.UncertainPolicy(),
+						DeliveryState:    deliveryPath,
 						QueuedEvents:     rst.Depth(),
 						DeliveredBatches: rst.AckedBatches + rst.AcceptedBatches,
 						UncertainBatches: rst.UncertainBatches,
@@ -652,7 +692,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			// from the in-process broker inbox (no Unix socket RPC overhead).
 			if webhookEnabled {
 				wg.Add(1)
-				go func(idx int, b *broker.Broker, ctxName, channelID string, rst relay.State, rstore *relay.Store, wakeCh <-chan struct{}) {
+				go func(idx int, b *broker.Broker, ctxName, channelID, dPath string, rst relay.State, rstore *relay.Store, wakeCh <-chan struct{}) {
 					defer wg.Done()
 					localScan := broker.ScanRequest{WholeChannel: true, Limit: 100, FromNow: rst.FromNow}
 					fetchLocal := func(callCtx context.Context, q broker.ScanRequest) (broker.ScanPage, error) {
@@ -674,6 +714,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 							cs.Webhook.State = "active"
 							cs.Webhook.Mode = rcfg.Mode()
 							cs.Webhook.OnUncertain = rcfg.UncertainPolicy()
+							cs.Webhook.DeliveryState = dPath
 							cs.Webhook.QueuedEvents = next.Depth()
 							cs.Webhook.DeliveredBatches = next.AckedBatches + next.AcceptedBatches
 							cs.Webhook.UncertainBatches = next.UncertainBatches
@@ -705,11 +746,12 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 								cs.Webhook = &ChannelWebhookStatus{}
 							}
 							cs.Webhook.State = "failed"
+							cs.Webhook.DeliveryState = dPath
 							cs.Webhook.LastDeliveryError = code
 						})
 						emitNotice(map[string]any{"webhook": map[string]any{"state": "failed", "context": ctxName, "channel_id": channelID, "error_code": code}})
 					}
-				}(idx, b, stInfo.Context, ch.ID, rst, rstore, wakeCh)
+				}(idx, b, stInfo.Context, ch.ID, deliveryPath, rst, rstore, wakeCh)
 			}
 		}
 

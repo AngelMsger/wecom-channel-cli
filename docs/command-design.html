@@ -21,7 +21,7 @@ flag, alias or the fact that a command appears in help.</p>
   policy    example | validate
   broker    serve
   config    path | get-contexts | set-context | use-context | delete-context
-  auth      guide | check
+  auth      guide | check | logout
   skill     show | path | status | install
   doctor
   version
@@ -49,7 +49,7 @@ flag, alias or the fact that a command appears in help.</p>
 </tr>
 <tr>
 <td><code>serve</code></td>
-<td>Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced <code>config.yaml</code> contexts, live <code>status.json</code>, and optional in-process webhook delivery</td>
+<td>Run the unified single-process daemon: concurrent polling, local agent/admin Unix sockets, synced <code>config.yaml</code> contexts, live <code>status.json</code>, and optional in-process webhook delivery (<code>--retry-failed</code> for explicit recovery)</td>
 <td>Trusted operator session; holds credentials in-process while exposing agent sockets to workers</td>
 </tr>
 <tr>
@@ -171,6 +171,11 @@ flag, alias or the fact that a command appears in help.</p>
 <td><code>auth check</code></td>
 <td>Perform a bounded upstream authentication check</td>
 <td>Private operator socket; remote I/O</td>
+</tr>
+<tr>
+<td><code>auth logout</code></td>
+<td>Idempotently remove a saved Bot Secret from the user credential store while preserving <code>profile.yaml</code> and ledgers</td>
+<td>Trusted operator session; rejects managed socket/context env</td>
 </tr>
 <tr>
 <td><code>doctor</code></td>

@@ -51,6 +51,13 @@ func (m *memProfileCreds) Save(account, secret string) (string, error) {
 	return "memory", nil
 }
 
+func (m *memProfileCreds) Delete(account string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.secrets, account)
+	return nil
+}
+
 type doerFunc func(*http.Request) (*http.Response, error)
 
 func (f doerFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
@@ -235,13 +242,53 @@ func TestConnectRealHTTPClientDecodingAndSelection(t *testing.T) {
 	if err != nil || len(p3.Channels) != 4 {
 		t.Fatalf("expected saved catalog preserved on partial discovery failure, got %+v err=%v", p3.Channels, err)
 	}
+
+	// Managed worker environment must be rejected on connect/listen/serve/auth logout.
+	t.Setenv("WECOM_CHANNEL_SOCKET", "/tmp/managed.sock")
+	for _, args := range [][]string{
+		{"--config-dir", dir, "connect", "--dry-run"},
+		{"--config-dir", dir, "listen", "--dry-run"},
+		{"--config-dir", dir, "serve", "--dry-run"},
+		{"--config-dir", dir, "auth", "logout", "--dry-run"},
+	} {
+		if _, _, err := runRootWithRuntime(context.Background(), rt, args...); e.Safe(err).Code != "PROFILE_CONNECTION_CONFLICT" {
+			t.Fatalf("expected PROFILE_CONNECTION_CONFLICT for %v with WECOM_CHANNEL_SOCKET set, got %v", args, err)
+		}
+	}
+	t.Setenv("WECOM_CHANNEL_SOCKET", "")
+
+	// auth logout --dry-run preserves the saved secret; real auth logout removes
+	// it idempotently while keeping profile.yaml intact.
+	out, _, err = runRootWithRuntime(context.Background(), rt, "--config-dir", dir, "auth", "logout", "--dry-run")
+	if err != nil || !strings.Contains(out, `"dry_run": true`) {
+		t.Fatalf("auth logout --dry-run failed: out=%s err=%v", out, err)
+	}
+	if _, err := creds.Load("bot-alpha"); err != nil {
+		t.Fatalf("dry-run logout must not remove secret: %v", err)
+	}
+	out, _, err = runRootWithRuntime(context.Background(), rt, "--config-dir", dir, "auth", "logout")
+	if err != nil || !strings.Contains(out, `"logged_out": true`) {
+		t.Fatalf("auth logout failed: out=%s err=%v", out, err)
+	}
+	if _, err := creds.Load("bot-alpha"); err != credstore.ErrSecretNotFound {
+		t.Fatalf("expected secret deleted after auth logout, got err=%v", err)
+	}
+	// Idempotent second logout and profile preserved.
+	if _, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", dir, "auth", "logout"); err != nil {
+		t.Fatalf("second auth logout should be idempotent, got %v", err)
+	}
+	if _, exists, err := config.LoadProfile(dir, false); err != nil || !exists {
+		t.Fatalf("expected profile.yaml preserved after auth logout, exists=%v err=%v", exists, err)
+	}
 }
 
 type scriptPollAPI struct {
-	mu      sync.Mutex
-	calls   int
-	failN   int
-	replies []apiclient.Message
+	mu        sync.Mutex
+	calls     int
+	failN     int
+	replies   []apiclient.Message
+	allowSend bool
+	sent      []apiclient.WriteRequest
 }
 
 func (a *scriptPollAPI) Read(_ context.Context, q apiclient.Query) (apiclient.Page, error) {
@@ -284,8 +331,17 @@ func (a *scriptPollAPI) Read(_ context.Context, q apiclient.Query) (apiclient.Pa
 	return apiclient.Page{}, nil
 }
 
-func (a *scriptPollAPI) Send(context.Context, apiclient.WriteRequest) (apiclient.SendResult, error) {
-	return apiclient.SendResult{}, e.New(e.CategoryPermission, "READONLY_BLOCKED", "read-only")
+func (a *scriptPollAPI) Send(_ context.Context, w apiclient.WriteRequest) (apiclient.SendResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.allowSend {
+		return apiclient.SendResult{}, e.New(e.CategoryPermission, "READONLY_BLOCKED", "read-only")
+	}
+	a.sent = append(a.sent, w)
+	if w.Kind == "reaction" {
+		return apiclient.SendResult{}, nil
+	}
+	return apiclient.SendResult{ID: "remote-" + w.Key, Kind: w.Kind}, nil
 }
 
 // TestListenResilientUnlimitedRecoveryAndCheckpoint verifies that `listen`
@@ -637,8 +693,14 @@ func TestServeWebhookFatalFailureSurfacesInStatusCheck(t *testing.T) {
 	cfgDir := filepath.Join(base, "cfg")
 	dataDir := filepath.Join(base, "d")
 
-	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
+	var delivered atomic.Int32
+	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer good-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		delivered.Add(1)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer hookSrv.Close()
 	t.Setenv("TEST_FAIL_KEY", "bad-key")
@@ -679,8 +741,8 @@ func TestServeWebhookFatalFailureSurfacesInStatusCheck(t *testing.T) {
 
 	waitFor(t, 8*time.Second, func() bool {
 		out, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status")
-		return err == nil && strings.Contains(out, `"state": "healthy"`)
-	}, "initial healthy baseline")
+		return err == nil && strings.Contains(out, `"state": "healthy"`) && strings.Contains(out, `"delivery_state":`)
+	}, "initial healthy baseline with delivery_state")
 
 	// Inject an event so the webhook hits terminal 401 Unauthorized.
 	api.mu.Lock()
@@ -699,6 +761,149 @@ func TestServeWebhookFatalFailureSurfacesInStatusCheck(t *testing.T) {
 		_, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status", "--check")
 		return e.Safe(err).Code == "SERVICE_UNHEALTHY" && strings.Contains(err.Error(), "webhook_failed")
 	}, "status --check to surface fatal webhook failure")
+
+	cancel()
+	<-done
+
+	// Fix the token and explicitly restart with --retry-failed: the previously
+	// failed batch must now deliver cleanly and status --check must pass.
+	t.Setenv("TEST_FAIL_KEY", "good-key")
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	done2 := make(chan error, 1)
+	go func() {
+		_, _, runErr := runRootWithRuntime(ctx2, rt, "--config-dir", cfgDir, "serve", "--retry-failed")
+		done2 <- runErr
+	}()
+
+	waitFor(t, 10*time.Second, func() bool {
+		return delivered.Load() >= 1
+	}, "failed webhook batch delivery after --retry-failed")
+
+	if _, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status", "--check"); err != nil {
+		cancel2()
+		<-done2
+		t.Fatalf("expected status --check healthy after --retry-failed recovery, got %v", err)
+	}
+	cancel2()
+	<-done2
+}
+
+// TestServeWriteAndReactionApprovalClosure verifies the full business write
+// loop under unified `serve`: agent proposes a reply and a native emoji
+// reaction through the auto-synced agent socket, agent cannot self-approve, and
+// the operator discovers admin_socket from `status` and approves both.
+func TestServeWriteAndReactionApprovalClosure(t *testing.T) {
+	base, err := os.MkdirTemp("", "wccw-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	if err := os.Chmod(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(base, "cfg")
+	dataDir := filepath.Join(base, "d")
+
+	writable := false
+	p := config.DefaultProfile("bot-write")
+	p.DataDir = dataDir
+	p.Polling.IntervalSeconds = 30
+	p.Channels = []config.ProfileChannel{{ID: "ch-w", Name: "Engineering", Selected: true, ReadOnly: &writable}}
+	if err := config.SaveProfile(cfgDir, p, false); err != nil {
+		t.Fatal(err)
+	}
+
+	api := &scriptPollAPI{allowSend: true}
+	creds := newMemProfileCreds()
+	_, _ = creds.Save("bot-write", "secret-write")
+	rt := profileRuntime{
+		credentials: func(string) profileCredentials { return creds },
+		client:      func(string, string, transport.Config) (apiclient.Client, error) { return api, nil },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, _, runErr := runRootWithRuntime(ctx, rt, "--config-dir", cfgDir, "serve")
+		done <- runErr
+	}()
+
+	var adminSock string
+	waitFor(t, 8*time.Second, func() bool {
+		out, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status")
+		if err != nil {
+			return false
+		}
+		var rep struct {
+			Running  bool            `json:"running"`
+			Channels []ChannelStatus `json:"channels"`
+		}
+		if json.Unmarshal([]byte(out), &rep) != nil || !rep.Running || len(rep.Channels) != 1 || rep.Channels[0].State != "healthy" {
+			return false
+		}
+		adminSock = rep.Channels[0].AdminSocket
+		return adminSock != ""
+	}, "writable serve startup and admin socket discovery")
+
+	// Agent proposes a reply and a native reaction via auto-synced context.
+	proposeReplyOut, _, err := runRootWithRuntime(context.Background(), rt,
+		"--config-dir", cfgDir, "reply", "propose",
+		"--post", "p-1", "--key", "reply-k1", "--text", "Looks good!",
+	)
+	if err != nil {
+		t.Fatalf("reply propose failed: %v", err)
+	}
+	proposeReactOut, _, err := runRootWithRuntime(context.Background(), rt,
+		"--config-dir", cfgDir, "reaction", "propose",
+		"--post", "p-1", "--emoji-type", "1", "--action", "add", "--key", "react-k1",
+	)
+	if err != nil {
+		t.Fatalf("reaction propose failed: %v", err)
+	}
+
+	extractProposal := func(raw string) (string, string) {
+		var rec struct {
+			Data struct {
+				ID     string `json:"id"`
+				Digest string `json:"digest"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(raw), &rec); err != nil || rec.Data.ID == "" || rec.Data.Digest == "" {
+			t.Fatalf("failed to decode proposal record: %v raw=%s", err, raw)
+		}
+		return rec.Data.ID, rec.Data.Digest
+	}
+	replyID, replyDigest := extractProposal(proposeReplyOut)
+	reactID, reactDigest := extractProposal(proposeReactOut)
+
+	// Agent socket must NOT be able to approve its own proposal.
+	if _, _, err := runRootWithRuntime(context.Background(), rt,
+		"--config-dir", cfgDir, "proposal", "approve", "--id", replyID, "--digest", replyDigest, "--yes",
+	); e.Safe(err).Code != "POLICY_DENIED" {
+		t.Fatalf("expected agent socket self-approval to fail with POLICY_DENIED, got %v", err)
+	}
+
+	// Operator uses admin_socket from `status` to list and approve both proposals.
+	listOut, _, err := runRootWithRuntime(context.Background(), rt, "--socket", adminSock, "proposal", "list")
+	if err != nil || !strings.Contains(listOut, replyID) || !strings.Contains(listOut, reactID) {
+		t.Fatalf("operator proposal list failed: err=%v out=%s", err, listOut)
+	}
+	for _, item := range [][2]string{{replyID, replyDigest}, {reactID, reactDigest}} {
+		if _, _, err := runRootWithRuntime(context.Background(), rt,
+			"--socket", adminSock, "proposal", "approve", "--id", item[0], "--digest", item[1], "--yes",
+		); err != nil {
+			t.Fatalf("operator approve %s failed: %v", item[0], err)
+		}
+	}
+
+	api.mu.Lock()
+	sentCount := len(api.sent)
+	api.mu.Unlock()
+	if sentCount != 2 {
+		t.Fatalf("expected 2 approved sends (reply + reaction), got %d", sentCount)
+	}
 
 	cancel()
 	<-done

@@ -27,6 +27,7 @@ import (
 type profileCredentials interface {
 	Load(string) (string, error)
 	Save(string, string) (string, error)
+	Delete(string) error
 }
 
 type profileRuntime struct {
@@ -47,7 +48,17 @@ func newProfileRuntime() profileRuntime {
 
 func (s *appState) profileDir(cmd *cobra.Command) (string, error) {
 	if cmd.Flag("socket").Changed || cmd.Flag("use-context").Changed {
-		return "", e.New(e.CategoryUsage, "PROFILE_CONNECTION_CONFLICT", "connect, listen, serve and status use the local profile directory, not --socket or --use-context.")
+		return "", e.New(e.CategoryUsage, "PROFILE_CONNECTION_CONFLICT", "connect, listen, serve, status and auth logout use the local profile directory, not --socket or --use-context.")
+	}
+	return s.clientDir()
+}
+
+// profileOperatorDir rejects managed worker environments (WECOM_CHANNEL_SOCKET
+// or WECOM_CHANNEL_CONTEXT) so credential-holding commands only run in a
+// trusted operator session.
+func (s *appState) profileOperatorDir(cmd *cobra.Command) (string, error) {
+	if cmd.Flag("socket").Changed || cmd.Flag("use-context").Changed || os.Getenv("WECOM_CHANNEL_SOCKET") != "" || os.Getenv("WECOM_CHANNEL_CONTEXT") != "" {
+		return "", e.New(e.CategoryUsage, "PROFILE_CONNECTION_CONFLICT", "connect, listen, serve and auth logout require a trusted operator session without a managed socket or context.")
 	}
 	return s.clientDir()
 }
@@ -278,7 +289,7 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 	cmd.Flags().BoolVar(&strictFS, "strict-fs", false, "Enforce full ancestor directory checks up to /")
 	cmd.Flags().BoolVar(&dry, "dry-run", false, "Preview discovery without reading credentials, making requests, or writing state")
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		dir, err := s.profileDir(cmd)
+		dir, err := s.profileOperatorDir(cmd)
 		if err != nil {
 			return err
 		}
@@ -370,6 +381,61 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 		}
 		output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": map[string]any{"connect": "ok", "profile": config.ProfilePath(dir), "channels": len(updated.Channels), "next_steps": next}})
 		return output.EmitList(profileChoices(updated), "", false, output.Options{Format: s.format, Writer: cmd.OutOrStdout(), NoticeWriter: cmd.ErrOrStderr()})
+	}
+	return cmd
+}
+
+func (s *appState) authLogoutCommand(runtime profileRuntime) *cobra.Command {
+	var bot string
+	var strictFS, dry bool
+	cmd := &cobra.Command{
+		Use:   "logout",
+		Short: "Remove the saved Bot Secret from the user credential store",
+		Args:  cobra.NoArgs,
+		Long: "Remove a Bot Secret stored by `connect` from the OS keychain and local fallback store.\n" +
+			"Preserves profile.yaml, client contexts, and channel ledgers. Idempotent when no secret is stored.",
+		Example: "  wecom-channel-cli auth logout\n  wecom-channel-cli auth logout --bot-id BOT_ID --dry-run",
+	}
+	cmd.Flags().StringVar(&bot, "bot-id", "", "Bot ID to forget (defaults to bot_id in profile.yaml)")
+	cmd.Flags().BoolVar(&strictFS, "strict-fs", false, "Enforce full ancestor directory checks up to /")
+	cmd.Flags().BoolVar(&dry, "dry-run", false, "Preview credential removal without modifying the credential store")
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		dir, err := s.profileOperatorDir(cmd)
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("bot-id") && !apiclient.Identifier(bot, 256) {
+			return e.New(e.CategoryUsage, "BOT_ID_REQUIRED", "Provide a valid Bot ID.")
+		}
+		if bot == "" {
+			p, exists, loadErr := config.LoadProfile(dir, strictFS)
+			if loadErr != nil {
+				return loadErr
+			}
+			if exists {
+				bot = p.Bot
+			}
+		}
+		if bot == "" {
+			bot = os.Getenv("WECOM_CHANNEL_BOT_ID")
+		}
+		if !apiclient.Identifier(bot, 256) {
+			return e.New(e.CategoryUsage, "BOT_ID_REQUIRED", "Pass --bot-id BOT_ID or run inside a directory with profile.yaml.")
+		}
+		if dry {
+			return s.emit(cmd, map[string]any{"dry_run": true, "operation": "auth.logout", "bot_id": bot, "profile_preserved": true})
+		}
+		if err = s.guard("auth logout"); err != nil {
+			return err
+		}
+		resolved := dir
+		if eval, evalErr := filepath.EvalSymlinks(dir); evalErr == nil {
+			resolved = eval
+		}
+		if err = runtime.credentials(resolved).Delete(bot); err != nil {
+			return e.New(e.CategoryConfig, "CREDENTIAL_DELETE_FAILED", "Could not remove the saved Bot Secret from the credential store. Check keychain access and retry.")
+		}
+		return s.emit(cmd, map[string]any{"logged_out": true, "bot_id": bot, "profile_preserved": true})
 	}
 	return cmd
 }

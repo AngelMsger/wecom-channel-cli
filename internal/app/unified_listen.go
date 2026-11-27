@@ -117,11 +117,13 @@ func buildChannelBrokerConfig(p config.Profile, ch config.ProfileChannel, ctxNam
 	cfg.UpstreamProxy = p.Network.Proxy
 	cfg.UpstreamTimeoutSeconds = p.Network.TimeoutSeconds
 	cfg.Channels = []config.Channel{{
-		ID:           ch.ID,
-		ReadAll:      true,
-		ObserveAll:   true,
-		AllowPosts:   !cfg.ReadOnly,
-		AllowReplies: !cfg.ReadOnly,
+		ID:             ch.ID,
+		ReadAll:        true,
+		ObserveAll:     true,
+		AllowPosts:     !cfg.ReadOnly,
+		AllowReplies:   !cfg.ReadOnly,
+		AllowReactions: !cfg.ReadOnly,
+		ReactionScope:  map[bool]string{true: "channel", false: "mentioned"}[!cfg.ReadOnly],
 	}}
 	return cfg
 }
@@ -153,7 +155,7 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 	cmd.Flags().BoolVar(&dry, "dry-run", false, "Show the effective channel selection without saving or contacting WeCom")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		dir, err := s.profileDir(cmd)
+		dir, err := s.profileOperatorDir(cmd)
 		if err != nil {
 			return err
 		}
@@ -173,6 +175,23 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		var profileLock *os.File
+		if !dry && selection.explicit() {
+			if dir, err = securefs.EnsurePrivateDir(dir, strictFS); err != nil {
+				return err
+			}
+			if profileLock, err = lockProfile(dir); err != nil {
+				return err
+			}
+		}
+		releaseProfileLock := func() {
+			if profileLock != nil {
+				_ = profileLock.Close()
+				profileLock = nil
+			}
+		}
+		defer releaseProfileLock()
+
 		p, exists, err := config.LoadProfile(dir, strictFS)
 		if err != nil {
 			return err
@@ -215,6 +234,7 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		releaseProfileLock()
 		if selection.none {
 			return s.emit(cmd, map[string]int{"selected_count": 0})
 		}

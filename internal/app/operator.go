@@ -125,20 +125,21 @@ func (s *appState) configCommands() *cobra.Command {
 	return g
 }
 
-func (s *appState) authCommands() *cobra.Command {
-	g := &cobra.Command{Use: "auth", Short: "Explain credential ownership and verify through the broker"}
+func (s *appState) authCommands(runtime profileRuntime) *cobra.Command {
+	g := &cobra.Command{Use: "auth", Short: "Explain credential ownership, manage stored secrets, and verify through the broker"}
 	g.AddCommand(&cobra.Command{Use: "guide", Short: "Read offline authentication and official CLI compatibility guidance", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.emit(cmd, map[string]any{
 			"scheme": "wecom-aibot-sha256", "endpoint": apiclient.Origin + "/cgi-bin/aibot/get_token",
 			"credential_owner": "isolated broker operator", "required_broker_environment": []string{"WECOM_CHANNEL_BOT_SECRET"},
 			"callback_environment": []string{"WECOM_CHANNEL_CALLBACK_TOKEN", "WECOM_CHANNEL_ENCODING_AES_KEY"},
 			"watch_setup":          "Polling needs read_all and observe_all with post/reply events enabled; leave callback_listen empty. Callback environment variables are optional and required only when a callback listener is configured.",
-			"unified_setup":        "Run `wecom-channel-cli connect --bot-id BOT_ID` once to store the verified Secret and discover channels into profile.yaml, then run `wecom-channel-cli listen --channel NAME` (foreground NDJSON) or `wecom-channel-cli serve --channel NAME --save` (single-process daemon with local CLI sockets, optional webhook delivery, and `status` health checks).",
+			"personal_setup":       "For a trusted operator's foreground listener, run wecom-channel-cli connect --bot-id BOT_ID then wecom-channel-cli listen --channel NAME. No policy file or system service is required.",
+			"unified_setup":        "Run `wecom-channel-cli connect --bot-id BOT_ID` once to store the verified Secret and discover channels into profile.yaml, then run `wecom-channel-cli listen --channel NAME` (foreground NDJSON) or `wecom-channel-cli serve --channel NAME --save` (single-process daemon with local CLI sockets, optional webhook delivery, and `status` health checks). Remove saved credentials anytime with `wecom-channel-cli auth logout`.",
 			"credential_guide":     "Obtain the API-mode bot ID and Secret from WeCom bot administration. In a trusted operator session, run connect --bot-id BOT_ID (or channel list --bot-id BOT_ID for strict managed setup) and supply WECOM_CHANNEL_BOT_SECRET through your secret manager; never send the Secret through chat or argv.",
-			"channel_discovery":    "Run channel list --bot-id BOT_ID before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
+			"channel_discovery":    "Run connect --bot-id BOT_ID (unified workflow) or channel list --bot-id BOT_ID (strict managed setup) before configuring channel policy or client contexts. Match data.topic_name and select data.topic_id; the WeCom client does not display channel IDs. Results are joined channels, not proof of read_all or write permission. Continue with --cursor when has_more is true. If empty, verify bot membership and channel API availability.",
 			"official_cli_reuse":   map[string]any{"supported": false, "reason": "The official CLI uses get_cli_config and a gateway Bearer token. Channel get_token credentials are a separate contract; encrypted private stores are not an integration API."},
 			"documentation":        "https://developer.work.weixin.qq.com/document/path/101910",
-			"next_steps":           []string{"wecom-channel-cli channel list --bot-id BOT_ID", "wecom-channel-cli policy example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
+			"next_steps":           []string{"wecom-channel-cli channel list --bot-id BOT_ID", "wecom-channel-cli connect --bot-id BOT_ID", "wecom-channel-cli serve --channel NAME --save", "wecom-channel-cli status", "wecom-channel-cli policy example --bot-id BOT_ID --channel DISCOVERED_TOPIC_ID", "wecom-channel-cli broker serve --help", "wecom-channel-cli config set-context --help", "wecom-channel-cli auth check --help"},
 		})
 	}})
 	status := s.doctorCommand()
@@ -147,5 +148,6 @@ func (s *appState) authCommands() *cobra.Command {
 	g.AddCommand(&cobra.Command{Use: "check", Short: "Operator-only: verify authentication with a bounded channel-list request", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.call(cmd, broker.Request{Operation: "auth.check"})
 	}})
+	g.AddCommand(s.authLogoutCommand(runtime))
 	return g
 }

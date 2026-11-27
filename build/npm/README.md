@@ -12,11 +12,17 @@ wecom-channel-cli auth guide
 wecom-channel-cli skill install
 ```
 
-For initial operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally and run
-`wecom-channel-cli channel list --bot-id BOT_ID` before configuring a channel.
-Choose `data.topic_id`, generate policy with `policy example --bot-id BOT_ID
---channel CHANNEL_ID`, then provision the broker and matching client context.
-Normal `channel list` uses the configured broker socket.
+For single-operator, container, or Grok deployments on this branch, start with
+`connect --bot-id BOT_ID`, then run `listen --channel NAME` (foreground NDJSON)
+or `serve --channel NAME --save` (single-process daemon with local CLI sockets,
+concurrent cross-region polling, and optional webhook delivery), monitor health
+with `status --check`, and remove stored credentials with `auth logout`.
+
+For strict multi-user operator setup, supply `WECOM_CHANNEL_BOT_SECRET` locally
+and run `wecom-channel-cli channel list --bot-id BOT_ID` before configuring a
+channel. Choose `data.topic_id`, generate policy with `policy example --bot-id
+BOT_ID --channel CHANNEL_ID`, then provision the broker and matching client
+context. Normal `channel list` uses the configured broker socket.
 
 Reload the agent context after refreshing the Skill. Operator provisioning and
 OS isolation are required before unattended use. Installation downloads the

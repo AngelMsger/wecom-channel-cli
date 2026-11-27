@@ -53,7 +53,7 @@ func newRootCmd(runtime profileRuntime) *cobra.Command {
 	root.AddCommand(s.connectCommand(runtime), s.listenCommand(runtime), s.serveCommand(runtime), s.statusCommand())
 	root.AddCommand(s.readCommands()...)
 	root.AddCommand(s.reactionCommands())
-	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(), s.skillCommands())
+	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(runtime), s.skillCommands())
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Print build metadata", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.emit(cmd, map[string]any{"name": constants.AppName, "version": constants.Version, "commit": constants.Commit, "built_at": constants.BuildTime})
 	}})
