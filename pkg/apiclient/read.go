@@ -147,7 +147,7 @@ func (c *HTTPClient) Read(ctx context.Context, q Query) (Page, error) {
 	if err != nil {
 		return Page{}, err
 	}
-	b, err := c.request(ctx, p.Path, p.Body)
+	b, err := c.readRequest(ctx, p.Path, p.Body)
 	if err != nil {
 		return Page{}, err
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
 	"github.com/angelmsger/wecom-channel-cli/pkg/transport"
@@ -32,7 +33,15 @@ func NewWebhook(c Config) (*Webhook, error) {
 			return nil, e.New(e.CategoryConfig, "RELAY_TOKEN", "Supply the relay's configured bearer token through its protected service environment.")
 		}
 	}
-	return &Webhook{config: c, token: token, client: transport.New()}, nil
+	tcfg := transport.DefaultConfig()
+	tcfg.Timeout = time.Duration(c.TimeoutSeconds) * time.Second
+	tcfg.ProxyURL = c.ProxyURL
+	tcfg.ReadMaxRetries = -1 // Webhook POSTs are never retried by transport.
+	client, err := transport.NewWithConfig(tcfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Webhook{config: c, token: token, client: client}, nil
 }
 
 // Send performs exactly one attempt. The durable runner owns retry scheduling;
@@ -59,10 +68,16 @@ func (h *Webhook) Send(ctx context.Context, batch Batch) error {
 	}
 	resp, err := h.client.Do(ctx, req)
 	if err != nil {
+		reason := transport.ClassifyNetworkError(err)
 		if h.config.Mode() == HTTPAccepted {
+			// If DNS/dial/TLS failed before the HTTP request was transmitted,
+			// the host could not have started a run; treat as retryable.
+			if transport.PreConnectFailure(err) {
+				return e.New(e.CategoryNetwork, "RELAY_UNREACHABLE", "Could not reach the receiver before sending; the immutable batch remains queued.").WithDetails(apiclient.FailureMetadata{NetworkReason: reason})
+			}
 			return UnknownOutcome()
 		}
-		return e.New(e.CategoryNetwork, "RELAY_UNREACHABLE", "The receiver did not return a reliable acknowledgment; the immutable batch remains queued.")
+		return e.New(e.CategoryNetwork, "RELAY_UNREACHABLE", "The receiver did not return a reliable acknowledgment; the immutable batch remains queued.").WithDetails(apiclient.FailureMetadata{NetworkReason: reason})
 	}
 	defer resp.Body.Close()
 	if h.config.Mode() == HTTPAccepted && resp.StatusCode == http.StatusOK {

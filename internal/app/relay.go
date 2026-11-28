@@ -7,7 +7,6 @@ import (
 	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
-	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -29,8 +28,8 @@ func (s *appState) relayCommand() *cobra.Command {
 		Example: "  wecom-channel-cli --use-context engineering relay run --whole-channel --config /etc/wecom-relay/relay.json --state /var/lib/wecom-relay/state.json --duration 24h\n  wecom-channel-cli relay status --state /var/lib/wecom-relay/state.json",
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		if duration <= 0 || duration > 24*time.Hour || interval < time.Second || interval > time.Minute || maxBatches < 1 || maxBatches > 100000 || ((statePath != "") == ephemeral) || (ephemeral && (retryFailed || retryScan)) || (retryFailed && retryScan) {
-			return e.New(e.CategoryUsage, "RELAY_LIMITS", "Choose --state or --ephemeral, duration up to 24h, interval 1s–1m, and max-batches 1–100000. Ephemeral mode cannot reset persisted retries.")
+		if duration < 0 || interval < time.Second || interval > time.Minute || maxBatches < 0 || maxBatches > 100000 || ((statePath != "") == ephemeral) || (ephemeral && (retryFailed || retryScan)) || (retryFailed && retryScan) {
+			return e.New(e.CategoryUsage, "RELAY_LIMITS", "Choose --state or --ephemeral, non-negative duration (0 for continuous), interval 1s–1m, and max-batches 0–100000. Ephemeral mode cannot reset persisted retries.")
 		}
 		var err error
 		scan, err = broker.NormalizeScan(scan)
@@ -54,10 +53,9 @@ func (s *appState) relayCommand() *cobra.Command {
 		if err = broker.ValidateSocket(socket); err != nil {
 			return err
 		}
-		consumer := apiclient.Digest(struct {
-			Socket, Scope string
-			Config        relay.Config
-		}{socket, watchScope(scan), cfg})
+		scope := watchScope(scan)
+		consumer := cfg.ConsumerDigest(socket, scope)
+		legacyConsumer := cfg.LegacyConsumerDigest(socket, scope)
 		var store *relay.Store
 		if !dry && !ephemeral {
 			store, err = relay.Open(statePath)
@@ -74,8 +72,19 @@ func (s *appState) relayCommand() *cobra.Command {
 				return err
 			}
 		}
-		if exists && (st.Consumer != consumer || cmd.Flags().Changed("after-sequence")) {
-			return e.New(e.CategoryConflict, "RELAY_BINDING_CHANGED", "Use the original socket, scope and relay configuration with saved state, without --after-sequence. Drain or reconcile pending work before deliberately provisioning a new consumer.")
+		consumerOK := st.Consumer == consumer || st.Consumer == legacyConsumer
+		if exists && (!consumerOK || cmd.Flags().Changed("after-sequence")) {
+			return e.New(e.CategoryConflict, "RELAY_BINDING_CHANGED", "Use the original socket, scope, destination and filters with saved state, without --after-sequence. Drain or reconcile pending work before deliberately provisioning a new consumer.")
+		}
+		// Migrate legacy full-config consumers to the tuning-independent digest,
+		// preserving LegacyConsumer when historical batches or receipts depend on it.
+		upgradedConsumer := false
+		if exists && st.Consumer == legacyConsumer && st.Consumer != consumer && !dry {
+			if st.Inflight != nil || len(st.Receipts) > 0 {
+				st.LegacyConsumer = st.Consumer
+			}
+			st.Consumer = consumer
+			upgradedConsumer = true
 		}
 		if retryScan && !exists {
 			return e.New(e.CategoryNotFound, "RELAY_STATE_MISSING", "A scan repair requires the original sender state.")
@@ -91,8 +100,12 @@ func (s *appState) relayCommand() *cobra.Command {
 			save = store.Save
 		}
 		scan.FromNow = st.FromNow
-		ctx, cancel := context.WithTimeout(cmd.Context(), duration)
-		defer cancel()
+		ctx := cmd.Context()
+		var cancel context.CancelFunc
+		if duration > 0 {
+			ctx, cancel = context.WithTimeout(ctx, duration)
+			defer cancel()
+		}
 		fetch := func(ctx context.Context, q broker.ScanRequest) (broker.ScanPage, error) {
 			r.Scan = &q
 			child, stop := context.WithTimeout(ctx, s.timeout)
@@ -115,14 +128,16 @@ func (s *appState) relayCommand() *cobra.Command {
 			if err = validateRelayPage(p, st, scan); err != nil {
 				return err
 			}
-			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "scan_retry_limit": cfg.ScanRetries(), "delivery_retry_limit": cfg.DeliveryRetries(), "retry_failed": retryFailed, "duration": duration.String(), "delivery_mode": cfg.Mode(), "durable": !ephemeral, "content": "metadata_only"})
+			return s.emit(cmd, map[string]any{"dry_run": true, "identity": p.Identity, "coverage": p.Coverage, "queued_events": st.Depth(), "batch_size": cfg.BatchSize, "batch_window_seconds": cfg.BatchWindowSeconds, "retry_limit": cfg.RetryLimit, "scan_retry_limit": cfg.ScanRetries(), "delivery_retry_limit": cfg.DeliveryRetries(), "on_uncertain": cfg.UncertainPolicy(), "retry_failed": retryFailed, "duration": duration.String(), "delivery_mode": cfg.Mode(), "durable": !ephemeral, "content": "metadata_only"})
 		}
 		hook, err := relay.NewWebhook(cfg)
 		if err != nil {
 			return err
 		}
-		if !exists || (st.Binding == "" && st.StartedAt == 0) {
-			st.StartedAt = time.Now().UnixMilli()
+		if !exists || (st.Binding == "" && st.StartedAt == 0) || upgradedConsumer {
+			if st.StartedAt == 0 {
+				st.StartedAt = time.Now().UnixMilli()
+			}
 			if err = save(st); err != nil {
 				return err
 			}
@@ -158,9 +173,9 @@ func (s *appState) relayCommand() *cobra.Command {
 	f.StringVar(&configPath, "config", "", "Private operator-provisioned JSON with fixed destination, filters and retry bounds")
 	f.StringVar(&statePath, "state", "", "Durable JSON queue in an existing private service-owned directory; mutually exclusive with --ephemeral")
 	f.BoolVar(&ephemeral, "ephemeral", false, "Keep delivery state only in bounded memory; interruption loses pending work, restart starts quietly now")
-	f.DurationVar(&duration, "duration", 5*time.Minute, "Maximum session duration, up to 24h; only --state preserves queued work on exit")
+	f.DurationVar(&duration, "duration", 0, "Optional maximum session duration (0 runs continuously until interrupted)")
 	f.DurationVar(&interval, "interval", 2*time.Second, "Minimum scan interval, 1s–1m; operator polling rates still apply")
-	f.IntVar(&maxBatches, "max-batches", 1000, "Stop after this many acknowledged or HTTP-accepted batches in this session")
+	f.IntVar(&maxBatches, "max-batches", 0, "Optional maximum acknowledged/accepted batches in this session (0 for unlimited)")
 	f.BoolVar(&retryScan, "retry-scan", false, "Resume a repaired scan with a fresh scan allowance and preserve delivery attempts")
 	f.BoolVar(&retryFailed, "retry-failed", false, "Explicitly reset persisted retry budgets after repairing a failed receiver or scan")
 	f.BoolVar(&dry, "dry-run", false, "Inspect binding and coverage without credentials, remote reads, locks or state writes")
@@ -182,6 +197,10 @@ func validateRelayPage(p broker.ScanPage, st relay.State, scan broker.ScanReques
 }
 
 func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, st relay.State, interval time.Duration, maxBatches int, fetch watchFetch, send func(context.Context, relay.Batch) error, save func(relay.State) error, notice func(string, relay.State, string)) error {
+	return pumpRelayWithWake(ctx, cfg, scan, st, interval, maxBatches, nil, fetch, send, save, notice)
+}
+
+func pumpRelayWithWake(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, st relay.State, interval time.Duration, maxBatches int, wakeCh <-chan struct{}, fetch watchFetch, send func(context.Context, relay.Batch) error, save func(relay.State) error, notice func(string, relay.State, string)) error {
 	st.QueueLimit = cfg.QueueLimit
 	initialAcks := st.AckedBatches + st.AcceptedBatches
 	started := false
@@ -201,6 +220,39 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 		}
 		return e.New(e.CategoryConflict, "RELAY_RETRIES_EXHAUSTED", "The persisted relay retry budget is exhausted. Repair the service, then explicitly use "+repair+" with the same state and configuration.").WithDetails(map[string]any{"phase": phase, "last_error": record})
 	}
+	handleUncertain := func(evidence string) (bool, error) {
+		switch cfg.UncertainPolicy() {
+		case relay.UncertainSkip:
+			if err := st.RecordUncertain(time.Now(), evidence); err != nil {
+				return false, fail(err)
+			}
+			if err := save(st); err != nil {
+				return false, fail(err)
+			}
+			notice("uncertain_skipped", st, "RELAY_OUTCOME_UNKNOWN")
+			return true, nil
+		case relay.UncertainRetry:
+			if st.Inflight.Attempts <= cfg.DeliveryRetries() {
+				st.Inflight.Status = "rejected"
+				st.Inflight.NextAttempt = time.Now().Add(relay.RetryDelay(cfg, st.Inflight.Attempts)).UnixMilli()
+				if err := save(st); err != nil {
+					return false, fail(err)
+				}
+				notice("delivery_retry", st, "RELAY_OUTCOME_UNKNOWN")
+				return true, nil
+			}
+			if err := st.RecordUncertain(time.Now(), evidence); err != nil {
+				return false, fail(err)
+			}
+			if err := save(st); err != nil {
+				return false, fail(err)
+			}
+			notice("uncertain_skipped", st, "RELAY_OUTCOME_UNKNOWN")
+			return true, nil
+		default:
+			return false, fail(relay.UnknownOutcome())
+		}
+	}
 	if cfg.Mode() == relay.HTTPAccepted && st.Inflight != nil {
 		if st.Inflight.Status == "sending" {
 			st.Inflight.Status = "unknown"
@@ -209,7 +261,9 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 			}
 		}
 		if st.Inflight.Status == "unknown" {
-			return fail(relay.UnknownOutcome())
+			if handled, err := handleUncertain("interrupted_sending"); !handled {
+				return err
+			}
 		}
 	}
 	if st.Inflight != nil && st.Inflight.Failure != "" {
@@ -220,7 +274,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 			notice("stopped", st, "")
 			return nil
 		}
-		if st.ScanFailures > cfg.ScanRetries() {
+		if !cfg.UnlimitedScanRetries() && st.ScanFailures > cfg.ScanRetries() {
 			return fail(exhausted("scan"))
 		}
 		if st.Inflight != nil && st.Inflight.Attempts > cfg.DeliveryRetries() {
@@ -272,11 +326,14 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 				if !retry {
 					return fail(err)
 				}
-				if st.ScanFailures > cfg.ScanRetries() {
+				if !cfg.UnlimitedScanRetries() && st.ScanFailures > cfg.ScanRetries() {
 					return fail(exhausted("scan"))
 				}
 				notice("scan_retry", st, e.Safe(err).Code)
 			} else if p.Progress != nil {
+				if p.MigratedFrom != "" && st.Binding == p.MigratedFrom {
+					st.Binding = p.Binding
+				}
 				st.Progress = p.Progress
 				st.NextScan = max(time.Now().Add(time.Millisecond*100).UnixMilli(), p.Progress.NextAt)
 				st.LastSnapshot = p.LastSnapshot
@@ -284,6 +341,9 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					return fail(err)
 				}
 			} else {
+				if p.MigratedFrom != "" && st.Binding == p.MigratedFrom {
+					st.Binding = p.Binding
+				}
 				st.ResetScan()
 				st.LastSnapshot = p.LastSnapshot
 				// When the queue is full, validate without consuming the returned page.
@@ -350,7 +410,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 						return fail(err)
 					}
 					notice(reason, st, "")
-					if st.AckedBatches+st.AcceptedBatches-initialAcks >= int64(maxBatches) {
+					if maxBatches > 0 && st.AckedBatches+st.AcceptedBatches-initialAcks >= int64(maxBatches) {
 						notice("max_batches", st, "")
 						return nil
 					}
@@ -362,7 +422,7 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 				}
 				if cfg.Mode() == relay.HTTPAccepted {
 					st.Inflight.Status = "unknown"
-					if x := e.Safe(err); x.Code == "RELAY_REJECTED" || x.Code == "RELAY_REDIRECT" {
+					if x := e.Safe(err); x.Code == "RELAY_REJECTED" || x.Code == "RELAY_REDIRECT" || x.Code == "RELAY_UNREACHABLE" {
 						st.Inflight.Status, st.Inflight.HTTPStatus = "rejected", x.HTTPStatus
 					}
 				}
@@ -371,7 +431,11 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 					return fail(saveErr)
 				}
 				if st.Inflight.Status == "unknown" {
-					return fail(relay.UnknownOutcome())
+					handled, handleErr := handleUncertain("post_send_timeout_or_eof")
+					if !handled {
+						return handleErr
+					}
+					continue
 				}
 				if ctx.Err() != nil {
 					notice("stopped", st, "")
@@ -399,6 +463,9 @@ func pumpRelay(ctx context.Context, cfg relay.Config, scan broker.ScanRequest, s
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+		case <-wakeCh:
+			timer.Stop()
+			nextScan = time.Now()
 		case <-timer.C:
 		}
 	}
@@ -470,6 +537,9 @@ func relayStatus(st relay.State) map[string]any {
 		v["delivery_mode"] = st.DeliveryMode
 	}
 	v["accepted_events"], v["accepted_batches"], v["last_accepted_at"], v["next_delivery_at"] = st.AcceptedEvents, st.AcceptedBatches, st.LastAccepted, st.NextDelivery
+	if st.UncertainBatches > 0 {
+		v["uncertain_events"], v["uncertain_batches"] = st.UncertainEvents, st.UncertainBatches
+	}
 	v["processing"] = "not_reported_by_webhook"
 	if len(st.Receipts) > 0 {
 		r := st.Receipts[len(st.Receipts)-1]

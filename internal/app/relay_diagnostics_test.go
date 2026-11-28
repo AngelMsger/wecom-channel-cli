@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
@@ -315,4 +316,66 @@ func TestRelayRestartDuringContinuationDoesNotRepeatAuthRecovery(t *testing.T) {
 	if e.Safe(err).Code != "AUTH_REJECTED" || calls != 0 || saved.ScanState() != "blocked" {
 		t.Fatal(err, calls, saved)
 	}
+}
+
+func TestRelayUnlimitedScanRetriesAndUncertainSkipNeverDeadlock(t *testing.T) {
+	st, page, cfg := relayFixture()
+	unlimited := -1
+	cfg.ScanRetryLimit = &unlimited
+	cfg.DeliveryMode = relay.HTTPAccepted
+	cfg.TokenEnv = "SYNTHETIC_TOKEN"
+	cfg.OnUncertain = relay.UncertainSkip
+	cfg.RetryBaseSeconds = 1
+	st.DeliveryMode = relay.HTTPAccepted
+	st.Binding = page.Binding
+
+	// Tuning operational parameters must preserve the consumer digest.
+	baseConsumer := cfg.ConsumerDigest("/run/a.sock", "scope-1")
+	tuned := cfg
+	tuned.TimeoutSeconds = 90
+	tuned.BatchWindowSeconds = 60
+	tuned.RetryBaseSeconds = 30
+	if tuned.ConsumerDigest("/run/a.sock", "scope-1") != baseConsumer {
+		t.Fatal("operational tuning broke ConsumerDigest")
+	}
+
+	// Simulate 25 consecutive transient scan failures (> old cap of 20), then recovery,
+	// followed by an uncertain webhook delivery that records a receipt without halting.
+	synctest.Test(t, func(t *testing.T) {
+		scanCalls := 0
+		var saved relay.State
+		skippedNotice := false
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
+		defer cancel()
+		save := func(s relay.State) error {
+			saved = copyRelayState(t, s)
+			return s.Validate()
+		}
+		err := pumpRelay(ctx, cfg, broker.ScanRequest{WholeChannel: true}, st, time.Second, 0,
+			func(context.Context, broker.ScanRequest) (broker.ScanPage, error) {
+				scanCalls++
+				if scanCalls <= 25 {
+					return broker.ScanPage{}, e.New(e.CategoryNetwork, "SCAN_TIMEOUT", "cross-ocean timeout")
+				}
+				if scanCalls == 26 {
+					return page, nil
+				}
+				cancel()
+				empty := page
+				empty.Items = nil
+				return empty, nil
+			},
+			func(context.Context, relay.Batch) error {
+				return relay.UnknownOutcome()
+			},
+			save,
+			func(reason string, _ relay.State, _ string) {
+				if reason == "uncertain_skipped" {
+					skippedNotice = true
+				}
+			})
+		if err != nil || scanCalls < 27 || !skippedNotice || saved.UncertainBatches != 1 || saved.UncertainEvents != 2 || saved.Inflight != nil {
+			t.Fatalf("err=%v scanCalls=%d skipped=%v saved=%+v", err, scanCalls, skippedNotice, saved)
+		}
+	})
 }

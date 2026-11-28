@@ -61,7 +61,7 @@ Channel names remain untrusted data; selecting an ID is not an authorization gra
 | Self-approval | Separate listener-bound authority; private operator socket; no request field or flag grants it | Same-user development runs do not isolate the sockets from that user |
 | Changed draft or destination | Immutable request and SHA-256 digest; exact event-to-channel/post/reply binding; short expiry; policy digest recheck | A digest is not authentication; only operator socket access grants approval |
 | Duplicate sends | Persist `sending` before I/O; terminal states reject replay; same-key submissions are idempotent | No documented remote idempotency key; operator-driven duplicates remain possible |
-| Credential exfiltration | Secret environment only in operator setup and broker service; fixed TLS host/paths; redirects and proxy environment disabled; raw network errors suppressed; no download cookies/URLs returned | A compromised broker OS account or host root remains trusted |
+| Credential exfiltration | Secret environment only in operator setup and broker service (or OS credential store via `connect`); fixed TLS host/paths; redirects and ambient proxy environment disabled (explicit proxy only); raw network errors suppressed; no download cookies/URLs returned | A compromised broker OS account or host root remains trusted |
 | Filesystem/SSRF abuse | Broker has no remote file-path operations, shell commands, URL following, media fetch/upload, or arbitrary API method; relay destination comes only from protected local configuration | Markdown links remain untrusted text, not approved network destinations |
 | Resource exhaustion | Request/response sizes, JSON depth, page sizes, timeouts, concurrency, rate budgets, retention and ledger capacity | Volumetric attacks need reverse-proxy/network controls; authenticated users can consume permitted capacity |
 | Terminal/UI spoofing | JSON escaping; no table/raw output or removable trust fields; outbound control/bidi overrides rejected | Review untrusted inbound text without rendering Markdown, links or terminal escapes |
@@ -69,6 +69,16 @@ Channel names remain untrusted data; selecting an ID is not an authorization gra
 These are structural controls, not a heuristic injection detector. No regex or
 classifier is used to declare a message safe. Do not automatically give a model
 additional tools because content passed a filter.
+
+The unified single-profile commands (`connect`, `listen`, `serve`, `status`) keep
+credentials inside the operator/service process and enforce owner-only `0700`
+non-symlink leaf directories and `0600` non-symlink state files while tolerating
+symlinked parent mounts (such as macOS `/var` or container workspaces); pass
+`--strict-fs` to require full ancestor-to-`/` checks. Strict multi-user Linux
+deployments (`broker serve` and standalone `relay run`) always enforce full
+ancestor checks. Read-only protocol POSTs use `transport.AsRead` retries for
+cross-region resilience; write operations (`Send` and webhook POSTs) are never
+retried by HTTP transport.
 
 ## Linux deployment reference
 

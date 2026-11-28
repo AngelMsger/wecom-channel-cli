@@ -73,6 +73,7 @@ type State struct {
 	Progress          *broker.PollProgress `json:"poll_progress,omitempty"`
 	Version           int                  `json:"relay_version"`
 	Consumer          string               `json:"consumer"`
+	LegacyConsumer    string               `json:"legacy_consumer,omitempty"`
 	Identity          broker.WatchIdentity `json:"identity"`
 	Binding           string               `json:"binding"`
 	After             int64                `json:"collected_sequence"`
@@ -92,6 +93,8 @@ type State struct {
 	DeliveryMode      string               `json:"delivery_mode,omitempty"`
 	AcceptedEvents    int64                `json:"accepted_events,omitempty"`
 	AcceptedBatches   int64                `json:"accepted_batches,omitempty"`
+	UncertainEvents   int64                `json:"uncertain_events,omitempty"`
+	UncertainBatches  int64                `json:"uncertain_batches,omitempty"`
 	LastAccepted      int64                `json:"last_accepted_at,omitempty"`
 	Receipts          []Receipt            `json:"receipts,omitempty"`
 	NextDelivery      int64                `json:"next_delivery_at,omitempty"`
@@ -188,6 +191,16 @@ func (s *State) Ack(now time.Time) {
 
 // Accept records a documented HTTP acceptance, never processing completion.
 func (s *State) Accept(now time.Time, evidence string) error {
+	return s.recordReceipt(now, "accepted", evidence)
+}
+
+// RecordUncertain records an uncertain post-send batch so the listener can keep
+// observing new events when configured with on_uncertain=skip or retry.
+func (s *State) RecordUncertain(now time.Time, evidence string) error {
+	return s.recordReceipt(now, "uncertain", evidence)
+}
+
+func (s *State) recordReceipt(now time.Time, status, evidence string) error {
 	if s.Inflight == nil || len(s.Receipts) >= 10000 {
 		return e.New(e.CategoryRateLimit, "RELAY_RECEIPTS_FULL", "The bounded delivery receipt history is full. Stop and archive/reconcile it before provisioning a new relay; no pending batch was discarded.")
 	}
@@ -195,10 +208,15 @@ func (s *State) Accept(now time.Time, evidence string) error {
 	for _, t := range s.Inflight.Batch.Threads {
 		n += len(t.Events)
 	}
-	s.Receipts = append(s.Receipts, Receipt{Batch: s.Inflight.Batch, ID: s.Inflight.Batch.ID, Status: "accepted", Events: n, Attempts: s.Inflight.Attempts, AcceptedAt: now.UnixMilli(), Evidence: evidence})
-	s.AcceptedEvents += int64(n)
-	s.AcceptedBatches++
-	s.LastAccepted = now.UnixMilli()
+	s.Receipts = append(s.Receipts, Receipt{Batch: s.Inflight.Batch, ID: s.Inflight.Batch.ID, Status: status, Events: n, Attempts: s.Inflight.Attempts, AcceptedAt: now.UnixMilli(), Evidence: evidence})
+	if status == "uncertain" {
+		s.UncertainEvents += int64(n)
+		s.UncertainBatches++
+	} else {
+		s.AcceptedEvents += int64(n)
+		s.AcceptedBatches++
+		s.LastAccepted = now.UnixMilli()
+	}
 	s.Inflight = nil
 	return nil
 }
@@ -207,6 +225,7 @@ type Store struct {
 	Path   string
 	lock   *os.File
 	digest string
+	strict bool
 }
 
 func stateError() error {
@@ -214,6 +233,16 @@ func stateError() error {
 }
 
 func Open(path string) (*Store, error) {
+	return openStore(path, true)
+}
+
+// OpenRelaxed opens a private 0600 relay state file inside a container-friendly
+// user-owned private directory (tolerating symlinked ancestors).
+func OpenRelaxed(path string) (*Store, error) {
+	return openStore(path, false)
+}
+
+func openStore(path string, strict bool) (*Store, error) {
 	if path == "" {
 		return nil, stateError()
 	}
@@ -221,8 +250,16 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, stateError()
 	}
-	if err = securefs.Directory(filepath.Dir(abs), true, false); err != nil {
-		return nil, err
+	if strict {
+		if err = securefs.Directory(filepath.Dir(abs), true, false); err != nil {
+			return nil, err
+		}
+	} else {
+		resolved, dirErr := securefs.EnsurePrivateDir(filepath.Dir(abs), false)
+		if dirErr != nil {
+			return nil, dirErr
+		}
+		abs = filepath.Join(resolved, filepath.Base(abs))
 	}
 	fd, err := unix.Open(abs+".lock", unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0600)
 	if err != nil {
@@ -238,8 +275,8 @@ func Open(path string) (*Store, error) {
 		f.Close()
 		return nil, e.New(e.CategoryConflict, "RELAY_IN_USE", "Another relay owns this state file.")
 	}
-	s := &Store{Path: abs, lock: f}
-	b, err := securefs.ReadPrivate(abs, maxStateBytes, false)
+	s := &Store{Path: abs, lock: f, strict: strict}
+	b, err := securefs.ReadPrivateFile(abs, maxStateBytes, false, strict)
 	if err != nil && !os.IsNotExist(err) {
 		s.Close()
 		return nil, stateError()
@@ -257,15 +294,25 @@ func (s *Store) Close() {
 }
 
 func Read(path string) (State, bool, error) {
+	return readState(path, true)
+}
+
+func ReadRelaxed(path string) (State, bool, error) {
+	return readState(path, false)
+}
+
+func readState(path string, strict bool) (State, bool, error) {
 	var s State
 	abs, err := filepath.Abs(path)
 	if err != nil || path == "" {
 		return s, false, stateError()
 	}
-	if err = securefs.Directory(filepath.Dir(abs), true, false); err != nil {
-		return s, false, err
+	if strict {
+		if err = securefs.Directory(filepath.Dir(abs), true, false); err != nil {
+			return s, false, err
+		}
 	}
-	b, err := securefs.ReadPrivate(abs, maxStateBytes, false)
+	b, err := securefs.ReadPrivateFile(abs, maxStateBytes, false, strict)
 	if os.IsNotExist(err) {
 		return s, false, nil
 	}
@@ -287,19 +334,26 @@ func (s State) Validate() error {
 	if !s.LastScanError.valid("scan") || !s.LastDeliveryError.valid("delivery") {
 		return stateError()
 	}
-	if s.Version != 1 || len(s.Consumer) != 64 || s.After < 0 || s.Depth() > 10000 || s.ScanFailures < 0 || s.ScanFailures > 21 || s.Filtered < 0 || s.Acknowledged < 0 || s.Collected != s.Filtered+s.Acknowledged+s.AcceptedEvents+int64(s.Depth()) || s.AckedBatches < 0 || (len(s.Pending) > 0 && s.PendingSince <= 0) {
+	maxScanFailures := 21
+	if s.LastScanError != nil && s.LastScanError.RetryLimit < 0 {
+		maxScanFailures = 1_000_000
+	}
+	if s.Version != 1 || len(s.Consumer) != 64 || (s.LegacyConsumer != "" && (len(s.LegacyConsumer) != 64 || s.LegacyConsumer == s.Consumer)) || s.After < 0 || s.Depth() > 10000 || s.ScanFailures < 0 || s.ScanFailures > maxScanFailures || s.Filtered < 0 || s.Acknowledged < 0 || s.Collected != s.Filtered+s.Acknowledged+s.AcceptedEvents+s.UncertainEvents+int64(s.Depth()) || s.AckedBatches < 0 || (len(s.Pending) > 0 && s.PendingSince <= 0) {
 		return stateError()
 	}
 	if s.DeliveryMode != "" && s.DeliveryMode != HTTPAccepted {
 		return stateError()
 	}
-	if (s.DeliveryMode == "" && (s.AcceptedEvents != 0 || s.AcceptedBatches != 0 || s.LastAccepted != 0 || len(s.Receipts) != 0)) || len(s.Receipts) > 10000 || s.AcceptedBatches != int64(len(s.Receipts)) || s.AcceptedEvents < 0 || s.NextDelivery < 0 {
+	if (s.DeliveryMode == "" && (s.AcceptedEvents != 0 || s.AcceptedBatches != 0 || s.UncertainEvents != 0 || s.UncertainBatches != 0 || s.LastAccepted != 0 || len(s.Receipts) != 0)) || len(s.Receipts) > 10000 || s.AcceptedBatches+s.UncertainBatches != int64(len(s.Receipts)) || s.AcceptedEvents < 0 || s.UncertainEvents < 0 || s.NextDelivery < 0 {
 		return stateError()
 	}
-	accepted := int64(0)
+	validBatchID := func(b Batch) bool {
+		return b.ID == batchID(s.Consumer, b) || (s.LegacyConsumer != "" && b.ID == batchID(s.LegacyConsumer, b))
+	}
+	accepted, uncertain := int64(0), int64(0)
 	receipts := map[string]bool{}
 	for _, r := range s.Receipts {
-		if r.Batch.ID != r.ID || r.Batch.Identity != s.Identity || r.Batch.Validate() != nil || r.Batch.ID != batchID(s.Consumer, r.Batch) || len(r.ID) != 64 || receipts[r.ID] || r.Status != "accepted" || r.Events < 1 || r.Events > 100 || r.Attempts < 1 || r.Attempts > 21 || r.AcceptedAt <= 0 {
+		if r.Batch.ID != r.ID || r.Batch.Identity != s.Identity || r.Batch.Validate() != nil || !validBatchID(r.Batch) || len(r.ID) != 64 || receipts[r.ID] || (r.Status != "accepted" && r.Status != "uncertain") || r.Events < 1 || r.Events > 100 || r.Attempts < 1 || r.Attempts > 21 || r.AcceptedAt <= 0 {
 			return stateError()
 		}
 		count := 0
@@ -310,15 +364,19 @@ func (s State) Validate() error {
 			return stateError()
 		}
 		receipts[r.ID] = true
-		accepted += int64(r.Events)
+		if r.Status == "uncertain" {
+			uncertain += int64(r.Events)
+		} else {
+			accepted += int64(r.Events)
+		}
 	}
-	if accepted != s.AcceptedEvents {
+	if accepted != s.AcceptedEvents || uncertain != s.UncertainEvents {
 		return stateError()
 	}
 	// Persist startup retry budgets before the first successful broker handshake.
 	// No work may be dispatched until a complete identity/binding is established.
 	if s.Binding == "" {
-		if s.Identity != (broker.WatchIdentity{}) || s.Depth() != 0 || s.Inflight != nil || s.Collected != 0 || s.AckedBatches != 0 || s.AcceptedBatches != 0 || (s.FromNow && s.After != 0) {
+		if s.Identity != (broker.WatchIdentity{}) || s.Depth() != 0 || s.Inflight != nil || s.Collected != 0 || s.AckedBatches != 0 || s.AcceptedBatches != 0 || s.UncertainBatches != 0 || (s.FromNow && s.After != 0) {
 			return stateError()
 		}
 		return nil
@@ -345,7 +403,7 @@ func (s State) Validate() error {
 		if receipts[d.Batch.ID] || (s.DeliveryMode == "" && d.Status != "") || (d.Status != "" && d.Status != "sending" && d.Status != "unknown" && d.Status != "rejected") || (d.Status != "" && d.Attempts < 1) {
 			return stateError()
 		}
-		if d.QueuedAt < 0 || d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || d.Batch.ID != batchID(s.Consumer, d.Batch) {
+		if d.QueuedAt < 0 || d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || !validBatchID(d.Batch) {
 			return stateError()
 		}
 		for _, t := range d.Batch.Threads {
@@ -372,7 +430,7 @@ func (s *Store) Save(v State) error {
 // save shares the existing atomic snapshot protocol with worker-owned receipts.
 // Callers validate their own schema before entering this persistence boundary.
 func (s *Store) save(v any) error {
-	old, err := securefs.ReadPrivate(s.Path, maxStateBytes, false)
+	old, err := securefs.ReadPrivateFile(s.Path, maxStateBytes, false, s.strict)
 	if (err != nil && !os.IsNotExist(err)) || (s.digest != "" && (err != nil || apiclient.Digest(string(old)) != s.digest)) || (s.digest == "" && err == nil) {
 		return stateError()
 	}

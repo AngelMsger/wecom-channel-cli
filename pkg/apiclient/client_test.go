@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	kit "github.com/angelmsger/agent-cli-kit/transport"
+	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 )
 
 type doerFunc func(*http.Request) (*http.Response, error)
@@ -233,18 +234,67 @@ func TestLateAuthRejectionKeepsRefreshedToken(t *testing.T) {
 		done <- err
 	}()
 	<-staleInFlight
-	// auth check uses channel.list. The first read evicts the old token;
-	// the next read obtains a replacement while the write is still in flight.
+	// auth check uses channel.list. A read encountering an expired token
+	// transparently evicts token-1 and refreshes to token-2 in one call.
 	check := func() error {
 		_, err := c.Read(ctx, Query{Operation: "channel.list", Limit: 1})
 		return err
 	}
-	rejected := check()
 	refreshed := check()
 	close(releaseStale)
 	writeErr := <-done
 	reused := check()
-	if rejected == nil || refreshed != nil || writeErr == nil || reused != nil || tokens.Load() != 2 {
-		t.Fatalf("rejection=%v refresh=%v late write=%v reuse=%v token calls=%d", rejected, refreshed, writeErr, reused, tokens.Load())
+	if refreshed != nil || writeErr == nil || reused != nil || tokens.Load() != 2 {
+		t.Fatalf("refresh=%v late write=%v reuse=%v token calls=%d", refreshed, writeErr, reused, tokens.Load())
 	}
 }
+
+func TestReadResilienceRetriesAndNetworkReason(t *testing.T) {
+	var tokenAttempts, readAttempts atomic.Int32
+	c, err := New("bot", "SECRET")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.http = kit.New(kit.Options{
+		MaxRetries:     2,
+		RetryBaseDelay: 1,
+		Doer: doerFunc(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path == "/cgi-bin/aibot/get_token" {
+				if tokenAttempts.Add(1) == 1 {
+					return nil, io.ErrUnexpectedEOF
+				}
+				return response(`{"errcode":0,"access_token":"TOKEN"}`), nil
+			}
+			n := readAttempts.Add(1)
+			if n == 1 {
+				return nil, io.ErrUnexpectedEOF
+			}
+			if n == 2 {
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(io.MultiReader(strings.NewReader("{"), errReader{io.ErrUnexpectedEOF})), Header: make(http.Header)}, nil
+			}
+			return response(`{"errcode":0,"topic_list":[{"topic_id":"ch1","topic_name":"Alpha"}],"has_more":false}`), nil
+		}),
+	})
+	page, err := c.Read(context.Background(), Query{Operation: "channel.list", Limit: 10})
+	if err != nil || len(page.Items) != 1 || tokenAttempts.Load() != 2 || readAttempts.Load() != 3 {
+		t.Fatalf("read resilience failed: page=%+v err=%v tokens=%d reads=%d", page, err, tokenAttempts.Load(), readAttempts.Load())
+	}
+
+	// Persistent network error reports secret-free curated NetworkReason.
+	c2, _ := New("bot", "SECRET")
+	c2.http = kit.New(kit.Options{Doer: doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial tcp: %w (SECRET)", context.DeadlineExceeded)
+	})})
+	_, err = c2.Read(context.Background(), Query{Operation: "channel.list", Limit: 10})
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	meta := ReadFailureMetadata(err.(*e.CLIError).Details)
+	if meta.NetworkReason != "timeout" {
+		t.Fatalf("expected timeout network_reason, got %+v", meta)
+	}
+}
+
+type errReader struct{ err error }
+
+func (r errReader) Read([]byte) (int, error) { return 0, r.err }

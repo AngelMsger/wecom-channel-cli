@@ -140,11 +140,12 @@ func TestPassInterruptionResumesOnlyUncommittedPage(t *testing.T) {
 	if p, err := b.scan(context.Background(), r); err != nil || p.Progress == nil || len(f.reads) != 4 {
 		t.Fatal("cached failure spent another read", p, err)
 	}
-	// Simulate a failed process after the reservation and before saving the page.
+	// Simulate a failed process after the failed page. The failed page must not
+	// burn pass budget: 3 committed pages + 8 resumed pages = 11 committed reads.
 	restarted := New(b.Config, b.Store, f, nil)
 	restarted.Now = b.Now
 	f.fail = ""
-	if p, err := restarted.scan(context.Background(), r); err != nil || p.Progress == nil || p.Progress.Requests != 12 || pollKey(f.reads[4]) != pollKey(f.reads[3]) {
+	if p, err := restarted.scan(context.Background(), r); err != nil || p.Progress == nil || p.Progress.Requests != 11 || pollKey(f.reads[4]) != pollKey(f.reads[3]) {
 		t.Fatal(p.Progress, err, len(f.reads))
 	}
 	if len(b.Store.View().Events) != 0 {
@@ -173,7 +174,7 @@ func TestPassRejectsRepeatedCursorAndExpiresUnusedStage(t *testing.T) {
 		t.Fatal(p, err)
 	}
 	reads := len(f.reads)
-	now := b.Now().Add(2 * time.Hour)
+	now := b.Now().Add(5 * time.Hour)
 	b.Now = func() time.Time { return now }
 	if _, err := b.scan(context.Background(), r); e.Safe(err).Code != "POLL_UNSTABLE" || len(f.reads) != reads {
 		t.Fatal(err)

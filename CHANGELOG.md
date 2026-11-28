@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add the unified single-profile workflow (`connect`, `listen`, `serve`, `status`, `auth logout`) backed by a single `profile.yaml` ([deploy/profile.example.yaml](deploy/profile.example.yaml)) and `agent-cli-kit/credstore`:
+  - `connect` verifies Bot ID/Secret, saves the verified Secret to the user credential store, discovers all joined channel pages, preserves selections across channel renames, and supports explicit `--proxy` and `--upstream-timeout`.
+  - `auth logout` idempotently removes a saved Bot Secret from the credential store while preserving `profile.yaml` and ledgers.
+  - `listen` streams selected channels as untrusted NDJSON with concurrent in-process polling (`Broker.PollNow`), automatic cross-region read retries, unlimited steady-state exponential backoff, and tuning-invariant checkpoints.
+  - `serve` consolidates polling, local agent/admin Unix sockets (with automatic stale-socket cleanup, synced `config.yaml` contexts, and full post/reply/reaction proposal support when `read_only: false`), live `status.json` (including `delivery_state` paths), and optional in-process Grok/explicit-ACK webhook delivery (with explicit `--retry-failed` recovery) into one continuous daemon.
+  - `status` performs real `flock`-based liveness probing on `serve.lock`, reports per-channel health and webhook counters, and supports `--check --max-stale` for host supervision.
+- Add explicit proxy support (`upstream_proxy` / `proxy_url` / `--proxy` supporting `http`, `https`, `socks5`, `socks5h`) without inheriting ambient `HTTP_PROXY`/`HTTPS_PROXY` environment variables.
+- Add configurable `scan_retry_limit: -1` (unlimited steady-state exponential backoff capped at 5m), `on_uncertain: skip|retry|halt` for `http_accepted` webhooks, bounded `network_reason` failure diagnostics, and concurrent reply fetching (`poll_concurrency`, default 4).
+
+### Fixed
+
+- Preserve every saved client context name during channel discovery and report unreadable client configuration before saving a profile.
+- Fix cross-region listener disconnects by marking read-only WeCom POSTs (`get_token` and read APIs) with `transport.AsRead` (3 transport retries with idle connection eviction on transport errors, 45s default timeout, transparent expired-token refresh on `853004`/`42001`/`40014`, and 1× interrupted-body retry) while keeping writes strictly non-retried.
+- Fix broker 60s request timeout misclassifying `context.DeadlineExceeded` as non-retryable `INTERNAL` (permanently latching `ScanBlocked`); raise handler timeout to 90s and classify timeouts as retryable `SCAN_TIMEOUT`.
+- Fix stale Unix sockets left after crashes causing `SOCKET_EXISTS` crash loops by probing liveness before unlinking dead sockets (while still rejecting live sockets and non-socket files).
+- Fix failed upstream reads in resumable `poll_pass` burning `poll_max_requests` budget and raise pass lifetime from 1h to 4h.
+- Decouple operational tuning (timeouts, retry limits, poll intervals, budgets, proxy URLs) from `ScopeDigest` and `ConsumerDigest` so tuning adjustments no longer trigger `WATCH_BINDING_CHANGED` or `RELAY_BINDING_CHANGED`.
+- Distinguish pre-connect DNS/dial/TLS errors (`RELAY_UNREACHABLE`) from post-send uncertainty in `http_accepted` webhooks, allow continuous `relay run --duration 0` / `--max-batches 0`, fix the templated socket path in `deploy/wecom-channel-relay@.service`, and update `deploy/grok.example.json` for cross-region resilience.
+- Update companion Skill and handshake to 0.1.16.
+
 ## [0.5.0] — 2026-11-24
 
 - Add a per-instance listener health timer, bounded scan-only read recovery,

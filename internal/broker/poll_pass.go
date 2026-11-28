@@ -23,7 +23,7 @@ type PollProgress struct {
 }
 
 func (p PollProgress) Valid() bool {
-	return p.NextAt > 0 && p.Requests >= 0 && p.Requests <= 1000 && p.Records >= 0 && p.Records <= 100000 && p.PageAt >= 0
+	return p.NextAt > 0 && p.Requests >= 0 && p.Requests <= 5000 && p.Records >= 0 && p.Records <= 100000 && p.PageAt >= 0
 }
 
 // There is one whole-channel scope per broker. Only the broker owns its cursors.
@@ -45,7 +45,7 @@ func (p *pollPass) valid(ledger string) bool {
 	if p.Ledger != ledger || len(p.Policy) != 64 || len(p.Scope) != 64 {
 		return false
 	}
-	if p.Started <= 0 || p.Requests < 1 || p.Requests > 1000 {
+	if p.Started <= 0 || p.Requests < 0 || p.Requests > 5000 {
 		return false
 	}
 	if p.Seen == nil || p.Observations == nil || p.Replies != (len(p.Remaining) > 0) {
@@ -72,8 +72,10 @@ func (p *pollPass) encode() (json.RawMessage, error) {
 	return raw, nil
 }
 
-// pollGate serializes these reservations across all scopes and watch modes.
+// reservePollRead safely reserves a rate-window slot across concurrent poll workers.
 func (b *Broker) reservePollRead(p *pollPass) (time.Time, error) {
+	b.rateMu.Lock()
+	defer b.rateMu.Unlock()
 	w, allowed := b.reserveRate(b.Store.PollRateWindow())
 	if !allowed {
 		return w.Start.Add(time.Minute), nil
@@ -127,7 +129,7 @@ func (p *pollPass) apply(b *Broker, q apiclient.Query, page apiclient.Page) erro
 	return nil
 }
 
-func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *PollProgress, resultErr error) {
+func (b *Broker) pollSlice(ctx context.Context, policy, legacyPolicy, scope string) (result *PollProgress, resultErr error) {
 	now := b.Now()
 	raw, revision, ledger := b.Store.StagedPoll()
 	p := pollPass{Policy: policy, Scope: scope, Ledger: ledger, Revision: revision, Started: now.UnixMilli(), Seen: map[string]bool{}, Observations: map[string]state.PollObservation{}}
@@ -147,9 +149,11 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		if len(raw) > maxPassBytes || safejson.Decode(raw, &p, true) != nil || !p.valid(ledger) {
 			return nil, e.New(e.CategoryConfig, "POLL_STAGE_INVALID", "The saved polling pass is unreadable. Inspect broker storage.")
 		}
-		if p.Policy != policy || p.Scope != scope || p.Revision != revision || now.Before(time.UnixMilli(p.Started)) || now.Sub(time.UnixMilli(p.Started)) >= time.Hour {
+		policyMatch := p.Policy == policy || (legacyPolicy != "" && p.Policy == legacyPolicy)
+		if !policyMatch || p.Scope != scope || p.Revision != revision || now.Before(time.UnixMilli(p.Started)) || now.Sub(time.UnixMilli(p.Started)) >= 4*time.Hour {
 			return nil, b.discardPass(e.New(e.CategoryConflict, "POLL_UNSTABLE", "The saved pass expired or a concurrent scan changed the baseline."))
 		}
+		p.Policy = policy
 	}
 	progress := func(at time.Time) *PollProgress {
 		return &PollProgress{NextAt: at.UnixMilli(), Requests: p.Requests, Records: len(p.Observations), PageAt: p.PageAt}
@@ -158,7 +162,7 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		return progress(time.UnixMilli(p.EligibleAt)), nil
 	}
 	for i := 0; i < 8; i++ {
-		if err := ctx.Err(); err != nil {
+		if err := contextError(ctx); err != nil {
 			return nil, err
 		}
 		if p.Requests >= b.Config.PollMaxRequests {
@@ -167,8 +171,9 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		if deadline, ok := ctx.Deadline(); i > 0 && ok && time.Until(deadline) < 5*time.Second {
 			return progress(b.Now().Add(time.Second)), nil
 		}
-		// A crash can waste one credit but cannot issue an uncharged read.
-		eligible, err := b.reservePollRead(&p)
+		// Reserve a rate-window slot before network I/O, without burning the
+		// pass's page budget on transient transport failures.
+		eligible, err := b.reservePollRead(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -187,19 +192,20 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 			}
 			return nil, err
 		}
-		if err = ctx.Err(); err != nil {
+		if err = contextError(ctx); err != nil {
 			return nil, err
 		}
 		if err = p.apply(b, q, page); err != nil {
 			return nil, b.discardPass(err)
 		}
+		p.Requests++
 		if p.Replies && len(p.Remaining) == 0 {
 			keys := slices.Sorted(maps.Keys(p.Observations))
 			observations := make([]state.PollObservation, 0, len(keys))
 			for _, k := range keys {
 				observations = append(observations, p.Observations[k])
 			}
-			return nil, b.Store.CommitPoll(policy, scope, true, nil, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
+			return nil, b.Store.CommitPoll(policy, legacyPolicy, scope, true, nil, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
 		}
 		if i == 7 {
 			p.EligibleAt = b.Now().Add(max(time.Second, 8*time.Minute/time.Duration(b.Config.RequestsPerMinute))).UnixMilli()

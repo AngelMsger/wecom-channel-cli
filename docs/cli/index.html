@@ -1,14 +1,16 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="../guide.html">Operator guide</a><a href="../command-design.html">Command responsibilities</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../reactions.html">Native reactions</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, proposal, relay, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose messages and native reactions through an isolated broker</p><pre><code>Usage:
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f9ff"><title>Command reference — WeCom Channel CLI</title><link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../assets/site.css"><script src="../assets/site.js" defer></script></head><body class="docs-page"><a class="skip" href="#main">Skip to content</a><header class="nav wrap"><a class="brand" href="../index.html" aria-label="WeCom Channel CLI home"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">WeCom Channel CLI</span></a><nav class="nav-links" aria-label="Main navigation"><a href="../contexts.html">Contexts</a><a href="../index.html#playground">Explore the interface</a><a class="source-link" href="https://github.com/AngelMsger/wecom-channel-cli">GitHub ↗</a></nav></header><main id="main" class="wrap doc-layout"><aside class="doc-sidebar"><span class="eyebrow">DOCUMENTATION / 0.2.0</span><a href="../guide.html">Operator guide</a><a href="../command-design.html">Command responsibilities</a><a href="../contexts.html">Channel contexts</a><a href="../watching.html">Watching channels</a><a href="../reactions.html">Native reactions</a><a href="../cli/index.html" aria-current="page">Command reference</a><a href="../security.html">Security model</a><a href="../technical-design.html">Technical design</a><a href="../research.html">API research</a><a href="../releasing.html">Release guide</a></aside><article class="doc-article"><h1>Command reference</h1><p>Generated from the actual command tree. Every flag, one searchable surface.</p><label for="command-search">Find a command or flag</label><input id="command-search" class="command-search" type="search" placeholder="Try: context, proposal, relay, --dry-run"><p id="search-summary" class="search-summary" aria-live="polite"></p><section class="command-section" id="wecom-channel-cli"><h2>wecom-channel-cli</h2><p>Read and watch WeCom channels; propose messages and native reactions through a resilient connector</p><pre><code>Usage:
   wecom-channel-cli [flags]
   wecom-channel-cli [command]
 
 Available Commands:
-  auth        Explain credential ownership and verify through the broker
+  auth        Explain credential ownership, manage stored secrets, and verify through the broker
   broker      Run the isolated credential-holding broker
   channel     List channels during operator setup or through broker policy
   config      Manage local client contexts; authorization belongs to operator policy
+  connect     Connect a WeCom Bot, save credentials securely, and discover its channels
   doctor      Check broker readiness and policy; use auth check to verify upstream credentials
   event       Read or watch channel observations and authenticated callback events
+  listen      Stream observations from selected channels as NDJSON with automatic recovery
   member      Inspect member data through broker policy
   policy      Generate or validate the broker&#39;s operator-owned authorization policy offline
   post        Inspect post data through broker policy
@@ -17,7 +19,9 @@ Available Commands:
   relay       Deliver changes and track local delivery and processing state
   reply       Inspect reply data through broker policy
   search      Inspect search data through broker policy
+  serve       Run the unified single-process channel daemon (polling, local CLI sockets, and optional webhook delivery)
   skill       Inspect or install the embedded companion Skill
+  status      Inspect live daemon liveness, per-channel polling health, and webhook delivery counters
   version     Print build metadata
 
 Flags:
@@ -28,13 +32,14 @@ Flags:
       --timeout duration     Bound the entire local request (default 1m5s)
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 
-Use &#34;wecom-channel-cli [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-auth"><h2>wecom-channel-cli auth</h2><p>Explain credential ownership and verify through the broker</p><pre><code>Usage:
+Use &#34;wecom-channel-cli [command] --help&#34; for more information about a command.</code></pre></section><section class="command-section" id="wecom-channel-cli-auth"><h2>wecom-channel-cli auth</h2><p>Explain credential ownership, manage stored secrets, and verify through the broker</p><pre><code>Usage:
   wecom-channel-cli auth [flags]
   wecom-channel-cli auth [command]
 
 Available Commands:
   check       Operator-only: verify authentication with a bounded channel-list request
   guide       Read offline authentication and official CLI compatibility guidance
+  logout      Remove the saved Bot Secret from the user credential store
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -55,6 +60,24 @@ Global Flags:
       --timeout duration     Bound the entire local request (default 1m5s)
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-auth-guide"><h2>wecom-channel-cli auth guide</h2><p>Read offline authentication and official CLI compatibility guidance</p><pre><code>Usage:
   wecom-channel-cli auth guide [flags]
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-auth-logout"><h2>wecom-channel-cli auth logout</h2><p>Remove the saved Bot Secret from the user credential store</p><pre><code>Usage:
+  wecom-channel-cli auth logout [flags]
+
+Examples:
+  wecom-channel-cli auth logout
+  wecom-channel-cli auth logout --bot-id BOT_ID --dry-run
+
+Flags:
+      --bot-id string   Bot ID to forget (defaults to bot_id in profile.yaml)
+      --dry-run         Preview credential removal without modifying the credential store
+      --strict-fs       Enforce full ancestor directory checks up to /
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -207,6 +230,28 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-connect"><h2>wecom-channel-cli connect</h2><p>Connect a WeCom Bot, save credentials securely, and discover its channels</p><pre><code>Usage:
+  wecom-channel-cli connect [flags]
+
+Examples:
+  wecom-channel-cli connect --bot-id BOT_ID
+  wecom-channel-cli connect --bot-id BOT_ID --proxy socks5://127.0.0.1:1080
+  wecom-channel-cli listen --channel Engineering
+  wecom-channel-cli serve --channel Engineering --webhook-url https://... --webhook-token-env GROK_ROUTINE_SENDER_KEY --save
+
+Flags:
+      --bot-id string               Bot ID (reused from profile or prompted in an interactive terminal)
+      --dry-run                     Preview discovery without reading credentials, making requests, or writing state
+      --proxy string                Optional explicit proxy URL (http/https/socks5/socks5h) saved to profile.yaml
+      --strict-fs                   Enforce full ancestor directory checks up to /
+      --upstream-timeout duration   Optional single-request timeout saved to profile.yaml (5s–180s, default 45s)
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-doctor"><h2>wecom-channel-cli doctor</h2><p>Check broker readiness and policy; use auth check to verify upstream credentials</p><pre><code>Usage:
   wecom-channel-cli doctor [flags]
 
@@ -289,6 +334,32 @@ Flags:
       --max-events int       Stop after this many matching emitted events (default 1000)
       --post stringArray     Watch this post and its replies; repeat for up to 32 post IDs
       --whole-channel        Watch post/reply changes throughout this channel context
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-listen"><h2>wecom-channel-cli listen</h2><p>Stream observations from selected channels as NDJSON with automatic recovery</p><pre><code>Usage:
+  wecom-channel-cli listen [flags]
+
+Examples:
+  wecom-channel-cli listen --channel Engineering
+  wecom-channel-cli listen --all
+  wecom-channel-cli listen --duration 10m
+
+Flags:
+      --all                   Select all discovered channels
+      --channel stringArray   Select a discovered channel by exact name or topic_id; repeat for multiple
+      --data-dir string       Optional private data directory override
+      --dry-run               Show the effective channel selection without saving or contacting WeCom
+      --duration duration     Optional session deadline (0 runs until interrupted)
+      --interval duration     Optional poll interval override (5s–1h)
+      --none                  Clear the saved channel selection
+      --pick ints             Select numbered entries from the last connect list (for duplicate names)
+      --proxy string          Optional explicit proxy URL override (http/https/socks5/socks5h)
+      --strict-fs             Enforce full ancestor directory checks up to /
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
@@ -661,10 +732,10 @@ Flags:
       --allow-partial        Explicitly accept allowlisted-human callback coverage
       --config string        Private operator-provisioned JSON with fixed destination, filters and retry bounds
       --dry-run              Inspect binding and coverage without credentials, remote reads, locks or state writes
-      --duration duration    Maximum session duration, up to 24h; only --state preserves queued work on exit (default 5m0s)
+      --duration duration    Optional maximum session duration (0 runs continuously until interrupted)
       --ephemeral            Keep delivery state only in bounded memory; interruption loses pending work, restart starts quietly now
       --interval duration    Minimum scan interval, 1s–1m; operator polling rates still apply (default 2s)
-      --max-batches int      Stop after this many acknowledged or HTTP-accepted batches in this session (default 1000)
+      --max-batches int      Optional maximum acknowledged/accepted batches in this session (0 for unlimited)
       --post stringArray     Observe this post and its replies; repeat for up to 32 IDs
       --retry-failed         Explicitly reset persisted retry budgets after repairing a failed receiver or scan
       --retry-scan           Resume a repaired scan with a fresh scan allowance and preserve delivery attempts
@@ -808,6 +879,38 @@ Global Flags:
       --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
       --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
       --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-serve"><h2>wecom-channel-cli serve</h2><p>Run the unified single-process channel daemon (polling, local CLI sockets, and optional webhook delivery)</p><pre><code>Usage:
+  wecom-channel-cli serve [flags]
+
+Examples:
+  wecom-channel-cli serve
+  wecom-channel-cli serve --channel Engineering --webhook-url https://... --webhook-token-env GROK_ROUTINE_SENDER_KEY --save
+  wecom-channel-cli serve --retry-failed
+  wecom-channel-cli status
+
+Flags:
+      --all                        Select all discovered channels
+      --channel stringArray        Select a discovered channel by exact name or topic_id; repeat for multiple
+      --data-dir string            Optional private data directory override
+      --delivery-mode string       Webhook contract: http_accepted (default, Grok) or explicit_ack
+      --dry-run                    Preview resolved channels, sockets and webhook config without starting
+      --interval duration          Optional poll interval override (5s–1h)
+      --none                       Clear the saved channel selection
+      --on-uncertain string        Action on post-send uncertain webhook outcome: skip (default), retry, or halt
+      --pick ints                  Select numbered entries from the last connect list (for duplicate names)
+      --proxy string               Optional explicit proxy URL (http/https/socks5/socks5h)
+      --retry-failed               Explicitly reset persisted webhook delivery failures after repairing the receiver or token
+      --save                       Persist flag overrides back into profile.yaml before starting
+      --strict-fs                  Enforce full ancestor directory checks up to /
+      --webhook-token-env string   Environment variable name holding the webhook Bearer token (e.g. GROK_ROUTINE_SENDER_KEY)
+      --webhook-url string         Optional webhook URL (HTTPS or loopback HTTP) for unattended delivery
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-skill"><h2>wecom-channel-cli skill</h2><p>Inspect or install the embedded companion Skill</p><pre><code>Usage:
   wecom-channel-cli skill [flags]
   wecom-channel-cli skill [command]
@@ -872,6 +975,25 @@ Flags:
       --agent string   Agent ID supported by agent-cli-kit (for example codex or claude)
       --dir string     Explicit parent skills directory
       --project        Use project rather than global agent paths
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default &#34;json&#34;)
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)</code></pre></section><section class="command-section" id="wecom-channel-cli-status"><h2>wecom-channel-cli status</h2><p>Inspect live daemon liveness, per-channel polling health, and webhook delivery counters</p><pre><code>Usage:
+  wecom-channel-cli status [flags]
+
+Examples:
+  wecom-channel-cli status
+  wecom-channel-cli status --check --max-stale 10m
+
+Flags:
+      --check                Exit non-zero if the daemon is not running or any channel is blocked or stale
+      --data-dir string      Optional private data directory override
+      --max-stale duration   Staleness threshold used with --check (default 10m0s)
+      --strict-fs            Enforce full ancestor directory checks up to /
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval

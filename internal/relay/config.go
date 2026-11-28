@@ -14,6 +14,7 @@ import (
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
+	"github.com/angelmsger/wecom-channel-cli/pkg/transport"
 )
 
 type Config struct {
@@ -34,15 +35,21 @@ type Config struct {
 	MinDeliverySeconds int      `json:"min_delivery_interval_seconds,omitempty"`
 	ScanRetryLimit     *int     `json:"scan_retry_limit,omitempty"`
 	DeliveryRetryLimit *int     `json:"delivery_retry_limit,omitempty"`
+	OnUncertain        string   `json:"on_uncertain,omitempty"`
+	ProxyURL           string   `json:"proxy_url,omitempty"`
 }
 
 // Omitted phase limits inherit the legacy limit, including its zero default.
-// Keep new fields optional so legacy consumer/configuration digests stay stable.
+// A scan_retry_limit of -1 enables unlimited steady-state exponential backoff.
 func (c Config) ScanRetries() int {
 	if c.ScanRetryLimit != nil {
 		return *c.ScanRetryLimit
 	}
 	return c.RetryLimit
+}
+
+func (c Config) UnlimitedScanRetries() bool {
+	return c.ScanRetries() < 0
 }
 
 func (c Config) DeliveryRetries() int {
@@ -55,11 +62,51 @@ func (c Config) DeliveryRetries() int {
 const ExplicitAck = "explicit_ack"
 const HTTPAccepted = "http_accepted"
 
+const (
+	UncertainHalt  = "halt"
+	UncertainSkip  = "skip"
+	UncertainRetry = "retry"
+)
+
 func (c Config) Mode() string {
 	if c.DeliveryMode == "" {
 		return ExplicitAck
 	}
 	return c.DeliveryMode
+}
+
+func (c Config) UncertainPolicy() string {
+	if c.OnUncertain == "" {
+		return UncertainHalt
+	}
+	return c.OnUncertain
+}
+
+// ConsumerDigest binds routing and filtering identity (socket, scope, destination,
+// delivery mode and filters) without binding operational tuning parameters like
+// timeouts, retry limits, batching windows or proxy URLs.
+func (c Config) ConsumerDigest(socket, scope string) string {
+	kinds := slices.Clone(c.Kinds)
+	slices.Sort(kinds)
+	changes := slices.Clone(c.Changes)
+	slices.Sort(changes)
+	bots := slices.Clone(c.ExcludeBots)
+	slices.Sort(bots)
+	return apiclient.Digest(struct {
+		Socket, Scope, URL, Mode string
+		Kinds                    []string
+		Changes                  []int
+		ExcludeBots              []string
+	}{socket, scope, c.URL, c.Mode(), kinds, changes, bots})
+}
+
+// LegacyConsumerDigest reproduces the pre-0.6 full-config consumer digest so
+// existing relay queues, sealed batch IDs, and receipts resume across upgrades.
+func (c Config) LegacyConsumerDigest(socket, scope string) string {
+	return apiclient.Digest(struct {
+		Socket, Scope string
+		Config        Config
+	}{socket, scope, c})
 }
 
 func DefaultConfig() Config {
@@ -84,10 +131,18 @@ func configError() error {
 }
 
 func (c Config) Validate() error {
-	if c.ScanRetries() < 0 || c.ScanRetries() > 20 || c.DeliveryRetries() < 0 || c.DeliveryRetries() > 20 {
+	if (c.ScanRetries() < -1 || c.ScanRetries() > 20) || c.DeliveryRetries() < 0 || c.DeliveryRetries() > 20 {
 		return configError()
 	}
 	if (c.Mode() != ExplicitAck && c.Mode() != HTTPAccepted) || c.MinDeliverySeconds < 0 || c.MinDeliverySeconds > 3600 || (c.Mode() == HTTPAccepted && c.TokenEnv == "") {
+		return configError()
+	}
+	switch c.UncertainPolicy() {
+	case UncertainHalt, UncertainSkip, UncertainRetry:
+	default:
+		return configError()
+	}
+	if _, err := transport.ValidateProxyURL(c.ProxyURL); err != nil {
 		return configError()
 	}
 	u, err := url.Parse(c.URL)
@@ -97,7 +152,7 @@ func (c Config) Validate() error {
 	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
 		return configError()
 	}
-	if c.Version != 1 || c.BatchWindowSeconds < 1 || c.BatchWindowSeconds > 300 || c.BatchSize < 1 || c.BatchSize > 100 || c.QueueLimit < c.BatchSize || c.QueueLimit > 10000 || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 30 || c.RetryLimit < 0 || c.RetryLimit > 20 || c.RetryBaseSeconds < 1 || c.RetryBaseSeconds > 300 {
+	if c.Version != 1 || c.BatchWindowSeconds < 1 || c.BatchWindowSeconds > 300 || c.BatchSize < 1 || c.BatchSize > 100 || c.QueueLimit < c.BatchSize || c.QueueLimit > 10000 || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 120 || c.RetryLimit < 0 || c.RetryLimit > 20 || c.RetryBaseSeconds < 1 || c.RetryBaseSeconds > 300 {
 		return configError()
 	}
 	if c.TokenEnv != "" && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`).MatchString(c.TokenEnv) {

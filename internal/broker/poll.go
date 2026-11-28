@@ -3,7 +3,9 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/angelmsger/wecom-channel-cli/internal/config"
@@ -18,6 +20,50 @@ type pollAttempt struct {
 	err error
 }
 
+func contextError(ctx context.Context) error {
+	err := ctx.Err()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		ce := e.New(e.CategoryNetwork, "SCAN_TIMEOUT", "The scan timed out before completing; retry safely.").WithCause(err)
+		ce.Retryable = true
+		return ce
+	}
+	return err
+}
+
+// PollNow performs one complete, bounded in-process whole-channel poll cycle
+// directly (used by unified `listen` and `serve`). It paces across RPM windows
+// in memory instead of staging intermediate cursors to disk, and commits the
+// complete diff atomically once finished.
+func (b *Broker) PollNow(ctx context.Context) (int, int64, error) {
+	select {
+	case b.pollGate <- struct{}{}:
+		defer func() { <-b.pollGate }()
+	case <-ctx.Done():
+		return 0, 0, contextError(ctx)
+	}
+	r := ScanRequest{WholeChannel: true, Limit: 100}
+	policy, scope := pollScope(b.Config, r)
+	legacyPolicy := apiclient.Digest(b.Config)
+	now := b.Now()
+	_, beforeHigh, _ := b.Store.Inbox()
+	observations, err := b.pollSnapshot(ctx, r, now, true)
+	if err == nil {
+		err = contextError(ctx)
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	completed := b.Now()
+	if err = b.Store.CommitPoll(policy, legacyPolicy, scope, true, nil, observations, completed, time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords); err != nil {
+		return 0, 0, err
+	}
+	_, afterHigh, _ := b.Store.Inbox()
+	return int(afterHigh - beforeHigh), completed.UnixMilli(), nil
+}
+
 // poll is demand-driven: only an active non-preview watch may perform remote reads.
 // All readers of a scope share its persisted baseline and minimum poll interval.
 func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error) {
@@ -25,12 +71,13 @@ func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error)
 	case b.pollGate <- struct{}{}:
 		defer func() { <-b.pollGate }()
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, contextError(ctx)
 	}
 	policy, scope := pollScope(b.Config, r)
+	legacyPolicy := apiclient.Digest(b.Config)
 	now := b.Now()
 	interval := time.Duration(b.Config.PollIntervalSeconds) * time.Second
-	last, count := b.Store.PollStatus(policy, scope)
+	last, count := b.Store.PollStatus(policy, legacyPolicy, scope)
 	if last != 0 && now.Sub(time.Unix(last, 0)) >= 0 && now.Sub(time.Unix(last, 0)) < interval {
 		return nil, nil
 	}
@@ -47,65 +94,103 @@ func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error)
 		return nil, e.New(e.CategoryRateLimit, "POLL_SCOPE_LIMIT", "Too many polling scopes were requested from this broker; reuse an existing scope.")
 	}
 	if r.ResumePoll && r.WholeChannel {
-		progress, err := b.pollSlice(ctx, policy, scope)
+		progress, err := b.pollSlice(ctx, policy, legacyPolicy, scope)
 		if progress == nil {
 			b.pollAttempts[scope] = pollAttempt{b.Now(), err}
 		}
 		return progress, err
 	}
-	observations, err := b.pollSnapshot(ctx, r, now)
+	observations, err := b.pollSnapshot(ctx, r, now, false)
 	if err == nil {
-		err = ctx.Err()
+		err = contextError(ctx)
 	}
 	if err == nil {
-		err = b.Store.CommitPoll(policy, scope, r.WholeChannel, r.Posts, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
+		err = b.Store.CommitPoll(policy, legacyPolicy, scope, r.WholeChannel, r.Posts, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
 	}
 	b.pollAttempts[scope] = pollAttempt{b.Now(), err}
 	return nil, err
 }
 
-func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time) ([]state.PollObservation, error) {
+func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time, waitForRate bool) ([]state.PollObservation, error) {
 	channel := b.Config.Channels[0].ID
+	var mu sync.Mutex
 	requests := 0
 	observations := map[string]state.PollObservation{}
-	readPage := func(q apiclient.Query) (apiclient.Page, error) {
-		if err := ctx.Err(); err != nil {
-			return apiclient.Page{}, err
-		}
-		if requests >= b.Config.PollMaxRequests {
-			return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_BUDGET", "The polling snapshot exceeds poll_max_requests. Select fewer --post IDs or ask the operator to review the budget; no partial snapshot was committed.")
-		}
-		eligible, err := b.reservePollRead(nil)
-		if err != nil {
-			return apiclient.Page{}, err
-		}
-		if !eligible.IsZero() {
-			return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_RATE_LIMIT", "Polling reached the context's requests_per_minute budget. Increase the interval, narrow the scope, or ask the operator to review the rate limit.").WithDetails(apiclient.FailureMetadata{RetryAfterSeconds: 60})
-		}
-		requests++
-		return b.API.Read(ctx, q)
+	releaseReservation := func() {
+		mu.Lock()
+		requests--
+		mu.Unlock()
 	}
-	list := func(operation, post string) ([]apiclient.Message, error) {
+	readPage := func(readCtx context.Context, q apiclient.Query) (apiclient.Page, error) {
+		for {
+			if err := contextError(readCtx); err != nil {
+				return apiclient.Page{}, err
+			}
+			// Reserve against poll_max_requests before starting parallel reads
+			// so concurrent reply workers can never exceed the snapshot cap.
+			mu.Lock()
+			over := requests >= b.Config.PollMaxRequests
+			if !over {
+				requests++
+			}
+			mu.Unlock()
+			if over {
+				return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_BUDGET", "The polling snapshot exceeds poll_max_requests. Select fewer --post IDs or ask the operator to review the budget; no partial snapshot was committed.")
+			}
+			eligible, err := b.reservePollRead(nil)
+			if err != nil {
+				releaseReservation()
+				return apiclient.Page{}, err
+			}
+			if !eligible.IsZero() {
+				releaseReservation()
+				if waitForRate {
+					delay := max(100*time.Millisecond, eligible.Sub(b.Now()))
+					timer := time.NewTimer(delay)
+					select {
+					case <-readCtx.Done():
+						timer.Stop()
+						return apiclient.Page{}, contextError(readCtx)
+					case <-timer.C:
+						continue
+					}
+				}
+				return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_RATE_LIMIT", "Polling reached the context's requests_per_minute budget. Increase the interval, narrow the scope, or ask the operator to review the rate limit.").WithDetails(apiclient.FailureMetadata{RetryAfterSeconds: 60})
+			}
+			page, err := b.API.Read(readCtx, q)
+			if err != nil {
+				if _, ok := err.(*e.CLIError); !ok && errors.Is(err, context.DeadlineExceeded) {
+					return apiclient.Page{}, contextError(readCtx)
+				}
+				return apiclient.Page{}, err
+			}
+			return page, nil
+		}
+	}
+	list := func(readCtx context.Context, operation, post string) ([]apiclient.Message, error) {
 		// Creation-time pagination is not a change feed. Revisit the complete
 		// bounded snapshot so edits and replies on old posts remain observable.
 		q := apiclient.Query{Operation: operation, Channel: channel, Post: post, Limit: 50, From: 1, To: now.Unix() + 1}
 		seen := map[string]bool{"": true}
 		var messages []apiclient.Message
 		for {
-			page, err := readPage(q)
+			page, err := readPage(readCtx, q)
 			if err != nil {
 				return nil, err
 			}
 			if len(page.Items) > q.Limit || (page.HasMore && (!apiclient.Identifier(page.Next, 256) || seen[page.Next])) {
 				return nil, pollResponse()
 			}
+			mu.Lock()
 			for _, record := range page.Items {
 				m, err := b.decodePoll(observations, now, record, post, operation == "reply.list")
 				if err != nil {
+					mu.Unlock()
 					return nil, err
 				}
 				messages = append(messages, m)
 			}
+			mu.Unlock()
 			if !page.HasMore {
 				return messages, nil
 			}
@@ -116,34 +201,77 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time)
 	var posts []apiclient.Message
 	if r.WholeChannel {
 		var err error
-		posts, err = list("post.list", "")
+		posts, err = list(ctx, "post.list", "")
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		for _, id := range r.Posts {
-			page, err := readPage(apiclient.Query{Operation: "post.get", Channel: channel, Post: id})
+			page, err := readPage(ctx, apiclient.Query{Operation: "post.get", Channel: channel, Post: id})
 			if err != nil {
 				return nil, err
 			}
 			if page.HasMore || len(page.Items) != 1 {
 				return nil, e.New(e.CategoryNotFound, "POLL_POST_UNAVAILABLE", "A selected post is absent or inaccessible. This is not proof of deletion; no snapshot was advanced.")
 			}
+			mu.Lock()
 			m, err := b.decodePoll(observations, now, page.Items[0], id, false)
+			mu.Unlock()
 			if err != nil {
 				return nil, err
 			}
 			posts = append(posts, m)
 		}
 	}
+	var postIDs []string
 	seenPosts := map[string]bool{}
 	for _, post := range posts {
 		if post.Recalled || seenPosts[post.PostID] {
 			continue
 		}
 		seenPosts[post.PostID] = true
-		if _, err := list("reply.list", post.PostID); err != nil {
-			return nil, err
+		postIDs = append(postIDs, post.PostID)
+	}
+	concurrency := b.Config.EffectivePollConcurrency()
+	if len(postIDs) <= 1 || concurrency <= 1 {
+		for _, id := range postIDs {
+			if _, err := list(ctx, "reply.list", id); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		workCtx, cancelWork := context.WithCancel(ctx)
+		defer cancelWork()
+		jobs := make(chan string, len(postIDs))
+		for _, id := range postIDs {
+			jobs <- id
+		}
+		close(jobs)
+		var firstErr error
+		var errOnce sync.Once
+		var wg sync.WaitGroup
+		workers := min(concurrency, len(postIDs))
+		for range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for id := range jobs {
+					if workCtx.Err() != nil {
+						return
+					}
+					if _, err := list(workCtx, "reply.list", id); err != nil {
+						errOnce.Do(func() {
+							firstErr = err
+							cancelWork()
+						})
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
+		if firstErr != nil {
+			return nil, firstErr
 		}
 	}
 	keys := make([]string, 0, len(observations))
@@ -244,7 +372,7 @@ func pollResponse() error {
 }
 
 func pollScope(cfg config.Config, r ScanRequest) (string, string) {
-	return apiclient.Digest(cfg), apiclient.Digest(struct {
+	return cfg.ScopeDigest(), apiclient.Digest(struct {
 		Whole bool
 		Posts []string
 	}{r.WholeChannel, r.Posts})

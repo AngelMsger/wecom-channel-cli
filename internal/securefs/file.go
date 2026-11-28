@@ -12,8 +12,17 @@ import (
 // ReadPrivate reads a bounded regular file without following a final symlink.
 // Root-owned configuration is allowed only when requested by the caller.
 func ReadPrivate(path string, limit int64, allowRoot bool) ([]byte, error) {
-	if err := Directory(filepath.Dir(path), false, allowRoot); err != nil {
-		return nil, err
+	return ReadPrivateFile(path, limit, allowRoot, true)
+}
+
+// ReadPrivateFile reads a bounded private regular file without following a
+// final symlink. When strict is false, ancestor directories are not walked to
+// root (supporting symlinked container mounts while preserving leaf checks).
+func ReadPrivateFile(path string, limit int64, allowRoot, strict bool) ([]byte, error) {
+	if strict {
+		if err := Directory(filepath.Dir(path), false, allowRoot); err != nil {
+			return nil, err
+		}
 	}
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 	if err != nil {

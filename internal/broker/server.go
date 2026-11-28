@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -11,11 +12,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/angelmsger/wecom-channel-cli/internal/securefs"
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
+	"golang.org/x/sys/unix"
 )
 
 // Handler binds authority to the listener, never a caller-supplied field.
@@ -49,10 +52,16 @@ func (b *Broker) Handler(admin bool) http.Handler {
 			writeError(w, e.New(e.CategoryUsage, "BAD_REQUEST", "Invalid, oversized, ambiguous or unsupported request fields."))
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 		defer cancel()
 		out, err := b.Handle(ctx, req, admin)
 		if err != nil {
+			if _, ok := err.(*e.CLIError); !ok && errors.Is(err, context.DeadlineExceeded) {
+				ce := e.New(e.CategoryNetwork, "SCAN_TIMEOUT", "The broker request timed out before completing.")
+				ce.Retryable = true
+				writeError(w, ce)
+				return
+			}
 			writeError(w, e.Safe(err))
 			return
 		}
@@ -213,12 +222,42 @@ func netQuery(r *http.Request) (map[string]string, error) {
 	return q, nil
 }
 
-func unixListener(path string, private bool) (net.Listener, error) {
-	if err := state.CheckDir(filepath.Dir(path), private); err != nil {
-		return nil, err
+func unixListener(path string, private, strict bool) (net.Listener, error) {
+	if strict {
+		if err := state.CheckDir(filepath.Dir(path), private); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := securefs.EnsurePrivateDir(filepath.Dir(path), false); err != nil {
+			return nil, err
+		}
 	}
-	if _, err := os.Lstat(path); !os.IsNotExist(err) {
-		return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "A socket path already exists; inspect the previous broker before removing a stale socket.")
+	if info, err := os.Lstat(path); !os.IsNotExist(err) {
+		if err != nil || info.Mode()&os.ModeSocket == 0 {
+			return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "A non-socket file already exists at the configured socket path.")
+		}
+		conn, dialErr := net.DialTimeout("unix", path, 500*time.Millisecond)
+		if dialErr == nil {
+			_ = conn.Close()
+			return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "An active broker is already listening on this socket.")
+		}
+		if !errors.Is(dialErr, os.ErrNotExist) {
+			if !errors.Is(dialErr, unix.ECONNREFUSED) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Could not confirm that the existing Unix socket is inactive.")
+			}
+			// Re-verify inode identity right before unlinking so a concurrent
+			// replacement is never disconnected.
+			info2, statErr := os.Lstat(path)
+			if statErr != nil {
+				if !os.IsNotExist(statErr) {
+					return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Cannot re-verify stale Unix socket before removal.")
+				}
+			} else if info2.Mode()&os.ModeSocket == 0 || !os.SameFile(info, info2) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "The Unix socket changed while probing; refusing to remove it.")
+			} else if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Cannot remove stale Unix socket.")
+			}
+		}
 	}
 	l, err := net.Listen("unix", path)
 	if err != nil {
@@ -236,7 +275,7 @@ func unixListener(path string, private bool) (net.Listener, error) {
 }
 
 func server(h http.Handler) *http.Server {
-	return &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 65 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
+	return &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 95 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
 }
 
 // Serve requires pre-provisioned socket directories. The process never creates
@@ -248,6 +287,13 @@ func (b *Broker) Serve(ctx context.Context, ready func()) error {
 // ServeContexts binds every context before reporting readiness and shares one
 // authenticated callback router. No agent request chooses another context.
 func ServeContexts(ctx context.Context, brokers []*Broker, callbackListen string, ready func()) error {
+	return ServeContextsWithMode(ctx, brokers, callbackListen, true, ready)
+}
+
+// ServeContextsWithMode binds every context using either strict ancestor checks
+// (managed multi-user Linux deployment) or single-user container-friendly
+// private directory checks.
+func ServeContextsWithMode(ctx context.Context, brokers []*Broker, callbackListen string, strictFS bool, ready func()) error {
 	if len(brokers) == 0 {
 		return e.New(e.CategoryConfig, "NO_CONTEXT", "No broker contexts configured.")
 	}
@@ -260,13 +306,13 @@ func ServeContexts(ctx context.Context, brokers []*Broker, callbackListen string
 	}()
 	routes := map[string]*Broker{}
 	for _, b := range brokers {
-		agent, err := unixListener(b.Config.AgentSocket, false)
+		agent, err := unixListener(b.Config.AgentSocket, false, strictFS)
 		if err != nil {
 			return err
 		}
 		listeners = append(listeners, agent)
 		servers = append(servers, server(b.Handler(false)))
-		admin, err := unixListener(b.Config.AdminSocket, true)
+		admin, err := unixListener(b.Config.AdminSocket, true, strictFS)
 		if err != nil {
 			return err
 		}
@@ -296,7 +342,7 @@ func ServeContexts(ctx context.Context, brokers []*Broker, callbackListen string
 	case <-ctx.Done():
 	case err = <-errs:
 	}
-	shutdown, cancel := context.WithTimeout(context.Background(), 65*time.Second)
+	shutdown, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for _, s := range servers {
 		if s.Shutdown(shutdown) != nil {

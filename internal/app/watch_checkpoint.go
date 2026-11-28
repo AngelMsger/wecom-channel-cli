@@ -34,19 +34,12 @@ func openWatchCheckpoint(path string, lock bool) (*checkpointFile, error) {
 		return nil, err
 	}
 	if lock {
-		fd, err := unix.Open(absolute+".lock", unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
+		f.lock, err = securefs.LockPrivate(absolute + ".lock")
 		if err != nil {
+			if err == unix.EWOULDBLOCK {
+				return nil, e.New(e.CategoryConflict, "WATCH_IN_USE", "Another watch owns this checkpoint.")
+			}
 			return nil, checkpointError()
-		}
-		f.lock = os.NewFile(uintptr(fd), "watch.lock")
-		var st unix.Stat_t
-		if unix.Fstat(fd, &st) != nil || int(st.Uid) != os.Geteuid() || st.Mode&0077 != 0 {
-			f.close()
-			return nil, checkpointError()
-		}
-		if unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) != nil {
-			f.close()
-			return nil, e.New(e.CategoryConflict, "WATCH_IN_USE", "Another watch owns this checkpoint.")
 		}
 	}
 	return f, nil
@@ -84,6 +77,9 @@ func (f *checkpointFile) read() (watchCheckpoint, bool, error) {
 	return cp, true, nil
 }
 func (f *checkpointFile) write(cp watchCheckpoint) error {
+	return f.writeWithMigration(cp, "")
+}
+func (f *checkpointFile) writeWithMigration(cp watchCheckpoint, fromBinding string) error {
 	if f.path == "" {
 		return nil
 	}
@@ -91,7 +87,8 @@ func (f *checkpointFile) write(cp watchCheckpoint) error {
 	if err != nil {
 		return err
 	}
-	if exists && (old.Socket != cp.Socket || old.Scope != cp.Scope || old.Binding != cp.Binding || old.Identity != cp.Identity) {
+	bindingMatch := old.Binding == cp.Binding || (fromBinding != "" && old.Binding == fromBinding)
+	if exists && (old.Socket != cp.Socket || old.Scope != cp.Scope || !bindingMatch || old.Identity != cp.Identity) {
 		return e.New(e.CategoryConflict, "WATCH_CHECKPOINT_CHANGED", "The checkpoint was replaced with a different watch while running; it was not overwritten.")
 	}
 	if exists && old == cp {
@@ -101,26 +98,8 @@ func (f *checkpointFile) write(cp watchCheckpoint) error {
 	if err != nil {
 		return checkpointError()
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(f.path), ".watch-*")
-	if err != nil {
+	if err := securefs.WriteAtomic(f.path, b); err != nil {
 		return checkpointError()
 	}
-	name := tmp.Name()
-	defer os.Remove(name)
-	if _, err = tmp.Write(b); err == nil {
-		err = tmp.Sync()
-	}
-	closeErr := tmp.Close()
-	if err != nil || closeErr != nil {
-		return checkpointError()
-	}
-	if os.Rename(name, f.path) != nil {
-		return checkpointError()
-	}
-	dir, err := os.Open(filepath.Dir(f.path))
-	if err != nil {
-		return checkpointError()
-	}
-	defer dir.Close()
-	return dir.Sync()
+	return nil
 }

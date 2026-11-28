@@ -18,7 +18,7 @@ func TestCanonicalCommandResponsibilities(t *testing.T) {
 		"policy":   {"example", "validate"},
 		"config":   {"delete-context", "get-contexts", "path", "set-context", "use-context"},
 		"proposal": {"approve", "get", "list", "reject", "resolve"},
-		"auth":     {"check", "guide"},
+		"auth":     {"check", "guide", "logout"},
 		"search":   {"get", "start"},
 	} {
 		cmd, _, err := root.Find([]string{group})

@@ -13,6 +13,7 @@ import (
 	"github.com/angelmsger/wecom-channel-cli/internal/state"
 	"github.com/angelmsger/wecom-channel-cli/pkg/apiclient"
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
+	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 )
 
 type pollAPI struct {
@@ -352,5 +353,105 @@ func TestPollingDrainsHistoryWithoutRemoteAccess(t *testing.T) {
 	p, err = b.scan(context.Background(), r)
 	if err != nil || len(p.Items) != 1 || len(f.reads) != before {
 		t.Fatal("offline retained-history replay attempted refresh", p, err)
+	}
+}
+
+func TestPollNowConcurrentAndTimeoutClassification(t *testing.T) {
+	b, f := pollFixture(t)
+	b.Config.PollConcurrency = 4
+	setPosts(f, polled("p1", "", "post 1", false), polled("p2", "", "post 2", false), polled("p3", "", "post 3", false), polled("p4", "", "post 4", false))
+	n, ts, err := b.PollNow(context.Background())
+	if err != nil || n != 0 || ts == 0 {
+		t.Fatalf("baseline PollNow failed: n=%d ts=%d err=%v", n, ts, err)
+	}
+	f.pages["reply.list/p3/"] = apiclient.Page{Items: []apiclient.Record{polled("p3", "r1", "new reply", false)}}
+	n, ts, err = b.PollNow(context.Background())
+	if err != nil || n != 1 || ts == 0 {
+		t.Fatalf("delta PollNow failed: n=%d ts=%d err=%v", n, ts, err)
+	}
+	f.block = true
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, _, err = b.PollNow(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) || e.Safe(err).Code != "SCAN_TIMEOUT" || !e.Safe(err).Retryable {
+		t.Fatalf("expected retryable SCAN_TIMEOUT wrapping DeadlineExceeded, got %v (%+v)", err, e.Safe(err))
+	}
+}
+
+func TestPollLegacyBaselineUpgradeAndParallelBudgetCap(t *testing.T) {
+	// 1. Legacy v0.5.0 checkpoint + polling baseline upgrade: post edited during
+	// broker downtime must be detected (not dropped as a quiet baseline) and the
+	// v0.5.0 full-config watch binding must resume without WATCH_BINDING_CHANGED.
+	b, f := pollFixture(t)
+	r := ScanRequest{WholeChannel: true, Limit: 100}
+	setPosts(f, polled("p1", "", "before-upgrade", false))
+	if _, err := b.scan(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	legacyPolicy := apiclient.Digest(b.Config)
+	if err := b.Store.Update(func(st *state.Snapshot) error {
+		st.Polling.Policy = legacyPolicy
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ledger, _, _ := b.Store.Inbox()
+	legacyBinding := apiclient.Digest(struct {
+		Identity WatchIdentity
+		Policy   string
+		Whole    bool
+		Posts    []string
+		Partial  bool
+		Filter   string
+	}{WatchIdentity{b.Config.Name, b.Config.Bot, "channel-a", ledger}, legacyPolicy, true, []string{}, false, "exclude-self-v1"})
+
+	// Edit p1 while broker is stopped, then scan with legacy checkpoint binding.
+	setPosts(f, polled("p1", "", "edited-during-downtime", false))
+	tick(b)
+	rLegacy := ScanRequest{WholeChannel: true, Limit: 100, Binding: legacyBinding}
+	p, err := b.scan(context.Background(), rLegacy)
+	if err != nil {
+		t.Fatalf("legacy checkpoint upgrade failed: %v", err)
+	}
+	if p.MigratedFrom != legacyBinding || p.Binding == legacyBinding || len(p.Items) != 1 {
+		t.Fatalf("expected migrated ScopeDigest binding and 1 downtime edit, got binding=%s migrated_from=%s items=%d", p.Binding, p.MigratedFrom, len(p.Items))
+	}
+	if got := b.Store.View().Polling.Policy; got != b.Config.ScopeDigest() {
+		t.Fatalf("expected persisted polling policy adopted to ScopeDigest, got %s", got)
+	}
+
+	// Tune poll interval by +5s, then resume a second time with the migrated binding.
+	b.Config.PollIntervalSeconds += 5
+	setPosts(f, polled("p1", "", "edited-after-tuning", false))
+	tick(b)
+	tick(b)
+	p2, err := b.scan(context.Background(), ScanRequest{WholeChannel: true, Limit: 100, After: p.After, Binding: p.Binding})
+	if err != nil {
+		t.Fatalf("second resume after poll interval change failed: %v", err)
+	}
+	if p2.Binding != p.Binding || p2.MigratedFrom != "" || len(p2.Items) != 1 {
+		t.Fatalf("expected stable migrated binding and 1 new edit, got binding=%s migrated_from=%s items=%d", p2.Binding, p2.MigratedFrom, len(p2.Items))
+	}
+
+	// Genuine scope change must still fail with WATCH_BINDING_CHANGED.
+	b.Config.Channels[0].ID = "channel-other"
+	if _, err := b.scan(context.Background(), ScanRequest{WholeChannel: true, Limit: 100, After: p2.After, Binding: p2.Binding}); e.Safe(err).Code != "WATCH_BINDING_CHANGED" {
+		t.Fatalf("expected WATCH_BINDING_CHANGED on channel scope change, got %v", err)
+	}
+
+	// 2. Parallel reply workers must never exceed poll_max_requests.
+	b2, f2 := pollFixture(t)
+	b2.Config.PollConcurrency = 4
+	b2.Config.PollMaxRequests = 2
+	setPosts(f2, polled("p1", "", "1", false), polled("p2", "", "2", false), polled("p3", "", "3", false), polled("p4", "", "4", false))
+	_, _, err = b2.PollNow(context.Background())
+	if e.Safe(err).Code != "POLL_BUDGET" {
+		t.Fatalf("expected POLL_BUDGET under cap=2 with 4 posts, got %v", err)
+	}
+	f2.mu.Lock()
+	readCount := len(f2.reads)
+	f2.mu.Unlock()
+	if readCount > 2 {
+		t.Fatalf("parallel poll exceeded poll_max_requests=2: recorded %d reads", readCount)
 	}
 }

@@ -76,10 +76,20 @@ func TestWatchBindingAndGaps(t *testing.T) {
 	_, err = b.scan(context.Background(), r)
 	assertCode(t, err, "WATCH_BINDING_CHANGED")
 	r = ScanRequest{WholeChannel: true, Limit: 100, Binding: first.Binding}
+	// Operational tuning (limits, intervals, budgets) must not invalidate watch checkpoints.
 	b.Config.MaxEvents++
+	b.Config.PollIntervalSeconds += 15
+	if _, err = b.scan(context.Background(), r); err != nil {
+		t.Fatalf("operational tuning broke watch binding: %v", err)
+	}
+	b.Config.MaxEvents--
+	b.Config.PollIntervalSeconds -= 15
+	// Changing observation scope (such as allowlisted senders) must invalidate bindings.
+	origSenders := b.Config.Channels[0].Senders
+	b.Config.Channels[0].Senders = []string{"other-user"}
 	_, err = b.scan(context.Background(), r)
 	assertCode(t, err, "WATCH_BINDING_CHANGED")
-	b.Config.MaxEvents--
+	b.Config.Channels[0].Senders = origSenders
 	if err = b.Store.Update(func(s *state.Snapshot) error { delete(s.Events, "b"); return nil }); err != nil {
 		t.Fatal(err)
 	}

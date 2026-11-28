@@ -26,7 +26,7 @@ func Call(ctx context.Context, socket string, req Request) (Response, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", socket)
 	}}
 	defer tr.CloseIdleConnections()
-	c := &http.Client{Transport: tr, Timeout: 65 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	c := &http.Client{Transport: tr, Timeout: 95 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return Response{}, e.New(e.CategoryUsage, "BAD_REQUEST", "Cannot encode broker request.")

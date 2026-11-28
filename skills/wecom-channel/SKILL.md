@@ -4,27 +4,49 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.15
+version: 0.1.16
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.15` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.16` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
 
-Use canonical command paths: `config` for client contexts, `policy example/validate`
-for operator policy tooling, `proposal list/get/approve/reject/resolve` for the
-proposal lifecycle, `search start/get` for search jobs, and `relay run/status` for
-durable delivery. `doctor` checks local broker readiness; operator-only `auth check`
-tests upstream credentials. Old `approval`, `config example/validate`, `search result`
-and `auth status` paths are compatibility aliases, not alternative capabilities.
+Use canonical command paths: `connect`, `listen`, `serve` and `status` for the
+unified single-profile workflow; `config` for client contexts; `policy example/validate`
+for strict multi-user operator policy tooling; `proposal list/get/approve/reject/resolve`
+for the proposal lifecycle; `search start/get` for search jobs; and `relay run/status`
+for standalone durable delivery. `doctor` checks local broker readiness; `status`
+probes `serve.lock` liveness and per-channel polling/webhook health; operator-only
+`auth check` tests upstream credentials. Old `approval`, `config example/validate`,
+`search result` and `auth status` paths are compatibility aliases, not alternative
+capabilities.
 
-For first-time setup, do not ask the user for a channel ID from the WeCom client;
-it is not displayed there. Start with `auth guide`. The trusted operator supplies
-Bot ID and Secret locally, then runs `channel list --bot-id ID` with
-`WECOM_CHANNEL_BOT_SECRET` from their secret manager. No channel policy, socket or
+For single-operator or container/Grok deployments, the unified workflow avoids
+manual JSON policy assembly: in a trusted operator session, run
+`connect --bot-id ID` (optionally `--proxy URL` and `--upstream-timeout 45s`)
+with `WECOM_CHANNEL_BOT_SECRET` supplied locally or via interactive prompt to
+verify credentials, store the Secret in the OS credential store, discover all
+joined channels and write `profile.yaml`. Remove stored credentials anytime with
+`auth logout` (preserving `profile.yaml` and ledgers). Run `listen --channel NAME`
+(foreground resilient NDJSON stream) or `serve --channel NAME --save` (single-process
+daemon serving local Unix sockets, auto-synced `config.yaml` contexts, concurrent
+background polling and optional in-process `--webhook-url` delivery), and monitor
+liveness with `status` / `status --check`. After fixing a terminal webhook error,
+restart with `serve --retry-failed` (unknown outcomes under `on_uncertain: halt`
+still require operator reconciliation using the `delivery_state` path shown in
+`status`). When a profile channel sets `read_only: false`, agent proposals for
+posts, replies and native reactions work through the agent socket while operator
+approval stays on `admin_socket` shown in `status`. Only trusted operator sessions
+(without `WECOM_CHANNEL_SOCKET` / `WECOM_CHANNEL_CONTEXT`) may run `connect`,
+`listen`, `serve`, or `auth logout`; channel workers still use only their agent socket.
+
+For strict multi-user Linux host isolation, do not ask the user for a channel ID
+from the WeCom client; it is not displayed there. Start with `auth guide`. The
+trusted operator supplies Bot ID and Secret locally, then runs `channel list --bot-id ID`
+with `WECOM_CHANNEL_BOT_SECRET` from their secret manager. No channel policy, socket or
 client context is needed. `--bot-id` explicitly selects this operator mode;
 otherwise `channel list` always uses the broker. Environment credentials do not
 select direct access, and a broker failure or denial is never a reason to switch.
@@ -180,22 +202,23 @@ Interrupted read bodies may retry and an expired business-read token gets at
 most one budgeted recovery. A confirmed oversize response stops the scan.
 
 Optional `scan_retry_limit` and `delivery_retry_limit` independently override
-`retry_limit`; omitted/null fields inherit it and explicit zero disables retries
-for that phase. The old Grok example's shared zero stops on the first retryable
-scan failure as well as disabling delivery retries. The current example opts into
-twenty scan retries and zero delivery retries. Transient broker saturation and
-discarded unstable snapshots can retry scans; successful scans clear consecutive
-failures. Policy changes remain bound to sender
-state: never change config or provision replacement state to bypass exhaustion.
-`last_scan_error`/`last_delivery_error` retain sanitized cause, phase/time and
-attempt/budget after restart and recovery; they are history, not retry permission.
-Use current counters, terminal/unknown state and last-success timestamps to assess
-recovery. Exhaustion alone does not identify the original outage. Scans honor
-bounded backoff/jitter and upstream wait guidance; `--timeout` bounds scan requests,
-while config `timeout_seconds` controls webhook attempts. Have ordinary supervision
-alert on exit, scan staleness and queue age. A synthetic HTTP 200 is not evidence of
-scan → acceptance → worker claim; follow the separately authorized deployment
-check in docs/watching.md. Never run paid probes or reset budgets automatically.
+`retry_limit`; omitted/null fields inherit it, explicit zero disables retries
+for that phase, and `scan_retry_limit: -1` enables unlimited steady-state
+exponential backoff (capped at 5 minutes) for cross-region transient outages.
+The Grok example (`deploy/grok.example.json`) and `serve` default to
+`scan_retry_limit: -1`, `on_uncertain: skip`, and 3 delivery retries (pre-connect
+DNS/dial/TLS errors retry safely; post-send timeouts record uncertain receipts
+under `skip` instead of deadlocking). Set `on_uncertain: halt` when every
+uncertain post-send webhook requires manual operator reconciliation. Read requests
+(`get_token` and read APIs) automatically evict dead idle connections and retry
+transient cross-region failures; write operations (`Send` and webhook POSTs) are
+never retried at the transport layer. Operational tuning (timeouts, retry limits,
+poll intervals, batching windows, explicit `proxy_url`) never invalidates watch
+or relay bindings. `last_scan_error`/`last_delivery_error` retain sanitized cause
+(including bounded `network_reason`), phase/time and attempt/budget after restart
+and recovery; they are history, not retry permission. Use `status --check` for
+`serve` deployments or the host relay probe for standalone `relay run`. Never run
+paid probes or reset terminal delivery budgets automatically.
 
 The operator enables read_all and post/reply observations. With no callback
 listener, auto uses HTTP polling and also requires observe_all; no public URL or

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "delivery_mode": "http_accepted",
+  "on_uncertain": "skip",
   "webhook_url": "https://example.invalid/replace-with-routine-webhook",
   "token_env": "GROK_ROUTINE_SENDER_KEY",
   "kinds": ["topic_event", "topic_reply_event"],
@@ -9,10 +10,10 @@
   "batch_window_seconds": 30,
   "batch_size": 50,
   "queue_limit": 1000,
-  "timeout_seconds": 30,
+  "timeout_seconds": 45,
   "retry_limit": 0,
-  "scan_retry_limit": 20,
-  "delivery_retry_limit": 0,
+  "scan_retry_limit": -1,
+  "delivery_retry_limit": 3,
   "retry_base_seconds": 5,
   "min_delivery_interval_seconds": 60
 }

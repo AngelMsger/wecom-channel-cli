@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,12 @@ import (
 
 const maxResponse = 2 << 20
 
+// Options configures an HTTPClient's upstream transport behavior.
+type Options struct {
+	Transport transport.Config
+	HTTP      *transport.Client
+}
+
 type HTTPClient struct {
 	bot, secret string
 	http        *transport.Client
@@ -33,10 +40,22 @@ type HTTPClient struct {
 }
 
 func New(bot, secret string) (*HTTPClient, error) {
+	return NewWithOptions(bot, secret, Options{Transport: transport.DefaultConfig()})
+}
+
+func NewWithOptions(bot, secret string, opts Options) (*HTTPClient, error) {
 	if !Identifier(bot, 256) || !Identifier(secret, 1024) {
 		return nil, e.New(e.CategoryAuth, "AUTH_MISSING", "The broker needs a valid bot ID and Secret.")
 	}
-	return &HTTPClient{bot: bot, secret: secret, http: transport.New(), now: time.Now}, nil
+	hc := opts.HTTP
+	if hc == nil {
+		var err error
+		hc, err = transport.NewWithConfig(opts.Transport)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &HTTPClient{bot: bot, secret: secret, http: hc, now: time.Now}, nil
 }
 
 func (c *HTTPClient) authorization(ctx context.Context) (string, error) {
@@ -52,7 +71,7 @@ func (c *HTTPClient) authorization(ctx context.Context) (string, error) {
 	n := hex.EncodeToString(nonce[:])
 	stamp := c.now().Unix()
 	sig := sha256.Sum256([]byte(c.secret + c.bot + strconv.FormatInt(stamp, 10) + n))
-	data, err := c.call(ctx, PhaseTokenBootstrap, "/cgi-bin/aibot/get_token", "", map[string]any{"bot_id": c.bot, "time": stamp, "nonce": n, "signature": hex.EncodeToString(sig[:])})
+	data, err := c.callWithMode(transport.AsRead(ctx), PhaseTokenBootstrap, "/cgi-bin/aibot/get_token", "", map[string]any{"bot_id": c.bot, "time": stamp, "nonce": n, "signature": hex.EncodeToString(sig[:])}, true)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +87,11 @@ func (c *HTTPClient) authorization(ctx context.Context) (string, error) {
 }
 
 func (c *HTTPClient) call(ctx context.Context, phase RequestPhase, path, token string, body any) ([]byte, error) {
-	req, err := newRequest(ctx, path, token, body)
+	return c.callWithMode(ctx, phase, path, token, body, false)
+}
+
+func (c *HTTPClient) callWithMode(ctx context.Context, phase RequestPhase, path, token string, body any, readOnly bool) ([]byte, error) {
+	req, err := newRequest(ctx, path, token, body, readOnly)
 	if err != nil {
 		if phase == PhaseBusinessRequest {
 			phase = PhasePrepare
@@ -82,7 +105,7 @@ func (c *HTTPClient) call(ctx context.Context, phase RequestPhase, path, token s
 	return data, nil
 }
 
-func newRequest(ctx context.Context, path, token string, body any) (*http.Request, error) {
+func newRequest(ctx context.Context, path, token string, body any, readOnly bool) (*http.Request, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, e.New(e.CategoryInternal, "ENCODE_FAILED", "Cannot encode request.")
@@ -95,15 +118,45 @@ func newRequest(ctx context.Context, path, token string, body any) (*http.Reques
 	if err != nil {
 		return nil, e.New(e.CategoryInternal, "REQUEST_FAILED", "Cannot construct request.")
 	}
+	if !readOnly {
+		// Prevent net/http from replaying a write POST on a reused idle connection.
+		req.GetBody = nil
+	}
 	req.Header.Set("Content-Type", "application/json")
 	return req, nil
+}
+
+func networkFailureMessage(reason string) string {
+	switch reason {
+	case "timeout":
+		return "The WeCom request timed out."
+	case "dns":
+		return "Could not resolve the WeCom API host."
+	case "dial":
+		return "Could not connect to the WeCom API."
+	case "tls":
+		return "The WeCom TLS handshake failed."
+	case "eof":
+		return "The WeCom connection closed unexpectedly (EOF)."
+	case "reset":
+		return "The WeCom connection was reset by peer."
+	case "proxy":
+		return "The configured proxy connection failed."
+	case "canceled":
+		return "The WeCom request was canceled."
+	default:
+		return "The WeCom request did not return a reliable result."
+	}
 }
 
 // exchange returns the WeCom code when it can decode the response envelope.
 func (c *HTTPClient) exchange(req *http.Request) ([]byte, *int, error) {
 	resp, err := c.http.Do(req.Context(), req)
 	if err != nil {
-		return nil, nil, e.New(e.CategoryNetwork, "REQUEST_UNCERTAIN", "The WeCom request did not return a reliable result.")
+		reason := transport.ClassifyNetworkError(err)
+		x := e.New(e.CategoryNetwork, "REQUEST_UNCERTAIN", networkFailureMessage(reason)).WithDetails(FailureMetadata{NetworkReason: reason})
+		x.Retryable = reason != "canceled"
+		return nil, nil, x
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -114,7 +167,10 @@ func (c *HTTPClient) exchange(req *http.Request) ([]byte, *int, error) {
 		return nil, nil, e.New(e.CategoryParse, "RESPONSE_LIMIT", "The WeCom response exceeded 2 MiB.")
 	}
 	if err != nil {
-		return nil, nil, e.New(e.CategoryNetwork, "RESPONSE_INTERRUPTED", "The WeCom response body was interrupted.")
+		reason := transport.ClassifyNetworkError(err)
+		x := e.New(e.CategoryNetwork, "RESPONSE_INTERRUPTED", "The WeCom response body was interrupted.").WithDetails(FailureMetadata{NetworkReason: reason})
+		x.Retryable = reason != "canceled"
+		return nil, nil, x
 	}
 	var result struct {
 		Code *int `json:"errcode"`
@@ -145,18 +201,67 @@ func (c *HTTPClient) exchange(req *http.Request) ([]byte, *int, error) {
 	return data, result.Code, nil
 }
 
-func (c *HTTPClient) request(ctx context.Context, path string, body any) ([]byte, error) {
+func (c *HTTPClient) evictToken(token string) {
+	c.mu.Lock()
+	if c.token == token {
+		c.token = ""
+	}
+	c.mu.Unlock()
+}
+
+func isExpiredTokenError(err error) bool {
+	var rf *RequestFailure
+	if !errors.As(err, &rf) || rf.Phase != PhaseBusinessRequest || rf.UpstreamErrcode == nil {
+		return false
+	}
+	switch *rf.UpstreamErrcode {
+	case 853004, 42001, 40014:
+		return true
+	default:
+		return false
+	}
+}
+
+// readRequest performs an idempotent WeCom read POST with transport-level
+// retries, one body-interruption retry, and one transparent expired-token refresh.
+func (c *HTTPClient) readRequest(ctx context.Context, path string, body any) ([]byte, error) {
+	readCtx := transport.AsRead(ctx)
+	refreshed := false
+	bodyRetried := false
+	for {
+		token, err := c.authorization(readCtx)
+		if err != nil {
+			return nil, err
+		}
+		data, err := c.callWithMode(readCtx, PhaseBusinessRequest, path, token, body, true)
+		if err == nil {
+			return data, nil
+		}
+		ce, ok := err.(*e.CLIError)
+		if ok && ce.Code == "AUTH_REJECTED" {
+			c.evictToken(token)
+			if !refreshed && isExpiredTokenError(err) && ctx.Err() == nil {
+				refreshed = true
+				continue
+			}
+		}
+		if ok && ce.Code == "RESPONSE_INTERRUPTED" && !bodyRetried && ctx.Err() == nil {
+			bodyRetried = true
+			continue
+		}
+		return nil, err
+	}
+}
+
+// writeRequest sends a write POST at most once; it never retries automatically.
+func (c *HTTPClient) writeRequest(ctx context.Context, path string, body any) ([]byte, error) {
 	token, err := c.authorization(ctx)
 	if err != nil {
 		return nil, err
 	}
-	data, err := c.call(ctx, PhaseBusinessRequest, path, token, body)
+	data, err := c.callWithMode(ctx, PhaseBusinessRequest, path, token, body, false)
 	if ce, ok := err.(*e.CLIError); ok && ce.Code == "AUTH_REJECTED" {
-		c.mu.Lock()
-		if c.token == token {
-			c.token = ""
-		}
-		c.mu.Unlock()
+		c.evictToken(token)
 	}
 	return data, err
 }
@@ -166,7 +271,7 @@ func (c *HTTPClient) Send(ctx context.Context, r WriteRequest) (SendResult, erro
 	if err != nil {
 		return SendResult{}, PhasePrepare.failed(err, nil)
 	}
-	b, err := c.request(ctx, p.Path, p.Body)
+	b, err := c.writeRequest(ctx, p.Path, p.Body)
 	if err != nil {
 		return SendResult{}, err
 	}

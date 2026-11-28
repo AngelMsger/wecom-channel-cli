@@ -117,13 +117,16 @@ func (s *appState) watchCommand() *cobra.Command {
 		if err = validateBatch(first, cp, scan.Limit); err != nil {
 			return err
 		}
+		if first.MigratedFrom != "" && cp.Binding == first.MigratedFrom {
+			cp.Binding = first.Binding
+		}
 		if first.Coverage.Backend == "poll" {
 			interval = max(interval, time.Duration(first.Coverage.PollIntervalSeconds)*time.Second)
 		}
 		if dry {
 			return s.emit(cmd, map[string]any{"dry_run": true, "identity": first.Identity, "coverage": first.Coverage, "whole_channel": scan.WholeChannel, "posts": scan.Posts, "start_after_sequence": cp.After, "duration": duration.String(), "interval": interval.String(), "max_events": maxEvents, "checkpoint": checkpoint})
 		}
-		if err = file.write(cp); err != nil {
+		if err = file.writeWithMigration(cp, first.MigratedFrom); err != nil {
 			return checkpointError()
 		}
 		notice := func(state string, cp watchCheckpoint, count int) {
@@ -220,7 +223,8 @@ func validateBatch(p broker.ScanPage, cp watchCheckpoint, limit int) error {
 	bad := func() error {
 		return e.New(e.CategoryParse, "WATCH_PROTOCOL", "The broker returned inconsistent watch identity, sequence, or trust metadata.")
 	}
-	if len(p.Binding) != 64 || p.Binding != cp.Binding || p.Identity != cp.Identity || len(p.Identity.Ledger) != 32 || !config.ValidContextName(p.Identity.Context) || !apiclient.Identifier(p.Identity.Bot, 256) || !apiclient.Identifier(p.Identity.Channel, 128) || p.After < cp.After || p.After > p.HighWatermark || p.HasMore != (p.After < p.HighWatermark) || len(p.Items) > limit {
+	bindingOK := p.Binding == cp.Binding || (p.MigratedFrom != "" && p.MigratedFrom == cp.Binding)
+	if len(p.Binding) != 64 || !bindingOK || p.Identity != cp.Identity || len(p.Identity.Ledger) != 32 || !config.ValidContextName(p.Identity.Context) || !apiclient.Identifier(p.Identity.Bot, 256) || !apiclient.Identifier(p.Identity.Channel, 128) || p.After < cp.After || p.After > p.HighWatermark || p.HasMore != (p.After < p.HighWatermark) || len(p.Items) > limit {
 		return bad()
 	}
 	prev := cp.After

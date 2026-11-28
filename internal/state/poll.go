@@ -32,10 +32,14 @@ type PollObservation struct {
 	Event  callback.Event
 }
 
-func (s *Store) PollStatus(policy, scope string) (int64, int) {
+func matchesPollPolicy(stored, policy, legacyPolicy string) bool {
+	return stored == policy || (legacyPolicy != "" && stored == legacyPolicy)
+}
+
+func (s *Store) PollStatus(policy, legacyPolicy, scope string) (int64, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.snapshot.Polling == nil || s.snapshot.Polling.Policy != policy {
+	if s.snapshot.Polling == nil || !matchesPollPolicy(s.snapshot.Polling.Policy, policy, legacyPolicy) {
 		return 0, 0
 	}
 	return s.snapshot.Polling.Scopes[scope].LastSuccess, len(s.snapshot.Polling.Scopes)
@@ -43,12 +47,14 @@ func (s *Store) PollStatus(policy, scope string) (int64, int) {
 
 // CommitPoll atomically commits a complete snapshot and every derived event.
 // Absence is never interpreted as deletion; only a returned recall flag is evidence.
-func (s *Store) CommitPoll(policy, scope string, whole bool, posts []string, observations []PollObservation, now time.Time, retention time.Duration, maxEvents, maxRecords int) error {
+func (s *Store) CommitPoll(policy, legacyPolicy, scope string, whole bool, posts []string, observations []PollObservation, now time.Time, retention time.Duration, maxEvents, maxRecords int) error {
 	return s.Update(func(st *Snapshot) error {
 		p := st.Polling
-		if p == nil || p.Policy != policy {
+		if p == nil || !matchesPollPolicy(p.Policy, policy, legacyPolicy) {
 			p = &PollState{Policy: policy, Scopes: map[string]PollScope{}, Resources: map[string]PollResource{}}
 			st.Polling = p
+		} else if p.Policy != policy {
+			p.Policy = policy
 		}
 		_, initialized := p.Scopes[scope]
 		changed := !initialized

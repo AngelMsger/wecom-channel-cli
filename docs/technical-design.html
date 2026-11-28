@@ -34,13 +34,32 @@ construct that client and hold the Secret: explicit <code>channel list --bot-id<
 setup and <code>broker serve</code> for the long-running deployment.</p>
 <h2 id="authentication-and-callbacks">Authentication and callbacks</h2>
 <p>A deployment has one configured bot identity and receives its Secret through an
-operator-managed environment. It signs the documented token request with a
-cryptographically random nonce and caches the one-day token in memory with a
-one-minute expiry margin. Requests are fixed HTTPS POSTs. The transport inherits
-neither proxy environment nor redirect handling and performs no POST retries.
-Raw upstream <code>errmsg</code>, response bodies and URL-bearing network errors are never
-used as diagnostics. Known authentication material is redacted from curated
-read content if reflected by the service.</p>
+operator-managed environment (or the OS credential store via <code>connect</code>). It signs
+the documented token request with a cryptographically random nonce and caches the
+one-day token in memory with a one-minute expiry margin. Requests are fixed HTTPS
+POSTs. The transport inherits neither ambient proxy environment variables nor
+redirect handling; an explicit proxy (<code>http</code>, <code>https</code>, <code>socks5</code>, <code>socks5h</code>) may
+be configured per deployment or profile.</p>
+<p>Read-only protocol POSTs (<code>get_token</code> and all <code>Reader</code> operations) are marked
+with <code>transport.AsRead</code>: on transient cross-region transport failures (dial/TLS
+timeouts, EOF, connection reset, 429/5xx), the client evicts idle pooled
+connections (<code>CloseIdleConnections</code>) and retries up to 3 times with backoff,
+performs one transparent token refresh on expired-token codes (<code>853004</code>, <code>42001</code>,
+<code>40014</code>), and retries interrupted response reads once. Write requests (<code>Send</code>
+and webhook deliveries) are never marked <code>AsRead</code> and keep <code>GetBody = nil</code>, so
+transport retries never replay a write. Raw upstream <code>errmsg</code>, response bodies and
+URL-bearing network errors are never used as diagnostics; transport failures emit
+only bounded <code>network_reason</code> codes (<code>timeout</code>, <code>dns</code>, <code>tls</code>, <code>dial</code>, <code>eof</code>,
+<code>reset</code>, <code>proxy</code>, <code>canceled</code>, <code>network</code>). Known authentication material is
+redacted from curated read content if reflected by the service.</p>
+<p>Operational tuning (timeouts, retry limits, poll intervals, concurrency, request
+budgets, batching windows, and explicit proxy URLs) is excluded from
+<code>Config.ScopeDigest</code> and <code>relay.Config.ConsumerDigest</code> so cross-region tuning
+never breaks saved watch or relay bindings. <code>Broker.PollNow</code> runs bounded
+concurrent reply workers (<code>poll_concurrency</code>, default 4) in-process for <code>listen</code>
+and <code>serve</code> without <code>poll_pass</code> RPC staging, while <code>broker serve</code> cleans stale
+unresponsive Unix sockets on startup and classifies server timeouts as retryable
+<code>SCAN_TIMEOUT</code>.</p>
 <p>Webhook signature verification precedes decryption. AES-256-CBC and SHA-1 are
 protocol requirements, not newly chosen cryptographic primitives. Check the
 five-minute URL timestamp window, full PKCS#7 padding, payload length and empty

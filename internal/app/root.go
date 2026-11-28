@@ -26,10 +26,12 @@ type appState struct {
 	allowWrites           bool
 }
 
-func NewRootCmd() *cobra.Command {
+func NewRootCmd() *cobra.Command { return newRootCmd(newProfileRuntime()) }
+
+func newRootCmd(runtime profileRuntime) *cobra.Command {
 	s := &appState{}
-	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through an isolated broker", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
-	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nFirst-time setup: auth guide -> channel list --bot-id -> policy example -> broker serve -> config set-context.\nRead retained events with event list/get, stream observations with event watch,\nor run durable unattended delivery with relay run."
+	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through a resilient connector", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
+	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nQuickstart: connect --bot-id BOT_ID -> listen --channel NAME (or serve --channel NAME --save) -> status.\nFor strict multi-user Linux host isolation, see `auth guide` and `broker serve` / `relay run`."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")
 	root.PersistentFlags().StringVar(&s.configDir, "config-dir", "", "Client context directory (or WECOM_CHANNEL_CONFIG)")
 	root.PersistentFlags().StringVar(&s.useContext, "use-context", "", "Select a channel security context (or WECOM_CHANNEL_CONTEXT)")
@@ -48,9 +50,10 @@ func NewRootCmd() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, _ error) error {
 		return e.New(e.CategoryUsage, "BAD_FLAG", "Invalid or unsupported flag; inspect command help.")
 	})
+	root.AddCommand(s.connectCommand(runtime), s.listenCommand(runtime), s.serveCommand(runtime), s.statusCommand())
 	root.AddCommand(s.readCommands()...)
 	root.AddCommand(s.reactionCommands())
-	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(), s.skillCommands())
+	root.AddCommand(s.eventCommands(), s.relayCommands(), s.proposalCommands(), s.approvalCommands(), s.brokerCommands(), s.policyCommands(), s.configCommands(), s.authCommands(runtime), s.skillCommands())
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Print build metadata", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return s.emit(cmd, map[string]any{"name": constants.AppName, "version": constants.Version, "commit": constants.Commit, "built_at": constants.BuildTime})
 	}})
