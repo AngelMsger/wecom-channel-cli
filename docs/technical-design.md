@@ -511,16 +511,31 @@ See [broker recovery](security.md#broker-recovery) for operational guidance.
 
 ### Host supervision
 
-Deployment-only Python probes invoke the existing doctor/auth-check primitives
-with a fixed binary, explicit socket, isolated environment and finite budgets.
-They suppress child output and emit only health metadata; no CLI command, broker
-endpoint, credential resolver or approval authority is added. Systemd bounds
-crash recovery and owns timers and failure notifications. Local readiness never
-implies upstream health. Probe failures do not restart services or reset durable
-state. See [supervision](security.md#supervision-and-health-monitoring).
+Deployment-only Python probes (`deploy/check-health.py`) invoke the existing
+`doctor` and `auth check` primitives for broker local/upstream health with a
+fixed binary, explicit socket, isolated environment and finite budgets.
+
+Relay listener supervision is Go-native through `internal/monitor`, exposed as
+`relay check` and `relay notify`. `relay check` inspects the expected systemd
+unit and reads local relay state read-only without credentials or network
+access, always reporting true health (exit `0` healthy, exit `11`
+`LISTENER_UNHEALTHY`, other non-zero only on probe errors so systemd's
+`SuccessExitStatus=11` suppresses per-probe `OnFailure=` spam while catching
+probe crashes/timeouts). Freshness alerts (`scan_stale`, `snapshot_stale`,
+`scan_outage`) default to 10 minutes via `--freshness-threshold`; hard failures
+(`service_missing`, `relay_down`, active `broker_unavailable`, `blocked`,
+delivery/queue/startup failures) stay immediate and independent. Backoff
+`next_scan_at` cannot mask an already stale `last_scan_at`. Edge transitions
+(`alert`, single freshness-to-hard `escalated`, and cause-verified `recovered`)
+are tracked in a separate private `probe-state.json` and enqueued as immutable
+sequence-numbered files in a bounded FIFO outbox drained by `relay notify` via
+`wecom-channel-notify-relay@.path` and `.service`. Removing delivered records
+only after exit `0` preserves alert and recovery ordering even when the
+notification service is slow or temporarily stopped.
 
 These deployment units are specific to the channel broker/relay. The sibling
 CLIs are direct service clients, so their transport/retry contracts and the kit
-remain unchanged. Python tests exercise fault sequences and real child timeouts;
-existing CLI process tests exercise state recovery. Live systemd lifecycle and
-external alert routing require the documented host acceptance drill.
+remain unchanged. Go tests cover assessment, backoff non-masking, escalation,
+cause-aware recovery, outbox FIFO durability, and systemd unit contracts; Python
+tests continue to cover `check-health.py`. Live systemd lifecycle and external
+alert routing require the documented host acceptance drill.

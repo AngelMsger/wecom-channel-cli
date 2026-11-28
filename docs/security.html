@@ -477,8 +477,15 @@ Use the host's journal collector, or an operator-owned systemd drop-in replacing
 its ExecStart with a fixed notification executable to connect the chosen alert
 service. Keep notification credentials in that service, never in the worker,
 probe or broker interface. No destination is inferred from channel content.
-Repeated failed probe runs generate at most one alert activation per completed
-run; there is no durable incident deduplication or guaranteed remote delivery.
+For broker local/upstream probes (<code>check-health.py</code>), repeated failed probe runs
+generate at most one alert activation per completed run. For relay listeners,
+<code>wecom-channel-health-relay@.service</code> runs <code>wecom-channel-cli relay check</code> with
+<code>SuccessExitStatus=11</code>, deduplicating continuing incidents in its own private
+<code>StateDirectory</code> and queuing immutable alert, escalation, and recovery records
+into a FIFO outbox drained by <code>wecom-channel-notify-relay@.path</code> and
+<code>wecom-channel-notify-relay@.service</code> (<code>relay notify</code>). Attach remote alert
+credentials and <code>AF_INET</code>/<code>AF_INET6</code> only via a drop-in on
+<code>wecom-channel-notify-relay@.service</code>, never on the probe unit.
 Monitor the host and timers externally as well: a dead host cannot alert locally.
 For relay backlog and stale collection, monitor <code>relay status</code> timestamps and
 queue counts separately as described in <a href="watching.html">watching</a>.</p>
@@ -492,27 +499,38 @@ primary group <code>wecom-channel-agents</code> using the host's account-managem
 It must not have access to the admin socket, credentials or ledger.</p>
 <pre><code class="language-sh">install -d -m 0755 /usr/local/libexec
 install -m 0644 deploy/check-health.py /usr/local/libexec/wecom-channel-check-health.py
-install -m 0644 deploy/check-listener.py /usr/local/libexec/wecom-channel-check-listener.py
 install -m 0644 deploy/wecom-channel-broker.service /etc/systemd/system/
 install -m 0644 deploy/wecom-channel-alert@.service /etc/systemd/system/
 install -m 0644 deploy/wecom-channel-health-*.service /etc/systemd/system/
 install -m 0644 deploy/wecom-channel-health-*.timer /etc/systemd/system/
-systemd-analyze verify /etc/systemd/system/wecom-channel-broker.service /etc/systemd/system/wecom-channel-health-*.service /etc/systemd/system/wecom-channel-health-*.timer /etc/systemd/system/wecom-channel-alert@probe.service
+install -m 0644 deploy/wecom-channel-notify-relay@.path /etc/systemd/system/
+install -m 0644 deploy/wecom-channel-notify-relay@.service /etc/systemd/system/
+systemd-analyze verify /etc/systemd/system/wecom-channel-broker.service /etc/systemd/system/wecom-channel-health-*.service /etc/systemd/system/wecom-channel-health-*.timer /etc/systemd/system/wecom-channel-notify-relay@probe.path /etc/systemd/system/wecom-channel-notify-relay@probe.service /etc/systemd/system/wecom-channel-alert@probe.service
 systemctl daemon-reload
 systemctl enable --now wecom-channel-broker.service
 systemctl enable --now wecom-channel-health-local.timer wecom-channel-health-upstream.timer
 systemctl list-timers 'wecom-channel-health-*'
 </code></pre>
-<p>For each expected listener, enable the independently provisioned timer, for
-example <code>systemctl enable --now wecom-channel-health-relay@engineering.timer</code>.
-For the standalone <code>wecom-channel-relay.service</code>, use a health instance such
-as <code>standalone</code> and override its service's <code>ExecStart</code> with the same command
-plus <code>--single</code>. This selects the standalone unit and its private sender path.
-Adapt the supervisor query for a custom supervisor. The check
-runs under the sender identity to read its private snapshot with a read-only
-filesystem and receives no credential environment. The monitor needs only the
-sanitized journal result. Keep the sender state directory private. Configure
-the external notification receiver and verify a test incident and recovery.
+<p>For each expected listener, enable both the probe timer and the edge-event path
+unit, for example:</p>
+<pre><code class="language-sh">systemctl enable --now wecom-channel-health-relay@engineering.timer
+systemctl enable --now wecom-channel-notify-relay@engineering.path
+</code></pre>
+<p>For the standalone <code>wecom-channel-relay.service</code>, use an instance name such as
+<code>standalone</code> and override <code>wecom-channel-health-relay@standalone.service</code>'s
+<code>ExecStart</code> to pass <code>--single</code> (which selects <code>wecom-channel-relay.service</code> and
+<code>/var/lib/wecom-relay/state.json</code>) alongside the same <code>--alert-state</code> and
+<code>--outbox</code> paths. The probe runs under the sender identity with read-only access
+to the relay state directory (<code>ReadOnlyPaths=</code>), its own private
+<code>StateDirectory=wecom-health-relay-%i</code> for probe state and outbox files, no
+credential environment, and <code>RestrictAddressFamilies=AF_UNIX</code>. The separate
+<code>wecom-channel-notify-relay@.service</code> drains only <code>outbox/</code> via <code>relay notify</code>
+with <code>InaccessiblePaths=</code> hiding relay state and secret files; attach remote
+notification credentials and network families only in a drop-in on that notify
+service. Upgrading from v0.5.0 removes <code>/usr/local/libexec/wecom-channel-check-listener.py</code>
+in favor of the Go binary's <code>relay check</code> and <code>relay notify</code> commands; preserve
+any per-instance drop-in threshold overrides (<code>--queue-age</code>, <code>--startup</code>,
+<code>--outage</code>, <code>--snapshot-age</code>) and migrate them to <code>relay check</code> flags.
 See <a href="watching.html#monitor-each-expected-listener">listener monitoring</a> for deadlines.</p>
 <p>Install the updated relay unit and alert template together if a relay is used.
 On an existing running deployment, enable does not load changed process settings;

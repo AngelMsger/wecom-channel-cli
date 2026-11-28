@@ -227,28 +227,68 @@ process liveness; compare timestamps with the configured scan interval and use
 the supervisor for exit/liveness checks. Normal relay stdout is empty; structured
 startup, retry, acknowledgment, stop and failure notices go to stderr.</p>
 <h3 id="monitor-each-expected-listener">Monitor each expected listener</h3>
-<p>Install the listener probe and timer from <a href="security.html">the Linux deployment guide</a>.
-Enable <code>wecom-channel-health-relay@NAME.timer</code> for each expected relay instance,
-including instances whose service has exited. The timer runs independently of
-the relay and the broker. Under the relay identity the probe reads systemd and
-<code>relay status</code>. It prints a bounded JSON result with the instance, reason,
-restart count and <code>ok</code>. Exit 1 signals failure. Route these results to an
-external monitor, group incidents by host, instance and reason, and close the
-incident on recovery. Alert on restart bursts and missing probe results there.
-Test with a mock listener stopped while its broker stays up, then verify receipt
-at the deployment's actual notification destination.</p>
-<p>The supplied timer runs about once a minute. Startup allows 300 seconds. With
-the default 30-second scan interval, 65-second request timeout and 60-second
-grace, an active listener with no scheduled retry becomes stale after 155 seconds.
-A scheduled retry reports <code>retry_wait</code> and gets its deadline plus grace, with a
-separate 600-second outage bound. A full queue, a blocked scan, an unknown
-delivery, or queued work over 300 seconds old fails the check. Empty scans keep
-a quiet callback listener healthy. For polling, the last fully committed snapshot
-has its own 300-second age limit. Partial pages and inbox draining cannot refresh
-that timestamp. Use a per-instance service drop-in to adjust probe arguments
-to the provisioned rate, scope, queue limit, and freshness objective. For a
-deliberately paused relay, add <code>--paused</code> to the probe arguments and keep its
-timer enabled. An unexpectedly running paused service also fails the check.</p>
+<p>Install the listener probe timer, path unit, and notification drain service from
+<a href="security.html">the Linux deployment guide</a>. Enable both
+<code>wecom-channel-health-relay@NAME.timer</code> and
+<code>wecom-channel-notify-relay@NAME.path</code> for each expected relay instance,
+including instances whose service has exited or has not been installed yet. The
+timer runs independently of the relay and the broker. Under the relay identity,
+<code>wecom-channel-cli relay check</code> inspects systemd and reads the private sender
+state file read-only without loading credentials or opening network sockets.</p>
+<p>Every check reports the true current listener state: exit <code>0</code> with sanitized
+JSON on stdout when healthy, exit <code>11</code> (<code>LISTENER_UNHEALTHY</code>) with the full
+sanitized report on stderr when unhealthy, and another non-zero exit code only
+for probe execution or storage errors. <code>wecom-channel-health-relay@.service</code>
+sets <code>SuccessExitStatus=11</code> so continuing listener incidents do not re-trigger
+systemd <code>OnFailure=</code> on every ~1-minute probe while probe crashes and timeouts
+still alert immediately.</p>
+<p>With <code>--alert-state</code> and <code>--outbox</code>, <code>relay check</code> persists a small private
+incident state file (separate from the relay state directory) and queues one
+immutable sequence-numbered JSON file per edge transition into the outbox
+directory:</p>
+<ul>
+<li><strong>Default 10-minute freshness threshold (<code>--freshness-threshold 10m</code>)</strong>:
+active-listener freshness gaps (<code>scan_stale</code>, <code>snapshot_stale</code>, and
+<code>scan_outage</code>) wait until the threshold is exceeded. Short gaps that recover
+inside the threshold emit nothing. <code>--outage</code> and <code>--snapshot-age</code> default to
+inheriting <code>--freshness-threshold</code>, so raising only <code>--freshness-threshold</code>
+(for example to <code>30m</code>) adjusts the full freshness SLO without code changes;
+explicit <code>--outage</code> or <code>--snapshot-age</code> drop-in overrides continue to take
+precedence. The scan-cycle floor (<code>max(--interval, poll_interval_seconds) + --scan-timeout + --grace</code>, default <code>155s</code>) still prevents alerting before one
+normal cycle completes, and a scheduled future retry (<code>next_scan_at</code>) never
+masks an already stale <code>last_scan_at</code>.</li>
+<li><strong>Immediate hard failures (<code>--hard-failure-threshold 0s</code>)</strong>: an uninstalled or
+unloaded expected service (<code>service_missing</code>), inactive/exited relay
+(<code>relay_down</code>), pause mismatch (<code>pause_mismatch</code>), active local broker
+unavailability (<code>broker_unavailable</code> when <code>first_scan_failure_at &gt; 0</code> and the
+current scan error is <code>BROKER_UNREACHABLE</code>), blocked scan or terminal delivery
+error (<code>blocked</code>), unknown/exhausted/stalled delivery, full queue
+(<code>queue_full</code>), queued backlog past <code>--queue-age</code> (default <code>300s</code>; a single
+freshly queued item does not alert), missing/unreadable state or overdue
+initial baseline past <code>--startup</code> (default <code>300s</code>) alert on first observation
+and never inherit <code>--freshness-threshold</code>.</li>
+<li><strong>Edge-triggered notifications and FIFO outbox delivery</strong>: an unchanged
+continuing incident or retry backoff emits nothing further. As an explicit
+escalation policy, if an active freshness incident deteriorates into a hard
+failure (such as <code>relay_down</code> or <code>blocked</code>), one <code>escalated</code> event is queued
+once; continuing downtime emits nothing further. A <code>recovered</code> event is queued
+only after genuine recovery matching the original cause — a newer completed
+scan (<code>last_scan_at</code>) for scan/broker failures or a newer committed polling
+snapshot (<code>last_snapshot_at</code>) for <code>snapshot_stale</code>, with active failures
+cleared (quiet channels with zero new messages still advance those timestamps
+and recover cleanly). <code>starting</code> and <code>retry_wait</code> never count as recovery.</li>
+<li><code>wecom-channel-notify-relay@.path</code> (<code>DirectoryNotEmpty=</code>) invokes
+<code>wecom-channel-cli relay notify</code> to drain queued event files in strict FIFO
+order, removing each file only after delivery succeeds. Even if the notifier
+service is slow or temporarily stopped while an incident opens and recovers,
+both records remain intact and are delivered in order once it resumes.</li>
+</ul>
+<p>Use a per-instance service drop-in to adjust probe arguments to the provisioned
+rate, scope, queue limit, and freshness objective. For a deliberately paused
+relay, add <code>--paused</code> to <code>relay check</code> and keep its timer enabled; an
+unexpectedly running paused service or missing unit still fails the check. Test
+with a mock listener stopped while its broker stays up, then verify alert and
+recovery receipt at the deployment's actual notification destination.</p>
 <h3 id="filters-and-batching">Filters and batching</h3>
 <table>
 <thead>
@@ -559,15 +599,19 @@ Inspect <code>systemctl show wecom-channel-relay@daily-ai</code> with properties
 stderr through <code>journalctl -u wecom-channel-relay@daily-ai</code>.</p>
 </li>
 <li>
-<p>Read each private sender snapshot as the sender identity, for example every
-60 seconds. Alert if the file is missing/unreadable or initialization never
-completes within the startup deadline. For an active relay with room to scan,
-alert when <code>last_scan_at</code> stops advancing beyond the effective scan interval
-plus request timeout and monitor grace (for example 30 + 65 + 60 seconds).
-Account for a known <code>next_scan_at</code> by allowing that deadline plus request timeout
-and grace, while still reporting sustained retry/backoff separately. A full
-queue intentionally pauses collection; that requires a queue alert, not a
-healthy-scan claim. Never use snapshot readability as process-liveness evidence.</p>
+<p>Run <code>wecom-channel-cli relay check</code> (or read each private sender snapshot as
+the sender identity), for example every 60 seconds. Alert immediately if the
+expected service is missing or down, local broker communication fails
+(<code>BROKER_UNREACHABLE</code>), the state file is unreadable, or initialization never
+completes within the startup deadline (300 seconds). For an active relay with
+room to scan, apply the configurable freshness alert threshold (default 10
+minutes via <code>--freshness-threshold</code>, floored at the scan cycle
+<code>interval + scan-timeout + grace</code>), emit nothing for shorter self-recovering
+gaps, and notify only on threshold crossing, escalation to a hard failure,
+and genuine recovery — never letting a scheduled <code>next_scan_at</code> backoff mask
+an already stale <code>last_scan_at</code>. A full queue intentionally pauses
+collection; that requires a queue alert, not a healthy-scan claim. Never use
+snapshot readability as process-liveness evidence.</p>
 </li>
 <li>
 <p>Alert on nonzero <code>queued_events</code> older than the deployment's delivery SLO

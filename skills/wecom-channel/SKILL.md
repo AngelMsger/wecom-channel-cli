@@ -4,12 +4,12 @@ description: Watch and read WeCom channels, inspect native reactions, and propos
 ---
 
 <!-- Companion version marker read by agent-cli-kit.
-version: 0.1.16
+version: 0.1.17
 -->
 
 # WeCom channels
 
-Set `WECOM_CHANNEL_SKILL_LOADED=0.1.16` for subsequent CLI calls after reading
+Set `WECOM_CHANNEL_SKILL_LOADED=0.1.17` for subsequent CLI calls after reading
 this Skill. This reports knowledge, not authority. `skill status` distinguishes
 loaded, installed and embedded versions. After an upgrade: rebuild/install the
 CLI, run `skill install`, then reload the agent context.
@@ -17,8 +17,8 @@ CLI, run `skill install`, then reload the agent context.
 Use canonical command paths: `connect`, `listen`, `serve` and `status` for the
 unified single-profile workflow; `config` for client contexts; `policy example/validate`
 for strict multi-user operator policy tooling; `proposal list/get/approve/reject/resolve`
-for the proposal lifecycle; `search start/get` for search jobs; and `relay run/status`
-for standalone durable delivery. `doctor` checks local broker readiness; `status`
+for the proposal lifecycle; `search start/get` for search jobs; and `relay run/status/check/notify`
+for standalone durable delivery and host listener alerting. `doctor` checks local broker readiness; `status`
 probes `serve.lock` liveness and per-channel polling/webhook health; operator-only
 `auth check` tests upstream credentials. Old `approval`, `config example/validate`,
 `search result` and `auth status` paths are compatibility aliases, not alternative
@@ -195,11 +195,13 @@ belongs to the operator after repair; retry reset cannot clear an unknown outcom
 promises exactly-once wakeups or processing.
 
 Durable whole-channel scans can yield between pages. Only a completed snapshot
-advances upstream freshness. Monitor each expected listener with the host relay
-probe and an external notification route. After an operator repairs a blocked
-scan, `--retry-scan` resets only scan recovery. Never automate that flag.
-Interrupted read bodies may retry and an expired business-read token gets at
-most one budgeted recovery. A confirmed oversize response stops the scan.
+advances upstream freshness. Monitor each expected standalone relay listener
+outside model turns with `relay check` (10-minute default `--freshness-threshold`,
+immediate hard failures, edge-triggered `--alert-state` and FIFO `--outbox`)
+paired with `relay notify` and an external notification route. After an operator
+repairs a blocked scan, `--retry-scan` resets only scan recovery. Never automate
+that flag. Interrupted read bodies may retry and an expired business-read token
+gets at most one budgeted recovery. A confirmed oversize response stops the scan.
 
 Optional `scan_retry_limit` and `delivery_retry_limit` independently override
 `retry_limit`; omitted/null fields inherit it, explicit zero disables retries
@@ -217,8 +219,8 @@ poll intervals, batching windows, explicit `proxy_url`) never invalidates watch
 or relay bindings. `last_scan_error`/`last_delivery_error` retain sanitized cause
 (including bounded `network_reason`), phase/time and attempt/budget after restart
 and recovery; they are history, not retry permission. Use `status --check` for
-`serve` deployments or the host relay probe for standalone `relay run`. Never run
-paid probes or reset terminal delivery budgets automatically.
+`serve` deployments or `relay check` / `relay notify` for standalone `relay run`.
+Never run paid probes or reset terminal delivery budgets automatically.
 
 The operator enables read_all and post/reply observations. With no callback
 listener, auto uses HTTP polling and also requires observe_all; no public URL or

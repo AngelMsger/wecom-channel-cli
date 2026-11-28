@@ -163,7 +163,17 @@ Keep host health probes outside model turns. Bound attempts and process lifetime
 separate local readiness from upstream auth, and never load secrets or reset
 write state in a probe. Test transient recovery, persistent failure, hung children
 and service authority boundaries. Local journal alerts are not remote delivery;
-retain an explicit operator integration and host acceptance procedure.
+retain an explicit operator integration and host acceptance procedure. Relay
+listener supervision (`relay check` / `relay notify` in `internal/monitor`)
+always reports true health (exit `0` healthy, exit `11` `LISTENER_UNHEALTHY`
+with systemd `SuccessExitStatus=11`, other non-zero only on probe errors),
+defaults freshness alerts (`scan_stale`, `snapshot_stale`, `scan_outage`) to
+10 minutes via `--freshness-threshold`, keeps hard failures (`service_missing`,
+`relay_down`, active `broker_unavailable`, `blocked`, delivery/queue/startup)
+immediate and independent, prevents `next_scan_at` backoff from masking stale
+scans, requires cause-verified recovery (newer scan or committed snapshot), and
+queues immutable edge events into a private FIFO outbox drained in order only
+after delivery succeeds.
 
 The unified single-profile workflow (`connect`, `listen`, `serve`, `status`,
 `auth logout`) uses one `profile.yaml` and `agent-cli-kit/credstore` while
