@@ -109,7 +109,7 @@ func decodeTopic(raw any) (apiclient.Topic, bool) {
 // discoverProfileChannels enumerates all joined channel pages before replacing
 // the saved catalog, preserving selection, custom context names and read_only
 // flags across channel renames by stable topic_id.
-func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old config.Profile, bot string) (config.Profile, error) {
+func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old config.Profile, bot string, reserved map[string]bool) (config.Profile, error) {
 	p := old
 	p.Version = 1
 	p.Bot = bot
@@ -160,6 +160,20 @@ func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old conf
 		}
 		return a.ID < b.ID
 	})
+	used := map[string]bool{}
+	for k := range reserved {
+		used[k] = true
+	}
+	for _, ch := range p.Channels {
+		if ch.Context != "" {
+			used[ch.Context] = true
+		}
+	}
+	for i := range p.Channels {
+		if p.Channels[i].Context == "" {
+			p.Channels[i].Context = config.ChannelContextName(bot, p.Channels[i], used)
+		}
+	}
 	return p, nil
 }
 
@@ -361,9 +375,17 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		reservedCtx := map[string]bool{}
+		if clients, readErr := config.ReadClients(dir); readErr == nil {
+			for _, c := range clients.Contexts {
+				if c.Bot != bot {
+					reservedCtx[c.Name] = true
+				}
+			}
+		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), max(s.timeout, 2*time.Minute))
 		defer cancel()
-		updated, err := discoverProfileChannels(ctx, api, old, bot)
+		updated, err := discoverProfileChannels(ctx, api, old, bot, reservedCtx)
 		if err != nil {
 			return err
 		}

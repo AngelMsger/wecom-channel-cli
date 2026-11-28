@@ -72,13 +72,15 @@ type ChannelWebhookStatus struct {
 }
 
 type statusTracker struct {
-	mu     sync.Mutex
-	path   string
-	status ServiceStatus
+	mu          sync.Mutex
+	path        string
+	status      ServiceStatus
+	onNotice    func(map[string]any)
+	writeFailed bool
 }
 
-func newStatusTracker(path string, init ServiceStatus) *statusTracker {
-	t := &statusTracker{path: path, status: init}
+func newStatusTracker(path string, init ServiceStatus, onNotice func(map[string]any)) *statusTracker {
+	t := &statusTracker{path: path, status: init, onNotice: onNotice}
 	t.flushLocked()
 	return t
 }
@@ -102,10 +104,22 @@ func (t *statusTracker) heartbeat() {
 
 func (t *statusTracker) flushLocked() {
 	b, err := json.MarshalIndent(t.status, "", "  ")
+	if err == nil {
+		err = securefs.WriteAtomic(t.path, b)
+	}
 	if err != nil {
+		if !t.writeFailed && t.onNotice != nil {
+			t.writeFailed = true
+			t.onNotice(map[string]any{"serve": map[string]any{"state": "status_write_failed", "code": e.Safe(err).Code}})
+		}
 		return
 	}
-	_ = securefs.WriteAtomic(t.path, b)
+	if t.writeFailed {
+		t.writeFailed = false
+		if t.onNotice != nil {
+			t.onNotice(map[string]any{"serve": map[string]any{"state": "status_write_recovered"}})
+		}
+	}
 }
 
 func buildServeRelayConfig(p config.Profile) (relay.Config, error) {
@@ -169,6 +183,27 @@ func buildServeRelayConfig(p config.Profile) (relay.Config, error) {
 	return cfg, cfg.Validate()
 }
 
+// foreignContextNames returns context names in config.yaml that already belong
+// to a different (bot_id, channel_id) pair so auto-generated context names
+// avoid colliding with existing saved contexts.
+func foreignContextNames(configDir, bot string, channels []config.ProfileChannel) (map[string]bool, error) {
+	f, err := config.ReadClients(configDir)
+	if err != nil {
+		return nil, err
+	}
+	owned := make(map[string]bool, len(channels))
+	for _, ch := range channels {
+		owned[ch.ID] = true
+	}
+	foreign := make(map[string]bool)
+	for _, c := range f.Contexts {
+		if c.Bot != bot || !owned[c.Channel] {
+			foreign[c.Name] = true
+		}
+	}
+	return foreign, nil
+}
+
 func syncServeClientContexts(configDir, bot string, entries []ChannelStatus) error {
 	f, err := config.ReadClients(configDir)
 	if err != nil {
@@ -187,6 +222,10 @@ func syncServeClientContexts(configDir, bot string, entries []ChannelStatus) err
 			Channel: entry.ChannelID,
 		}
 		if idx, ok := byName[cc.Name]; ok {
+			existing := f.Contexts[idx]
+			if existing.Bot != bot || existing.Channel != entry.ChannelID {
+				return e.New(e.CategoryConflict, "CONTEXT_CONFLICT", "Saved client context "+cc.Name+" already belongs to a different bot or channel. Assign a distinct context name in profile.yaml before running serve.")
+			}
 			f.Contexts[idx] = cc
 		} else {
 			byName[cc.Name] = len(f.Contexts)
@@ -276,6 +315,8 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 		if !exists || p.Bot == "" {
 			return profileMissingError()
 		}
+		baseProfile := p
+		baseProfile.Channels = append([]config.ProfileChannel(nil), p.Channels...)
 		if cmd.Flags().Changed("interval") {
 			p.Polling.IntervalSeconds = int(interval / time.Second)
 		}
@@ -323,11 +364,26 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		foreignCtx, err := foreignContextNames(dir, p.Bot, channels)
+		if err != nil {
+			return err
+		}
 		effectiveData := p.EffectiveDataDir(dir)
 		usedCtx := map[string]bool{}
+		for name := range foreignCtx {
+			usedCtx[name] = true
+		}
+		for _, ch := range channels {
+			if ch.Context != "" {
+				usedCtx[ch.Context] = true
+			}
+		}
 		previewChannels := make([]ChannelStatus, 0, len(channels))
 		for _, ch := range channels {
-			ctxName := config.ChannelContextName(p.Bot, ch, usedCtx)
+			ctxName := ch.Context
+			if ctxName == "" {
+				ctxName = config.ChannelContextName(p.Bot, ch, usedCtx)
+			}
 			slug := config.ChannelStateSlug(p.Bot, ch.ID)
 			agentSock, adminSock, sockErr := config.ChannelSocketPaths(effectiveData, slug)
 			if sockErr != nil {
@@ -361,12 +417,8 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				"channels":         previewChannels,
 			})
 		}
-		if saveFlags || selection.explicit() {
-			if err = config.SaveProfile(dir, p, strictFS); err != nil {
-				return err
-			}
-		}
-		releaseProfileLock()
+		// Validate webhook (including token env) before persisting --save so
+		// failed invocations never write half-configured destinations.
 		var hook *relay.Webhook
 		if webhookEnabled {
 			hook, err = relay.NewWebhook(rcfg)
@@ -374,6 +426,19 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
+		if saveFlags {
+			if err = config.SaveProfile(dir, p, strictFS); err != nil {
+				return err
+			}
+		} else if selection.explicit() {
+			if err = selection.apply(&baseProfile); err != nil {
+				return err
+			}
+			if err = config.SaveProfile(dir, baseProfile, strictFS); err != nil {
+				return err
+			}
+		}
+		releaseProfileLock()
 		secret, _, err := loadProfileSecret(cmd, p.Bot, runtime.credentials(dir), false)
 		if err != nil {
 			return err
@@ -386,7 +451,8 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		lock, err := securefs.LockPrivate(filepath.Join(resolvedData, "serve.lock"))
+		lockPath := filepath.Join(resolvedData, "serve.lock")
+		lock, err := securefs.LockPrivate(lockPath)
 		if err != nil {
 			if err == unix.EWOULDBLOCK {
 				return e.New(e.CategoryConflict, "SERVICE_RUNNING", "Another wecom-channel-cli serve instance already owns this data directory.")
@@ -394,10 +460,20 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			return e.New(e.CategoryConfig, "SERVICE_LOCK", "Could not acquire serve.lock in the data directory.")
 		}
 		defer lock.Close()
+		now := time.Now()
+		_ = os.Chtimes(lockPath, now, now)
 
 		// Recompute socket paths against canonical resolvedData so config.yaml
 		// and unixListener agree on exact paths.
 		usedCtx = map[string]bool{}
+		for name := range foreignCtx {
+			usedCtx[name] = true
+		}
+		for _, ch := range channels {
+			if ch.Context != "" {
+				usedCtx[ch.Context] = true
+			}
+		}
 		statuses := make([]ChannelStatus, 0, len(channels))
 		brokers := make([]*broker.Broker, 0, len(channels))
 		var stores []*state.Store
@@ -408,12 +484,23 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 		}()
 
 		for _, ch := range channels {
-			ctxName := config.ChannelContextName(p.Bot, ch, usedCtx)
+			ctxName := ch.Context
+			if ctxName == "" {
+				ctxName = config.ChannelContextName(p.Bot, ch, usedCtx)
+			}
 			slug := config.ChannelStateSlug(p.Bot, ch.ID)
 			chDir := filepath.Join(resolvedData, "channels", slug)
 			agentSock, adminSock, sockErr := config.ChannelSocketPaths(resolvedData, slug)
 			if sockErr != nil {
 				return sockErr
+			}
+			if strictFS {
+				if _, dirErr := securefs.EnsurePrivateDir(filepath.Dir(agentSock), true); dirErr != nil {
+					return dirErr
+				}
+				if _, dirErr := securefs.EnsurePrivateDir(filepath.Dir(adminSock), true); dirErr != nil {
+					return dirErr
+				}
 			}
 			var st *state.Store
 			if strictFS {
@@ -437,6 +524,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			}
 			if webhookEnabled {
 				cs.Webhook = &ChannelWebhookStatus{
+					State:       "active",
 					Mode:        rcfg.Mode(),
 					OnUncertain: rcfg.UncertainPolicy(),
 				}
@@ -448,7 +536,17 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			return err
 		}
 
-		nowMs := time.Now().UnixMilli()
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+
+		var noticeMu sync.Mutex
+		emitNotice := func(payload map[string]any) {
+			noticeMu.Lock()
+			defer noticeMu.Unlock()
+			output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": payload})
+		}
+
+		nowMs := now.UnixMilli()
 		tracker := newStatusTracker(filepath.Join(resolvedData, "status.json"), ServiceStatus{
 			Version:         1,
 			PID:             os.Getpid(),
@@ -459,17 +557,7 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			ProxyConfigured: p.Network.Proxy != "",
 			WebhookEnabled:  webhookEnabled,
 			Channels:        statuses,
-		})
-
-		ctx, cancel := context.WithCancel(cmd.Context())
-		defer cancel()
-
-		var noticeMu sync.Mutex
-		emitNotice := func(payload map[string]any) {
-			noticeMu.Lock()
-			defer noticeMu.Unlock()
-			output.EmitNotice(cmd.ErrOrStderr(), map[string]any{"_notice": payload})
-		}
+		}, emitNotice)
 
 		serverErr := make(chan error, 1)
 		socketsReady := make(chan struct{})
@@ -589,20 +677,25 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 						return err
 					}
 				} else if retryFailed && rst.Inflight != nil {
-					if rcfg.Mode() == relay.HTTPAccepted && rcfg.UncertainPolicy() == relay.UncertainHalt && (rst.Inflight.Status == "unknown" || rst.Inflight.Status == "sending") {
-						cancel()
-						wg.Wait()
-						<-serverErr
-						return relay.UnknownOutcome()
-					}
-					rst.Inflight.Attempts, rst.Inflight.NextAttempt = 0, 0
-					rst.Inflight.Status, rst.Inflight.HTTPStatus, rst.Inflight.Failure = "", 0, ""
-					rst.NextDelivery = 0
-					if err = rstore.Save(rst); err != nil {
-						cancel()
-						wg.Wait()
-						<-serverErr
-						return err
+					if rcfg.Mode() == relay.HTTPAccepted && (rst.Inflight.Status == "unknown" || rst.Inflight.Status == "sending") {
+						if rcfg.UncertainPolicy() == relay.UncertainHalt {
+							cancel()
+							wg.Wait()
+							<-serverErr
+							return relay.UnknownOutcome()
+						}
+						// Leave sending/unknown batches to pumpRelayWithWake's
+						// uncertainty handler (on_uncertain: skip or retry).
+					} else if rst.Inflight.Failure != "" || rst.Inflight.Attempts > rcfg.DeliveryRetries() {
+						rst.Inflight.Attempts, rst.Inflight.NextAttempt = 0, 0
+						rst.Inflight.Status, rst.Inflight.HTTPStatus, rst.Inflight.Failure = "", 0, ""
+						rst.NextDelivery = 0
+						if err = rstore.Save(rst); err != nil {
+							cancel()
+							wg.Wait()
+							<-serverErr
+							return err
+						}
 					}
 				}
 				tracker.updateChannel(idx, func(cs *ChannelStatus) {
@@ -806,13 +899,15 @@ func (s *appState) statusCommand() *cobra.Command {
 		if eval, err := filepath.EvalSymlinks(resolvedData); err == nil {
 			resolvedData = eval
 		}
-		running, _ := securefs.ProbeLock(filepath.Join(resolvedData, "serve.lock"))
+		lockPath := filepath.Join(resolvedData, "serve.lock")
+		running, _ := securefs.ProbeLock(lockPath)
 		statusPath := filepath.Join(resolvedData, "status.json")
 		raw, readErr := os.ReadFile(statusPath)
 		var st ServiceStatus
 		hasSnapshot := readErr == nil && json.Unmarshal(raw, &st) == nil && st.Version == 1
 
-		nowMs := time.Now().UnixMilli()
+		now := time.Now()
+		nowMs := now.UnixMilli()
 		report := map[string]any{
 			"running":  running,
 			"data_dir": resolvedData,
@@ -822,8 +917,16 @@ func (s *appState) statusCommand() *cobra.Command {
 		if !running {
 			reason = "stopped"
 		} else if !hasSnapshot {
-			reason = "starting"
-			healthy = true
+			if readErr == nil || !os.IsNotExist(readErr) {
+				healthy = false
+				reason = "status_unreadable"
+			} else if lockInfo, statErr := os.Stat(lockPath); statErr != nil || now.Sub(lockInfo.ModTime()) > min(maxStale, time.Minute) {
+				healthy = false
+				reason = "status_overdue"
+			} else {
+				healthy = true
+				reason = "starting"
+			}
 		}
 		if hasSnapshot {
 			report["pid"] = st.PID
@@ -837,7 +940,14 @@ func (s *appState) statusCommand() *cobra.Command {
 			report["webhook_enabled"] = st.WebhookEnabled
 			report["channels"] = st.Channels
 			if running {
+				if st.UpdatedAt > 0 && nowMs-st.UpdatedAt > maxStale.Milliseconds() {
+					healthy = false
+					reason = "status_stale"
+				}
 				for _, ch := range st.Channels {
+					if !healthy {
+						break
+					}
 					if ch.State == "blocked" {
 						healthy = false
 						reason = "channel_blocked"

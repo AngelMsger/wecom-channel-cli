@@ -93,16 +93,24 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 	}
 	ledger, high, events := b.Store.Inbox()
 	identity := WatchIdentity{b.Config.Name, b.Config.Bot, ch.ID, ledger}
-	binding := apiclient.Digest(struct {
-		Identity WatchIdentity
-		Policy   string
-		Whole    bool
-		Posts    []string
-		Partial  bool
-		Filter   string
-	}{identity, b.Config.ScopeDigest(), r.WholeChannel, r.Posts, r.AllowPartial, "exclude-self-v1"})
-	if r.Binding != "" && r.Binding != binding {
-		return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
+	bindingFor := func(policy string) string {
+		return apiclient.Digest(struct {
+			Identity WatchIdentity
+			Policy   string
+			Whole    bool
+			Posts    []string
+			Partial  bool
+			Filter   string
+		}{identity, policy, r.WholeChannel, r.Posts, r.AllowPartial, "exclude-self-v1"})
+	}
+	binding := bindingFor(b.Config.ScopeDigest())
+	legacyBinding := bindingFor(apiclient.Digest(b.Config))
+	if r.Binding != "" {
+		if r.Binding == legacyBinding {
+			binding = legacyBinding
+		} else if r.Binding != binding {
+			return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
+		}
 	}
 	if r.After > high {
 		return ScanPage{}, e.New(e.CategoryConflict, "SEQUENCE_AHEAD", "The checkpoint is ahead of this inbox.")
@@ -127,7 +135,8 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 	}
 	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: coverage}
 	if r.ResumePoll && backend == "poll" {
-		last, _ := b.Store.PollStatus(pollScope(b.Config, r))
+		policy, scope := pollScope(b.Config, r)
+		last, _ := b.Store.PollStatus(policy, apiclient.Digest(b.Config), scope)
 		p.LastSnapshot = last * 1000
 		if progress != nil {
 			p.Progress = progress

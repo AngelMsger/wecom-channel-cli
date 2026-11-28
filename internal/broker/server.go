@@ -18,6 +18,7 @@ import (
 	"github.com/angelmsger/wecom-channel-cli/pkg/callback"
 	e "github.com/angelmsger/wecom-channel-cli/pkg/errors"
 	"github.com/angelmsger/wecom-channel-cli/pkg/safejson"
+	"golang.org/x/sys/unix"
 )
 
 // Handler binds authority to the listener, never a caller-supplied field.
@@ -240,10 +241,22 @@ func unixListener(path string, private, strict bool) (net.Listener, error) {
 			_ = conn.Close()
 			return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "An active broker is already listening on this socket.")
 		}
-		// The exclusive ledger lock is already held and nothing answers on this
-		// socket: remove the stale socket left behind by an unclean crash.
-		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
-			return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Cannot remove stale Unix socket.")
+		if !errors.Is(dialErr, os.ErrNotExist) {
+			if !errors.Is(dialErr, unix.ECONNREFUSED) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Could not confirm that the existing Unix socket is inactive.")
+			}
+			// Re-verify inode identity right before unlinking so a concurrent
+			// replacement is never disconnected.
+			info2, statErr := os.Lstat(path)
+			if statErr != nil {
+				if !os.IsNotExist(statErr) {
+					return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Cannot re-verify stale Unix socket before removal.")
+				}
+			} else if info2.Mode()&os.ModeSocket == 0 || !os.SameFile(info, info2) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "The Unix socket changed while probing; refusing to remove it.")
+			} else if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+				return nil, e.New(e.CategoryConflict, "SOCKET_EXISTS", "Cannot remove stale Unix socket.")
+			}
 		}
 	}
 	l, err := net.Listen("unix", path)

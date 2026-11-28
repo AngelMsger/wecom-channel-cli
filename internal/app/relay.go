@@ -53,7 +53,9 @@ func (s *appState) relayCommand() *cobra.Command {
 		if err = broker.ValidateSocket(socket); err != nil {
 			return err
 		}
-		consumer := cfg.ConsumerDigest(socket, watchScope(scan))
+		scope := watchScope(scan)
+		consumer := cfg.ConsumerDigest(socket, scope)
+		legacyConsumer := cfg.LegacyConsumerDigest(socket, scope)
 		var store *relay.Store
 		if !dry && !ephemeral {
 			store, err = relay.Open(statePath)
@@ -70,8 +72,14 @@ func (s *appState) relayCommand() *cobra.Command {
 				return err
 			}
 		}
-		if exists && (st.Consumer != consumer || cmd.Flags().Changed("after-sequence")) {
+		consumerOK := st.Consumer == consumer || st.Consumer == legacyConsumer
+		if exists && (!consumerOK || cmd.Flags().Changed("after-sequence")) {
 			return e.New(e.CategoryConflict, "RELAY_BINDING_CHANGED", "Use the original socket, scope, destination and filters with saved state, without --after-sequence. Drain or reconcile pending work before deliberately provisioning a new consumer.")
+		}
+		// Keep legacy st.Consumer intact whenever sealed batches or receipts
+		// depend on it; upgrade only empty, receipt-free state to the new digest.
+		if exists && st.Consumer == legacyConsumer && st.Inflight == nil && len(st.Receipts) == 0 && !dry {
+			st.Consumer = consumer
 		}
 		if retryScan && !exists {
 			return e.New(e.CategoryNotFound, "RELAY_STATE_MISSING", "A scan repair requires the original sender state.")

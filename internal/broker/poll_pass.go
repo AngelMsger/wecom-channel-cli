@@ -129,7 +129,7 @@ func (p *pollPass) apply(b *Broker, q apiclient.Query, page apiclient.Page) erro
 	return nil
 }
 
-func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *PollProgress, resultErr error) {
+func (b *Broker) pollSlice(ctx context.Context, policy, legacyPolicy, scope string) (result *PollProgress, resultErr error) {
 	now := b.Now()
 	raw, revision, ledger := b.Store.StagedPoll()
 	p := pollPass{Policy: policy, Scope: scope, Ledger: ledger, Revision: revision, Started: now.UnixMilli(), Seen: map[string]bool{}, Observations: map[string]state.PollObservation{}}
@@ -149,9 +149,11 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 		if len(raw) > maxPassBytes || safejson.Decode(raw, &p, true) != nil || !p.valid(ledger) {
 			return nil, e.New(e.CategoryConfig, "POLL_STAGE_INVALID", "The saved polling pass is unreadable. Inspect broker storage.")
 		}
-		if p.Policy != policy || p.Scope != scope || p.Revision != revision || now.Before(time.UnixMilli(p.Started)) || now.Sub(time.UnixMilli(p.Started)) >= 4*time.Hour {
+		policyMatch := p.Policy == policy || (legacyPolicy != "" && p.Policy == legacyPolicy)
+		if !policyMatch || p.Scope != scope || p.Revision != revision || now.Before(time.UnixMilli(p.Started)) || now.Sub(time.UnixMilli(p.Started)) >= 4*time.Hour {
 			return nil, b.discardPass(e.New(e.CategoryConflict, "POLL_UNSTABLE", "The saved pass expired or a concurrent scan changed the baseline."))
 		}
+		p.Policy = policy
 	}
 	progress := func(at time.Time) *PollProgress {
 		return &PollProgress{NextAt: at.UnixMilli(), Requests: p.Requests, Records: len(p.Observations), PageAt: p.PageAt}
@@ -203,7 +205,7 @@ func (b *Broker) pollSlice(ctx context.Context, policy, scope string) (result *P
 			for _, k := range keys {
 				observations = append(observations, p.Observations[k])
 			}
-			return nil, b.Store.CommitPoll(policy, scope, true, nil, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
+			return nil, b.Store.CommitPoll(policy, legacyPolicy, scope, true, nil, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
 		}
 		if i == 7 {
 			p.EligibleAt = b.Now().Add(max(time.Second, 8*time.Minute/time.Duration(b.Config.RequestsPerMinute))).UnixMilli()

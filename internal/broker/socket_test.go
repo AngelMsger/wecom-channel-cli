@@ -129,4 +129,26 @@ func TestStaleSocketRecoveryAndFileProtection(t *testing.T) {
 		t.Fatalf("failed to recover stale socket: %v", err)
 	}
 	_ = rebound.Close()
+
+	// Inconclusive probe (e.g. EACCES on a live socket) must not unlink the path.
+	if os.Geteuid() != 0 {
+		noAccessPath := filepath.Join(dir, "noaccess.sock")
+		l3, err := unixListener(noAccessPath, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			_ = os.Chmod(noAccessPath, 0600)
+			_ = l3.Close()
+		}()
+		if err := os.Chmod(noAccessPath, 0000); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := unixListener(noAccessPath, true, true); err == nil {
+			t.Fatal("expected inconclusive EACCES probe to refuse replacing socket")
+		}
+		if _, err := os.Lstat(noAccessPath); err != nil {
+			t.Fatalf("inconclusive probe must not unlink existing socket: %v", err)
+		}
+	}
 }

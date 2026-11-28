@@ -100,6 +100,15 @@ func (c Config) ConsumerDigest(socket, scope string) string {
 	}{socket, scope, c.URL, c.Mode(), kinds, changes, bots})
 }
 
+// LegacyConsumerDigest reproduces the pre-0.6 full-config consumer digest so
+// existing relay queues, sealed batch IDs, and receipts resume across upgrades.
+func (c Config) LegacyConsumerDigest(socket, scope string) string {
+	return apiclient.Digest(struct {
+		Socket, Scope string
+		Config        Config
+	}{socket, scope, c})
+}
+
 func DefaultConfig() Config {
 	return Config{Version: 1, Kinds: []string{"topic_event", "topic_reply_event"}, Changes: []int{1, 2, 3}, ExcludeSelf: true, BatchWindowSeconds: 5, BatchSize: 50, QueueLimit: 1000, TimeoutSeconds: 30, RetryBaseSeconds: 5}
 }

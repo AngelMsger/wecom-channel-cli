@@ -46,6 +46,7 @@ func (b *Broker) PollNow(ctx context.Context) (int, int64, error) {
 	}
 	r := ScanRequest{WholeChannel: true, Limit: 100}
 	policy, scope := pollScope(b.Config, r)
+	legacyPolicy := apiclient.Digest(b.Config)
 	now := b.Now()
 	_, beforeHigh, _ := b.Store.Inbox()
 	observations, err := b.pollSnapshot(ctx, r, now, true)
@@ -56,7 +57,7 @@ func (b *Broker) PollNow(ctx context.Context) (int, int64, error) {
 		return 0, 0, err
 	}
 	completed := b.Now()
-	if err = b.Store.CommitPoll(policy, scope, true, nil, observations, completed, time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords); err != nil {
+	if err = b.Store.CommitPoll(policy, legacyPolicy, scope, true, nil, observations, completed, time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords); err != nil {
 		return 0, 0, err
 	}
 	_, afterHigh, _ := b.Store.Inbox()
@@ -73,9 +74,10 @@ func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error)
 		return nil, contextError(ctx)
 	}
 	policy, scope := pollScope(b.Config, r)
+	legacyPolicy := apiclient.Digest(b.Config)
 	now := b.Now()
 	interval := time.Duration(b.Config.PollIntervalSeconds) * time.Second
-	last, count := b.Store.PollStatus(policy, scope)
+	last, count := b.Store.PollStatus(policy, legacyPolicy, scope)
 	if last != 0 && now.Sub(time.Unix(last, 0)) >= 0 && now.Sub(time.Unix(last, 0)) < interval {
 		return nil, nil
 	}
@@ -92,7 +94,7 @@ func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error)
 		return nil, e.New(e.CategoryRateLimit, "POLL_SCOPE_LIMIT", "Too many polling scopes were requested from this broker; reuse an existing scope.")
 	}
 	if r.ResumePoll && r.WholeChannel {
-		progress, err := b.pollSlice(ctx, policy, scope)
+		progress, err := b.pollSlice(ctx, policy, legacyPolicy, scope)
 		if progress == nil {
 			b.pollAttempts[scope] = pollAttempt{b.Now(), err}
 		}
@@ -103,7 +105,7 @@ func (b *Broker) poll(ctx context.Context, r ScanRequest) (*PollProgress, error)
 		err = contextError(ctx)
 	}
 	if err == nil {
-		err = b.Store.CommitPoll(policy, scope, r.WholeChannel, r.Posts, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
+		err = b.Store.CommitPoll(policy, legacyPolicy, scope, r.WholeChannel, r.Posts, observations, b.Now(), time.Duration(b.Config.RetentionHours)*time.Hour, b.Config.MaxEvents, b.Config.PollMaxRecords)
 	}
 	b.pollAttempts[scope] = pollAttempt{b.Now(), err}
 	return nil, err
@@ -114,22 +116,34 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time,
 	var mu sync.Mutex
 	requests := 0
 	observations := map[string]state.PollObservation{}
+	releaseReservation := func() {
+		mu.Lock()
+		requests--
+		mu.Unlock()
+	}
 	readPage := func(readCtx context.Context, q apiclient.Query) (apiclient.Page, error) {
 		for {
 			if err := contextError(readCtx); err != nil {
 				return apiclient.Page{}, err
 			}
+			// Reserve against poll_max_requests before starting parallel reads
+			// so concurrent reply workers can never exceed the snapshot cap.
 			mu.Lock()
 			over := requests >= b.Config.PollMaxRequests
+			if !over {
+				requests++
+			}
 			mu.Unlock()
 			if over {
 				return apiclient.Page{}, e.New(e.CategoryRateLimit, "POLL_BUDGET", "The polling snapshot exceeds poll_max_requests. Select fewer --post IDs or ask the operator to review the budget; no partial snapshot was committed.")
 			}
 			eligible, err := b.reservePollRead(nil)
 			if err != nil {
+				releaseReservation()
 				return apiclient.Page{}, err
 			}
 			if !eligible.IsZero() {
+				releaseReservation()
 				if waitForRate {
 					delay := max(100*time.Millisecond, eligible.Sub(b.Now()))
 					timer := time.NewTimer(delay)
@@ -150,9 +164,6 @@ func (b *Broker) pollSnapshot(ctx context.Context, r ScanRequest, now time.Time,
 				}
 				return apiclient.Page{}, err
 			}
-			mu.Lock()
-			requests++
-			mu.Unlock()
 			return page, nil
 		}
 	}

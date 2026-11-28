@@ -199,6 +199,8 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 		if !exists || p.Bot == "" {
 			return profileMissingError()
 		}
+		baseProfile := p
+		baseProfile.Channels = append([]config.ProfileChannel(nil), p.Channels...)
 		if cmd.Flags().Changed("interval") {
 			p.Polling.IntervalSeconds = int(interval / time.Second)
 		}
@@ -230,7 +232,10 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 			return e.New(e.CategoryUsage, "NO_CHANNELS_SELECTED", "Run connect to discover channels, then listen --channel NAME or listen --all.")
 		}
 		if selection.explicit() {
-			if err = config.SaveProfile(dir, p, strictFS); err != nil {
+			if err = selection.apply(&baseProfile); err != nil {
+				return err
+			}
+			if err = config.SaveProfile(dir, baseProfile, strictFS); err != nil {
 				return err
 			}
 		}

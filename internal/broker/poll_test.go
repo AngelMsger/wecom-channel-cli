@@ -377,3 +377,62 @@ func TestPollNowConcurrentAndTimeoutClassification(t *testing.T) {
 		t.Fatalf("expected retryable SCAN_TIMEOUT wrapping DeadlineExceeded, got %v (%+v)", err, e.Safe(err))
 	}
 }
+
+func TestPollLegacyBaselineUpgradeAndParallelBudgetCap(t *testing.T) {
+	// 1. Legacy v0.5.0 checkpoint + polling baseline upgrade: post edited during
+	// broker downtime must be detected (not dropped as a quiet baseline) and the
+	// v0.5.0 full-config watch binding must resume without WATCH_BINDING_CHANGED.
+	b, f := pollFixture(t)
+	r := ScanRequest{WholeChannel: true, Limit: 100}
+	setPosts(f, polled("p1", "", "before-upgrade", false))
+	if _, err := b.scan(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	legacyPolicy := apiclient.Digest(b.Config)
+	if err := b.Store.Update(func(st *state.Snapshot) error {
+		st.Polling.Policy = legacyPolicy
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ledger, _, _ := b.Store.Inbox()
+	legacyBinding := apiclient.Digest(struct {
+		Identity WatchIdentity
+		Policy   string
+		Whole    bool
+		Posts    []string
+		Partial  bool
+		Filter   string
+	}{WatchIdentity{b.Config.Name, b.Config.Bot, "channel-a", ledger}, legacyPolicy, true, []string{}, false, "exclude-self-v1"})
+
+	// Edit p1 while broker is stopped, then scan with legacy checkpoint binding.
+	setPosts(f, polled("p1", "", "edited-during-downtime", false))
+	tick(b)
+	rLegacy := ScanRequest{WholeChannel: true, Limit: 100, Binding: legacyBinding}
+	p, err := b.scan(context.Background(), rLegacy)
+	if err != nil {
+		t.Fatalf("legacy checkpoint upgrade failed: %v", err)
+	}
+	if p.Binding != legacyBinding || len(p.Items) != 1 {
+		t.Fatalf("expected legacy binding preserved and 1 downtime edit detected, got binding=%s items=%d", p.Binding, len(p.Items))
+	}
+	if got := b.Store.View().Polling.Policy; got != b.Config.ScopeDigest() {
+		t.Fatalf("expected persisted polling policy adopted to ScopeDigest, got %s", got)
+	}
+
+	// 2. Parallel reply workers must never exceed poll_max_requests.
+	b2, f2 := pollFixture(t)
+	b2.Config.PollConcurrency = 4
+	b2.Config.PollMaxRequests = 2
+	setPosts(f2, polled("p1", "", "1", false), polled("p2", "", "2", false), polled("p3", "", "3", false), polled("p4", "", "4", false))
+	_, _, err = b2.PollNow(context.Background())
+	if e.Safe(err).Code != "POLL_BUDGET" {
+		t.Fatalf("expected POLL_BUDGET under cap=2 with 4 posts, got %v", err)
+	}
+	f2.mu.Lock()
+	readCount := len(f2.reads)
+	f2.mu.Unlock()
+	if readCount > 2 {
+		t.Fatalf("parallel poll exceeded poll_max_requests=2: recorded %d reads", readCount)
+	}
+}
