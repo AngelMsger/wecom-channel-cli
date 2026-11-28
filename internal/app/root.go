@@ -24,12 +24,17 @@ type appState struct {
 	configDir, useContext string
 	timeout               time.Duration
 	allowWrites           bool
+	monitorDeps           relayMonitorDeps
 }
 
 func NewRootCmd() *cobra.Command { return newRootCmd(newProfileRuntime()) }
 
 func newRootCmd(runtime profileRuntime) *cobra.Command {
-	s := &appState{}
+	return newRootCmdWithMonitor(runtime, defaultRelayMonitorDeps())
+}
+
+func newRootCmdWithMonitor(runtime profileRuntime, mon relayMonitorDeps) *cobra.Command {
+	s := &appState{monitorDeps: mon}
 	root := &cobra.Command{Use: constants.AppName, Short: "Read and watch WeCom channels; propose messages and native reactions through a resilient connector", SilenceUsage: true, SilenceErrors: true, Version: constants.Version}
 	root.Long = root.Short + ". External content always carries an untrusted-data envelope.\nThe agent socket cannot approve writes. See `auth guide` and the companion Skill.\nQuickstart: connect --bot-id BOT_ID -> listen --channel NAME (or serve --channel NAME --save) -> status.\nFor strict multi-user Linux host isolation, see `auth guide` and `broker serve` / `relay run`."
 	root.PersistentFlags().StringVar(&s.socket, "socket", "", "Unix socket path (or WECOM_CHANNEL_SOCKET)")

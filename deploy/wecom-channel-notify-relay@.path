@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch queued WeCom listener %i edge notifications
+
+[Path]
+DirectoryNotEmpty=/var/lib/wecom-health-relay-%i/outbox
+Unit=wecom-channel-notify-relay@%i.service
+TriggerLimitIntervalSec=60s
+TriggerLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target

@@ -16,7 +16,6 @@ lint:
 test:
 	$(GO) test ./...
 	python3 -m unittest discover -s scripts -p 'test_health.py'
-	python3 -m unittest discover -s scripts -p 'test_listener.py'
 
 e2e: build
 	WECOM_CHANNEL_TEST_BINARY="$(CURDIR)/bin/wecom-channel-cli" $(GO) test ./internal/app -run TestCLIProcess -count=1

@@ -112,6 +112,30 @@ func (s State) Depth() int {
 	return n
 }
 
+// OldestQueuedAt returns the earliest Unix-millisecond enqueue timestamp across
+// pending and inflight work, or zero when unavailable. Legacy inflight batches
+// fall back to the broker's receipt time as an upper bound on queue age.
+func (s State) OldestQueuedAt() int64 {
+	oldest := s.PendingSince
+	if s.Inflight != nil {
+		queuedAt := s.Inflight.QueuedAt
+		if queuedAt == 0 {
+			for _, thread := range s.Inflight.Batch.Threads {
+				for _, record := range thread.Events {
+					at := record.Data.Received * 1000
+					if at > 0 && (queuedAt == 0 || at < queuedAt) {
+						queuedAt = at
+					}
+				}
+			}
+		}
+		if queuedAt > 0 && (oldest == 0 || queuedAt < oldest) {
+			oldest = queuedAt
+		}
+	}
+	return oldest
+}
+
 func (s *State) Collect(p broker.ScanPage, c Config, now time.Time) error {
 	// Decode the entire page before changing progress. The CLI validates binding,
 	// sequence and trust metadata before calling this method.

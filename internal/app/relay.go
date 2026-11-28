@@ -13,7 +13,7 @@ import (
 
 func (s *appState) relayCommands() *cobra.Command {
 	g := &cobra.Command{Use: "relay", Short: "Deliver changes and track local delivery and processing state"}
-	g.AddCommand(s.relayCommand(), s.relayStatusCommand(), s.relayResolveCommand(), s.relayClaimCommand(), s.relayConsumeCommand())
+	g.AddCommand(s.relayCommand(), s.relayStatusCommand(), s.relayCheckCommand(), s.relayNotifyCommand(), s.relayResolveCommand(), s.relayClaimCommand(), s.relayConsumeCommand())
 	return g
 }
 
@@ -514,24 +514,7 @@ func relayStatus(st relay.State) map[string]any {
 	}
 	// Preserve enqueue age across sealing/retry. Legacy batches fall back to the
 	// broker's receipt time, an upper bound on their time in the sender queue.
-	oldest := st.PendingSince
-	if st.Inflight != nil {
-		queuedAt := st.Inflight.QueuedAt
-		if queuedAt == 0 {
-			for _, thread := range st.Inflight.Batch.Threads {
-				for _, record := range thread.Events {
-					at := record.Data.Received * 1000
-					if at > 0 && (queuedAt == 0 || at < queuedAt) {
-						queuedAt = at
-					}
-				}
-			}
-		}
-		if queuedAt > 0 && (oldest == 0 || queuedAt < oldest) {
-			oldest = queuedAt
-		}
-	}
-	v["oldest_queued_at"] = oldest
+	v["oldest_queued_at"] = st.OldestQueuedAt()
 	v["delivery_mode"] = relay.ExplicitAck
 	if st.DeliveryMode != "" {
 		v["delivery_mode"] = st.DeliveryMode

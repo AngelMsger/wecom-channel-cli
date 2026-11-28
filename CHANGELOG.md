@@ -13,6 +13,8 @@
 - Add explicit proxy support (`upstream_proxy` / `proxy_url` / `--proxy` supporting `http`, `https`, `socks5`, `socks5h`) without inheriting ambient `HTTP_PROXY`/`HTTPS_PROXY` environment variables.
 - Add configurable `scan_retry_limit: -1` (unlimited steady-state exponential backoff capped at 5m), `on_uncertain: skip|retry|halt` for `http_accepted` webhooks, bounded `network_reason` failure diagnostics, and concurrent reply fetching (`poll_concurrency`, default 4).
 
+- Add Go-native host relay supervision (`relay check` and `relay notify`, replacing `deploy/check-listener.py`) with a configurable 10-minute default freshness alert threshold (`--freshness-threshold`), independent immediate hard failures (`service_missing`, `relay_down`, active `broker_unavailable`, `blocked`, delivery/queue/startup failures), edge-triggered incident state (`--alert-state`), and immutable FIFO outbox delivery (`--outbox`, drained by `deploy/wecom-channel-notify-relay@.path` and `.service`).
+
 ### Fixed
 
 - Preserve every saved client context name during channel discovery and report unreadable client configuration before saving a profile.
@@ -22,7 +24,8 @@
 - Fix failed upstream reads in resumable `poll_pass` burning `poll_max_requests` budget and raise pass lifetime from 1h to 4h.
 - Decouple operational tuning (timeouts, retry limits, poll intervals, budgets, proxy URLs) from `ScopeDigest` and `ConsumerDigest` so tuning adjustments no longer trigger `WATCH_BINDING_CHANGED` or `RELAY_BINDING_CHANGED`.
 - Distinguish pre-connect DNS/dial/TLS errors (`RELAY_UNREACHABLE`) from post-send uncertainty in `http_accepted` webhooks, allow continuous `relay run --duration 0` / `--max-batches 0`, fix the templated socket path in `deploy/wecom-channel-relay@.service`, and update `deploy/grok.example.json` for cross-region resilience.
-- Update companion Skill and handshake to 0.1.16.
+- Fix listener probe backoff masking (`next_scan_at` could hide an already stale `last_scan_at` as `retry_wait`), detect uninstalled expected relay units as `service_missing`, classify active `BROKER_UNREACHABLE` scan failures as immediate `broker_unavailable`, suppress per-probe `OnFailure=` spam via `SuccessExitStatus=11`, and require cause-verified recovery (new scan or committed polling snapshot) before clearing an incident.
+- Update companion Skill and handshake to 0.1.17.
 
 ## [0.5.0] — 2026-11-24
 

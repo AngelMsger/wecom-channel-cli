@@ -7,7 +7,13 @@ OnFailure=wecom-channel-alert@%n.service
 Type=oneshot
 User=wecom-relay
 Group=wecom-channel-agents
-ExecStart=/usr/bin/python3 -I /usr/local/libexec/wecom-channel-check-listener.py %i
+ExecStart=/usr/local/bin/wecom-channel-cli relay check --instance %i --alert-state /var/lib/wecom-health-relay-%i/probe-state.json --outbox /var/lib/wecom-health-relay-%i/outbox
+# Exit 11 (LISTENER_UNHEALTHY) preserves real check results while letting
+# edge-triggered outbox notifications replace per-probe OnFailure wakeups.
+# Probe execution errors, timeouts, and storage failures still trigger OnFailure.
+SuccessExitStatus=11
+StateDirectory=wecom-health-relay-%i
+StateDirectoryMode=0700
 TimeoutStartSec=50
 TimeoutStopSec=5
 KillMode=control-group
@@ -36,4 +42,3 @@ MemoryMax=128M
 TasksMax=32
 StandardOutput=journal
 StandardError=journal
-SyslogLevelPrefix=true

@@ -16,7 +16,7 @@ flag, alias or the fact that a command appears in help.</p>
   reaction  types | list | propose
   search    start | get
   event     list | get | context | watch
-  relay     run | status | claim | consume | resolve
+  relay     run | status | check | notify | claim | consume | resolve
   proposal  list | get | approve | reject | resolve
   policy    example | validate
   broker    serve
@@ -131,6 +131,16 @@ flag, alias or the fact that a command appears in help.</p>
 <td><code>relay status</code></td>
 <td>Inspect sender delivery or worker claims</td>
 <td>Read-only local files, no network or liveness probe</td>
+</tr>
+<tr>
+<td><code>relay check</code></td>
+<td>Host supervision probe for one expected systemd relay listener with configurable freshness alerts, immediate hard failures, and edge-triggered outbox queuing</td>
+<td>Separate trusted host probe identity; read-only toward relay state; no credentials or outbound network</td>
+</tr>
+<tr>
+<td><code>relay notify</code></td>
+<td>Drain queued listener alert, escalation, and recovery events from a private FIFO outbox in strict order</td>
+<td>Isolated host notification unit; removes each record only after delivery succeeds</td>
 </tr>
 <tr>
 <td><code>relay claim</code></td>

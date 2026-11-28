@@ -1005,8 +1005,10 @@ Usage:
   wecom-channel-cli relay [command]
 
 Available Commands:
+  check       Check one expected systemd relay listener and queue edge-triggered alert events
   claim       Atomically claim a webhook batch in worker-owned state before processing
   consume     Record a claimed batch as processed or failed; never send channel replies
+  notify      Drain queued listener alert and recovery events in FIFO order
   resolve     Reconcile an unknown HTTP acceptance using verified host evidence
   run         Collect changes and deliver nonempty batches without a model
   status      Read local delivery counts, timestamps and failure causes; this does not probe process liveness
@@ -1020,6 +1022,46 @@ Global Flags:
       --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 
 Use "wecom-channel-cli relay [command] --help" for more information about a command.
+```
+
+## wecom-channel-cli relay check
+
+Check one expected systemd relay listener and queue edge-triggered alert events
+
+```text
+Usage:
+  wecom-channel-cli relay check [flags]
+
+Examples:
+  wecom-channel-cli relay check --instance engineering
+  wecom-channel-cli relay check --instance engineering --alert-state /var/lib/wecom-health-relay-engineering/probe-state.json --outbox /var/lib/wecom-health-relay-engineering/outbox
+
+Flags:
+      --alert-state string                Private probe-state.json file for edge-triggered incident deduplication and recovery tracking
+      --freshness-threshold duration      Freshness alert threshold for active listeners (scan_stale, and default for scan_outage and snapshot_stale) (default 10m0s)
+      --grace duration                    Monitor scheduling grace used for scan cycle floor and delivery stall bound (default 1m0s)
+      --hard-failure-threshold duration   Optional delay before alerting on hard failures (0 alerts on first observation)
+      --instance string                   Expected relay instance name (alphanumeric, _, -)
+      --interval duration                 Minimum scan interval floor (default 30s)
+      --outage duration                   Optional sustained scan-failure threshold override (0 inherits --freshness-threshold)
+      --outbox string                     Private FIFO directory for immutable edge notification events (requires --alert-state)
+      --paused                            Expect the relay service to be deliberately inactive
+      --queue-age duration                Maximum allowed age of queued events before alerting (default 5m0s)
+      --queue-limit int                   Fallback queue capacity when absent from relay state (default 1000)
+      --scan-timeout duration             Single scan request deadline used for scan cycle floor (default 1m5s)
+      --single                            Check the standalone wecom-channel-relay.service unit and /var/lib/wecom-relay/state.json
+      --snapshot-age duration             Optional polling snapshot age threshold override (0 inherits --freshness-threshold)
+      --startup duration                  Startup and initial baseline deadline (default 5m0s)
+      --state string                      Optional private relay state.json path override
+      --unit string                       Optional systemd unit name override
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
 ```
 
 ## wecom-channel-cli relay claim
@@ -1058,6 +1100,33 @@ Flags:
       --consumer-state string   Private worker-owned claim file (required)
       --dry-run                 Validate completion without locks or writes
       --result string           processed or failed (required); neither permits automatic replay
+
+Global Flags:
+      --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval
+      --config-dir string    Client context directory (or WECOM_CHANNEL_CONFIG)
+      --format string        Output format: json or ndjson; trust metadata is always retained (default "json")
+      --socket string        Unix socket path (or WECOM_CHANNEL_SOCKET)
+      --timeout duration     Bound the entire local request (default 1m5s)
+      --use-context string   Select a channel security context (or WECOM_CHANNEL_CONTEXT)
+```
+
+## wecom-channel-cli relay notify
+
+Drain queued listener alert and recovery events in FIFO order
+
+```text
+Usage:
+  wecom-channel-cli relay notify [-- ARGS...] [flags]
+
+Examples:
+  wecom-channel-cli relay notify --outbox /var/lib/wecom-health-relay-engineering/outbox --lock /run/wecom-notify-relay-engineering/notify.lock --exec /usr/bin/logger -- --priority daemon.err --tag wecom-channel-alert
+
+Flags:
+      --exec string             Fixed absolute executable invoked once per queued event with JSON on stdin
+      --exec-timeout duration   Per-event execution deadline for --exec (1ms–2m) (default 30s)
+      --lock string             Lock file path outside --outbox (defaults to <parent>/.notify.lock)
+      --max-events int          Maximum queued events to drain in one run (1–1000) (default 100)
+      --outbox string           Private FIFO directory written by relay check --outbox
 
 Global Flags:
       --allow-writes         Override only WECOM_CHANNEL_CLI_READ_ONLY; never broker policy or approval

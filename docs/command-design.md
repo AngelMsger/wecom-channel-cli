@@ -20,7 +20,7 @@ wecom-channel-cli
   reaction  types | list | propose
   search    start | get
   event     list | get | context | watch
-  relay     run | status | claim | consume | resolve
+  relay     run | status | check | notify | claim | consume | resolve
   proposal  list | get | approve | reject | resolve
   policy    example | validate
   broker    serve
@@ -55,6 +55,8 @@ This inventory omits Cobra's built-in help/completion. The
 | `event watch` | Stream bounded observations to NDJSON | Consumer checkpoint records successful output, not processing |
 | `relay run` | Collect, queue, filter, batch and deliver to one configured host adapter | Separate trusted service; optional durable queue, explicit ACK or documented HTTP acceptance |
 | `relay status` | Inspect sender delivery or worker claims | Read-only local files, no network or liveness probe |
+| `relay check` | Host supervision probe for one expected systemd relay listener with configurable freshness alerts, immediate hard failures, and edge-triggered outbox queuing | Separate trusted host probe identity; read-only toward relay state; no credentials or outbound network |
+| `relay notify` | Drain queued listener alert, escalation, and recovery events from a private FIFO outbox in strict order | Isolated host notification unit; removes each record only after delivery succeeds |
 | `relay claim` | Atomically claim new batch/event IDs before work | Worker-owned state; no sender credentials; no automatic reclaim |
 | `relay consume` | Report processed/failed for a matching claim | Idempotent worker report; does not send channel content |
 | `relay resolve` | Record verified host outcome for an uncertain batch | Trusted sender operator; never guess from a timeout |
