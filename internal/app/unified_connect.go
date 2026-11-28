@@ -417,6 +417,10 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 			old.Network.TimeoutSeconds = int(upstreamTimeout / time.Second)
 		}
 
+		clients, err := config.ReadClients(dir)
+		if err != nil {
+			return err
+		}
 		store := runtime.credentials(dir)
 		secret, persist, err := loadProfileSecret(cmd, bot, store, true)
 		if err != nil {
@@ -426,13 +430,9 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		var savedContexts []config.ClientContext
-		if clients, readErr := config.ReadClients(dir); readErr == nil {
-			savedContexts = clients.Contexts
-		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), max(s.timeout, 2*time.Minute))
 		defer cancel()
-		updated, err := discoverProfileChannels(ctx, api, old, bot, savedContexts)
+		updated, err := discoverProfileChannels(ctx, api, old, bot, clients.Contexts)
 		if err != nil {
 			return err
 		}

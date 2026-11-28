@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Preserve every saved client context name during channel discovery and report unreadable client configuration before saving a profile.
 - Fix cross-region listener disconnects by marking read-only WeCom POSTs (`get_token` and read APIs) with `transport.AsRead` (3 transport retries with idle connection eviction on transport errors, 45s default timeout, transparent expired-token refresh on `853004`/`42001`/`40014`, and 1× interrupted-body retry) while keeping writes strictly non-retried.
 - Fix broker 60s request timeout misclassifying `context.DeadlineExceeded` as non-retryable `INTERNAL` (permanently latching `ScanBlocked`); raise handler timeout to 90s and classify timeouts as retryable `SCAN_TIMEOUT`.
 - Fix stale Unix sockets left after crashes causing `SOCKET_EXISTS` crash loops by probing liveness before unlinking dead sockets (while still rejecting live sockets and non-socket files).

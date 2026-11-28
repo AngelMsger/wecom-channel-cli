@@ -89,6 +89,11 @@ func TestChannelContextNameAndSocketPathLimit(t *testing.T) {
 	if c2 == c1 || !strings.HasPrefix(c2, "engineering-ops-") || !ValidContextName(c2) {
 		t.Fatalf("expected disambiguated valid context name, got %q", c2)
 	}
+	// Both the plain name and its first disambiguation can be user-owned.
+	next := ChannelContextName("bot-1", ProfileChannel{ID: "id-2", Name: "Engineering Ops"}, used)
+	if next == c1 || next == c2 || !ValidContextName(next) {
+		t.Fatalf("generated an occupied or invalid context name %q", next)
+	}
 	if !strings.HasPrefix(c3, "ch-") || !ValidContextName(c3) {
 		t.Fatalf("expected stable hash fallback for non-ASCII name, got %q", c3)
 	}

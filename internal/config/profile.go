@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -228,9 +229,10 @@ func ChannelContextName(bot string, ch ProfileChannel, used map[string]bool) str
 	}
 	candidate := base
 	if used[candidate] {
-		candidate = base + "-" + apiclient.Digest([]string{bot, ch.ID})[:6]
-		if len(candidate) > 63 {
-			candidate = "ch-" + apiclient.Digest([]string{bot, ch.ID})[:12]
+		stem := base + "-" + apiclient.Digest([]string{bot, ch.ID})[:6]
+		candidate = stem
+		for n := 2; used[candidate]; n++ {
+			candidate = stem + "-" + strconv.Itoa(n)
 		}
 	}
 	used[candidate] = true
