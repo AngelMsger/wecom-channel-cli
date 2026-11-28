@@ -77,6 +77,9 @@ func (f *checkpointFile) read() (watchCheckpoint, bool, error) {
 	return cp, true, nil
 }
 func (f *checkpointFile) write(cp watchCheckpoint) error {
+	return f.writeWithMigration(cp, "")
+}
+func (f *checkpointFile) writeWithMigration(cp watchCheckpoint, fromBinding string) error {
 	if f.path == "" {
 		return nil
 	}
@@ -84,7 +87,8 @@ func (f *checkpointFile) write(cp watchCheckpoint) error {
 	if err != nil {
 		return err
 	}
-	if exists && (old.Socket != cp.Socket || old.Scope != cp.Scope || old.Binding != cp.Binding || old.Identity != cp.Identity) {
+	bindingMatch := old.Binding == cp.Binding || (fromBinding != "" && old.Binding == fromBinding)
+	if exists && (old.Socket != cp.Socket || old.Scope != cp.Scope || !bindingMatch || old.Identity != cp.Identity) {
 		return e.New(e.CategoryConflict, "WATCH_CHECKPOINT_CHANGED", "The checkpoint was replaced with a different watch while running; it was not overwritten.")
 	}
 	if exists && old == cp {

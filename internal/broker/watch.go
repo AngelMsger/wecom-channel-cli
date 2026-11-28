@@ -45,6 +45,7 @@ type ScanPage struct {
 	HighWatermark int64              `json:"high_watermark"`
 	HasMore       bool               `json:"has_more"`
 	Binding       string             `json:"binding"`
+	MigratedFrom  string             `json:"migrated_from,omitempty"`
 	Identity      WatchIdentity      `json:"identity"`
 	Coverage      WatchCoverage      `json:"coverage"`
 }
@@ -105,10 +106,11 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 	}
 	binding := bindingFor(b.Config.ScopeDigest())
 	legacyBinding := bindingFor(apiclient.Digest(b.Config))
-	if r.Binding != "" {
+	migratedFrom := ""
+	if r.Binding != "" && r.Binding != binding {
 		if r.Binding == legacyBinding {
-			binding = legacyBinding
-		} else if r.Binding != binding {
+			migratedFrom = legacyBinding
+		} else {
 			return ScanPage{}, e.New(e.CategoryConflict, "WATCH_BINDING_CHANGED", "The checkpoint belongs to another context, ledger, policy or thread filter. Review the change before starting a new watch.")
 		}
 	}
@@ -133,7 +135,7 @@ func (b *Broker) scan(ctx context.Context, raw ScanRequest) (ScanPage, error) {
 		coverage.Actors = "unknown"
 		coverage.Note = "Snapshot observations of resources authored by other users/bots; this bot's posts/replies are excluded, but other authors' replies to its posts remain eligible. Missing or ambiguous creators stop the snapshot. Change actors remain unknown. First snapshot is a baseline; edits may coalesce; absence is not deletion; recall requires a returned flag. Only fingerprints and event metadata persist. Polling runs only while a watch requests scans."
 	}
-	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, Identity: identity, Coverage: coverage}
+	p := ScanPage{Items: []apiclient.Record{}, After: r.After, HighWatermark: high, Binding: binding, MigratedFrom: migratedFrom, Identity: identity, Coverage: coverage}
 	if r.ResumePoll && backend == "poll" {
 		policy, scope := pollScope(b.Config, r)
 		last, _ := b.Store.PollStatus(policy, apiclient.Digest(b.Config), scope)

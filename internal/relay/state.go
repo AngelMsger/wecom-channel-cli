@@ -73,6 +73,7 @@ type State struct {
 	Progress          *broker.PollProgress `json:"poll_progress,omitempty"`
 	Version           int                  `json:"relay_version"`
 	Consumer          string               `json:"consumer"`
+	LegacyConsumer    string               `json:"legacy_consumer,omitempty"`
 	Identity          broker.WatchIdentity `json:"identity"`
 	Binding           string               `json:"binding"`
 	After             int64                `json:"collected_sequence"`
@@ -337,7 +338,7 @@ func (s State) Validate() error {
 	if s.LastScanError != nil && s.LastScanError.RetryLimit < 0 {
 		maxScanFailures = 1_000_000
 	}
-	if s.Version != 1 || len(s.Consumer) != 64 || s.After < 0 || s.Depth() > 10000 || s.ScanFailures < 0 || s.ScanFailures > maxScanFailures || s.Filtered < 0 || s.Acknowledged < 0 || s.Collected != s.Filtered+s.Acknowledged+s.AcceptedEvents+s.UncertainEvents+int64(s.Depth()) || s.AckedBatches < 0 || (len(s.Pending) > 0 && s.PendingSince <= 0) {
+	if s.Version != 1 || len(s.Consumer) != 64 || (s.LegacyConsumer != "" && (len(s.LegacyConsumer) != 64 || s.LegacyConsumer == s.Consumer)) || s.After < 0 || s.Depth() > 10000 || s.ScanFailures < 0 || s.ScanFailures > maxScanFailures || s.Filtered < 0 || s.Acknowledged < 0 || s.Collected != s.Filtered+s.Acknowledged+s.AcceptedEvents+s.UncertainEvents+int64(s.Depth()) || s.AckedBatches < 0 || (len(s.Pending) > 0 && s.PendingSince <= 0) {
 		return stateError()
 	}
 	if s.DeliveryMode != "" && s.DeliveryMode != HTTPAccepted {
@@ -346,10 +347,13 @@ func (s State) Validate() error {
 	if (s.DeliveryMode == "" && (s.AcceptedEvents != 0 || s.AcceptedBatches != 0 || s.UncertainEvents != 0 || s.UncertainBatches != 0 || s.LastAccepted != 0 || len(s.Receipts) != 0)) || len(s.Receipts) > 10000 || s.AcceptedBatches+s.UncertainBatches != int64(len(s.Receipts)) || s.AcceptedEvents < 0 || s.UncertainEvents < 0 || s.NextDelivery < 0 {
 		return stateError()
 	}
+	validBatchID := func(b Batch) bool {
+		return b.ID == batchID(s.Consumer, b) || (s.LegacyConsumer != "" && b.ID == batchID(s.LegacyConsumer, b))
+	}
 	accepted, uncertain := int64(0), int64(0)
 	receipts := map[string]bool{}
 	for _, r := range s.Receipts {
-		if r.Batch.ID != r.ID || r.Batch.Identity != s.Identity || r.Batch.Validate() != nil || r.Batch.ID != batchID(s.Consumer, r.Batch) || len(r.ID) != 64 || receipts[r.ID] || (r.Status != "accepted" && r.Status != "uncertain") || r.Events < 1 || r.Events > 100 || r.Attempts < 1 || r.Attempts > 21 || r.AcceptedAt <= 0 {
+		if r.Batch.ID != r.ID || r.Batch.Identity != s.Identity || r.Batch.Validate() != nil || !validBatchID(r.Batch) || len(r.ID) != 64 || receipts[r.ID] || (r.Status != "accepted" && r.Status != "uncertain") || r.Events < 1 || r.Events > 100 || r.Attempts < 1 || r.Attempts > 21 || r.AcceptedAt <= 0 {
 			return stateError()
 		}
 		count := 0
@@ -399,7 +403,7 @@ func (s State) Validate() error {
 		if receipts[d.Batch.ID] || (s.DeliveryMode == "" && d.Status != "") || (d.Status != "" && d.Status != "sending" && d.Status != "unknown" && d.Status != "rejected") || (d.Status != "" && d.Attempts < 1) {
 			return stateError()
 		}
-		if d.QueuedAt < 0 || d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || d.Batch.ID != batchID(s.Consumer, d.Batch) {
+		if d.QueuedAt < 0 || d.Attempts < 0 || d.Attempts > 21 || d.Batch.Version != 1 || d.Batch.Identity != s.Identity || len(d.Batch.Threads) == 0 || !validBatchID(d.Batch) {
 			return stateError()
 		}
 		for _, t := range d.Batch.Threads {

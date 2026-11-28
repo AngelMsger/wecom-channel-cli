@@ -413,11 +413,30 @@ func TestPollLegacyBaselineUpgradeAndParallelBudgetCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("legacy checkpoint upgrade failed: %v", err)
 	}
-	if p.Binding != legacyBinding || len(p.Items) != 1 {
-		t.Fatalf("expected legacy binding preserved and 1 downtime edit detected, got binding=%s items=%d", p.Binding, len(p.Items))
+	if p.MigratedFrom != legacyBinding || p.Binding == legacyBinding || len(p.Items) != 1 {
+		t.Fatalf("expected migrated ScopeDigest binding and 1 downtime edit, got binding=%s migrated_from=%s items=%d", p.Binding, p.MigratedFrom, len(p.Items))
 	}
 	if got := b.Store.View().Polling.Policy; got != b.Config.ScopeDigest() {
 		t.Fatalf("expected persisted polling policy adopted to ScopeDigest, got %s", got)
+	}
+
+	// Tune poll interval by +5s, then resume a second time with the migrated binding.
+	b.Config.PollIntervalSeconds += 5
+	setPosts(f, polled("p1", "", "edited-after-tuning", false))
+	tick(b)
+	tick(b)
+	p2, err := b.scan(context.Background(), ScanRequest{WholeChannel: true, Limit: 100, After: p.After, Binding: p.Binding})
+	if err != nil {
+		t.Fatalf("second resume after poll interval change failed: %v", err)
+	}
+	if p2.Binding != p.Binding || p2.MigratedFrom != "" || len(p2.Items) != 1 {
+		t.Fatalf("expected stable migrated binding and 1 new edit, got binding=%s migrated_from=%s items=%d", p2.Binding, p2.MigratedFrom, len(p2.Items))
+	}
+
+	// Genuine scope change must still fail with WATCH_BINDING_CHANGED.
+	b.Config.Channels[0].ID = "channel-other"
+	if _, err := b.scan(context.Background(), ScanRequest{WholeChannel: true, Limit: 100, After: p2.After, Binding: p2.Binding}); e.Safe(err).Code != "WATCH_BINDING_CHANGED" {
+		t.Fatalf("expected WATCH_BINDING_CHANGED on channel scope change, got %v", err)
 	}
 
 	// 2. Parallel reply workers must never exceed poll_max_requests.

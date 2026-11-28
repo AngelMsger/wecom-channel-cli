@@ -33,6 +33,14 @@ type profileCredentials interface {
 type profileRuntime struct {
 	credentials func(string) profileCredentials
 	client      func(bot, secret string, tcfg transport.Config) (apiclient.Client, error)
+	isTerminal  func(any) bool
+}
+
+func (r profileRuntime) interactive(stream any) bool {
+	if r.isTerminal != nil {
+		return r.isTerminal(stream)
+	}
+	return terminal.Is(stream)
 }
 
 func newProfileRuntime() profileRuntime {
@@ -106,10 +114,49 @@ func decodeTopic(raw any) (apiclient.Topic, bool) {
 	return topic, true
 }
 
+// resolveChannelContexts computes context names for channels against saved
+// config.yaml entries. Explicit ch.Context values are preserved verbatim so
+// syncServeClientContexts can reject collisions; missing names reuse a saved
+// context only for the same (bot, channel) pair and otherwise avoid every
+// existing saved context name.
+func resolveChannelContexts(bot string, channels []config.ProfileChannel, saved []config.ClientContext) []string {
+	used := make(map[string]bool, len(saved)+len(channels))
+	ownedByChannel := make(map[string]string)
+	for _, c := range saved {
+		used[c.Name] = true
+		if c.Bot == bot && c.Channel != "" && ownedByChannel[c.Channel] == "" {
+			ownedByChannel[c.Channel] = c.Name
+		}
+	}
+	assigned := make(map[string]bool, len(channels))
+	for _, ch := range channels {
+		if ch.Context != "" {
+			used[ch.Context] = true
+			assigned[ch.Context] = true
+		}
+	}
+	out := make([]string, len(channels))
+	for i, ch := range channels {
+		if ch.Context != "" {
+			out[i] = ch.Context
+			continue
+		}
+		if name := ownedByChannel[ch.ID]; name != "" && !assigned[name] {
+			out[i] = name
+			assigned[name] = true
+			continue
+		}
+		name := config.ChannelContextName(bot, ch, used)
+		out[i] = name
+		assigned[name] = true
+	}
+	return out
+}
+
 // discoverProfileChannels enumerates all joined channel pages before replacing
 // the saved catalog, preserving selection, custom context names and read_only
 // flags across channel renames by stable topic_id.
-func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old config.Profile, bot string, reserved map[string]bool) (config.Profile, error) {
+func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old config.Profile, bot string, saved []config.ClientContext) (config.Profile, error) {
 	p := old
 	p.Version = 1
 	p.Bot = bot
@@ -160,19 +207,9 @@ func discoverProfileChannels(ctx context.Context, api apiclient.Reader, old conf
 		}
 		return a.ID < b.ID
 	})
-	used := map[string]bool{}
-	for k := range reserved {
-		used[k] = true
-	}
-	for _, ch := range p.Channels {
-		if ch.Context != "" {
-			used[ch.Context] = true
-		}
-	}
+	names := resolveChannelContexts(bot, p.Channels, saved)
 	for i := range p.Channels {
-		if p.Channels[i].Context == "" {
-			p.Channels[i].Context = config.ChannelContextName(bot, p.Channels[i], used)
-		}
+		p.Channels[i].Context = names[i]
 	}
 	return p, nil
 }
@@ -194,11 +231,12 @@ func profileChoices(p config.Profile) []apiclient.Record {
 type channelSelection struct {
 	names     []string
 	picks     []int
+	ids       []string
 	all, none bool
 }
 
 func (s channelSelection) explicit() bool {
-	return s.all || s.none || len(s.names)+len(s.picks) > 0
+	return s.all || s.none || len(s.names)+len(s.picks)+len(s.ids) > 0
 }
 
 func (s *channelSelection) bindFlags(cmd *cobra.Command) {
@@ -210,7 +248,7 @@ func (s *channelSelection) bindFlags(cmd *cobra.Command) {
 }
 
 func (s channelSelection) apply(p *config.Profile) error {
-	if (s.all && s.none) || ((s.all || s.none) && len(s.names)+len(s.picks) > 0) {
+	if (s.all && s.none) || ((s.all || s.none) && len(s.names)+len(s.picks)+len(s.ids) > 0) {
 		return e.New(e.CategoryUsage, "CHANNEL_SELECTION", "Choose --channel/--pick, --all, or --none.")
 	}
 	chosen := make(map[int]bool)
@@ -219,6 +257,19 @@ func (s channelSelection) apply(p *config.Profile) error {
 			return e.New(e.CategoryUsage, "CHANNEL_CHOICE", "Choose a number from the channel list returned by connect.")
 		}
 		chosen[pick-1] = true
+	}
+	for _, id := range s.ids {
+		found := -1
+		for i, ch := range p.Channels {
+			if ch.ID == id {
+				found = i
+				break
+			}
+		}
+		if found < 0 {
+			return e.New(e.CategoryNotFound, "CHANNEL_NAME_UNKNOWN", "The channel name or ID was not found. Refresh with connect and select a listed channel.")
+		}
+		chosen[found] = true
 	}
 	for _, want := range s.names {
 		var nameMatches []int
@@ -265,10 +316,10 @@ func promptChannelSelection(cmd *cobra.Command, p config.Profile) (channelSelect
 	default:
 		for _, part := range strings.Split(answer, ",") {
 			n, err := strconv.Atoi(strings.TrimSpace(part))
-			if err != nil {
+			if err != nil || n < 1 || n > len(p.Channels) {
 				return s, e.New(e.CategoryUsage, "CHANNEL_CHOICE", "Enter channel numbers, all, or none.")
 			}
-			s.picks = append(s.picks, n)
+			s.ids = append(s.ids, p.Channels[n-1].ID)
 		}
 	}
 	return s, nil
@@ -375,17 +426,13 @@ func (s *appState) connectCommand(runtime profileRuntime) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		reservedCtx := map[string]bool{}
+		var savedContexts []config.ClientContext
 		if clients, readErr := config.ReadClients(dir); readErr == nil {
-			for _, c := range clients.Contexts {
-				if c.Bot != bot {
-					reservedCtx[c.Name] = true
-				}
-			}
+			savedContexts = clients.Contexts
 		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), max(s.timeout, 2*time.Minute))
 		defer cancel()
-		updated, err := discoverProfileChannels(ctx, api, old, bot, reservedCtx)
+		updated, err := discoverProfileChannels(ctx, api, old, bot, savedContexts)
 		if err != nil {
 			return err
 		}

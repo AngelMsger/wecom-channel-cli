@@ -153,7 +153,10 @@ func TestRelayLegacyConsumerUpgradePreservesQueue(t *testing.T) {
 		t.Fatalf("failed preparing legacy batch: resp=%+v err=%v", resp, err)
 	}
 	legacyState := relay.State{Version: 1, Consumer: legacyConsumer}
-	if err := legacyState.Collect(*resp.Scan, rcfg, time.Now().Add(-10*time.Second)); err != nil {
+	legacyPage := *resp.Scan
+	legacyPage.Binding = legacyBinding
+	legacyPage.MigratedFrom = ""
+	if err := legacyState.Collect(legacyPage, rcfg, time.Now().Add(-10*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if !legacyState.Seal(rcfg, time.Now()) || legacyState.Inflight == nil {
@@ -569,5 +572,647 @@ func TestStatusCheckFailsOnOverdueOrCorruptSnapshot(t *testing.T) {
 	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(), "--config-dir", cfgDir, "status", "--data-dir", dataDir, "--check", "--max-stale", "10m")
 	if e.Safe(err).Code != "SERVICE_UNHEALTHY" || !strings.Contains(err.Error(), "status_stale") {
 		t.Fatalf("expected status_stale on overdue UpdatedAt, got %v", err)
+	}
+}
+
+// TestRelayAcceptedReceiptUpgradeThenTimeoutTuning verifies that a v0.5.0
+// http_accepted sender with a retained accepted receipt migrates its consumer
+// and watch binding on first resume, survives a subsequent timeout_seconds +
+// broker poll-interval tuning change with the receipt intact, and still stops
+// on genuine destination changes.
+func TestRelayAcceptedReceiptUpgradeThenTimeoutTuning(t *testing.T) {
+	root := shortPrivateDir(t, "wcc-rcpt-")
+	stateDir := filepath.Join(root, "bstate")
+	agentDir := filepath.Join(root, "agent")
+	adminDir := filepath.Join(root, "admin")
+	rdir := filepath.Join(root, "relay")
+	for _, d := range []string{stateDir, agentDir, adminDir, rdir} {
+		if err := os.Mkdir(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	bcfg := config.Default()
+	bcfg.Name = "eng"
+	bcfg.Bot = "bot-1"
+	bcfg.StateDir = stateDir
+	bcfg.AgentSocket = filepath.Join(agentDir, "a.sock")
+	bcfg.AdminSocket = filepath.Join(adminDir, "o.sock")
+	bcfg.WatchBackend = "poll"
+	bcfg.PollIntervalSeconds = 30
+	bcfg.Events = []string{"topic_event", "topic_reply_event"}
+	bcfg.Channels = []config.Channel{{ID: "ch-1", ReadAll: true, ObserveAll: true}}
+
+	st, err := state.Open(stateDir, bcfg.Bot, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Now()
+	if err := st.Update(func(sn *state.Snapshot) error {
+		sn.Events["ev-1"] = callback.Event{
+			ID: "ev-1", Sequence: 1, Bot: bcfg.Bot, Channel: "ch-1", Post: "p-1",
+			Kind: "topic_event", Change: 1, Transport: "poll", ObservationOnly: true,
+			ResourceCreator: "alice", ResourceCreatorKind: "user", SenderKind: "unknown",
+			Received: now.Unix(), Created: now.Unix(),
+		}
+		sn.NextEventSequence = 1
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ledger, _, _ := st.Inbox()
+
+	var received atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	t.Setenv("TEST_RCPT_TOKEN", "tok-rcpt")
+
+	rcfg := relay.DefaultConfig()
+	rcfg.URL = srv.URL
+	rcfg.TokenEnv = "TEST_RCPT_TOKEN"
+	rcfg.DeliveryMode = relay.HTTPAccepted
+	rcfg.TimeoutSeconds = 30
+	rcfg.BatchWindowSeconds = 1
+	rcfg.BatchSize = 1
+	cfgPath := filepath.Join(rdir, "relay.json")
+	writeRelayCfg := func() {
+		raw, _ := json.Marshal(rcfg)
+		if err := securefs.WriteAtomic(cfgPath, raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeRelayCfg()
+
+	scan, err := broker.NormalizeScan(broker.ScanRequest{WholeChannel: true, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyConsumer := rcfg.LegacyConsumerDigest(bcfg.AgentSocket, watchScope(scan))
+	legacyPolicy := apiclient.Digest(bcfg)
+	identity := broker.WatchIdentity{Context: bcfg.Name, Bot: bcfg.Bot, Channel: "ch-1", Ledger: ledger}
+	legacyBinding := apiclient.Digest(struct {
+		Identity broker.WatchIdentity
+		Policy   string
+		Whole    bool
+		Posts    []string
+		Partial  bool
+		Filter   string
+	}{identity, legacyPolicy, true, []string{}, false, "exclude-self-v1"})
+
+	// Pre-populate poll state at legacyPolicy so poll does not hit API on first resume.
+	if err := st.Update(func(snap *state.Snapshot) error {
+		snap.Polling = &state.PollState{
+			Policy: legacyPolicy,
+			Scopes: map[string]state.PollScope{
+				apiclient.Digest(struct {
+					Whole bool
+					Posts []string
+				}{true, []string{}}): {LastSuccess: now.Unix()},
+			},
+			Resources: map[string]state.PollResource{},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := broker.New(bcfg, st, &scriptPollAPI{}, nil)
+	b.Now = func() time.Time { return now }
+
+	// Build a valid v0.5.0 http_accepted state with 1 retained accepted receipt.
+	resp, err := b.Handle(context.Background(), broker.Request{Operation: "event.scan", Scan: &broker.ScanRequest{WholeChannel: true, Limit: 100, Binding: legacyBinding}, DryRun: true}, false)
+	if err != nil || len(resp.Scan.Items) != 1 {
+		t.Fatalf("failed preparing legacy receipt page: resp=%+v err=%v", resp, err)
+	}
+	legacyPage := *resp.Scan
+	legacyPage.Binding = legacyBinding
+	legacyPage.MigratedFrom = ""
+	legacyState := relay.State{Version: 1, Consumer: legacyConsumer, DeliveryMode: relay.HTTPAccepted}
+	if err := legacyState.Collect(legacyPage, rcfg, now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if !legacyState.Seal(rcfg, now) {
+		t.Fatal("expected legacy batch to seal")
+	}
+	legacyState.Inflight.Attempts = 1
+	if err := legacyState.Accept(now, "http_200"); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(rdir, "state.json")
+	rstore, err := relay.Open(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rstore.Save(legacyState); err != nil {
+		t.Fatal(err)
+	}
+	rstore.Close()
+
+	serveCtx, stopBroker := context.WithCancel(context.Background())
+	ready := make(chan struct{})
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- broker.ServeContexts(serveCtx, []*broker.Broker{b}, "", func() { close(ready) })
+	}()
+	<-ready
+	defer func() { stopBroker(); <-serveDone }()
+
+	// Resume #1 with unchanged config: must migrate Consumer (retaining LegacyConsumer)
+	// and migrate watch Binding while keeping the historical receipt intact.
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "relay", "run",
+		"--whole-channel", "--config", cfgPath, "--state", statePath,
+		"--duration", "350ms", "--interval", "1s",
+	)
+	if err != nil {
+		t.Fatalf("first resume with retained receipt failed: %v", err)
+	}
+	after1, exists, err := relay.Read(statePath)
+	if err != nil || !exists {
+		t.Fatalf("failed reading migrated relay state: exists=%v err=%v", exists, err)
+	}
+	if after1.Consumer != rcfg.ConsumerDigest(bcfg.AgentSocket, watchScope(scan)) || after1.LegacyConsumer != legacyConsumer {
+		t.Fatalf("expected migrated Consumer + preserved LegacyConsumer, got consumer=%s legacy=%s", after1.Consumer, after1.LegacyConsumer)
+	}
+	if after1.Binding == legacyBinding || len(after1.Receipts) != 1 {
+		t.Fatalf("expected migrated watch binding and 1 retained receipt, got binding=%s receipts=%d", after1.Binding, len(after1.Receipts))
+	}
+
+	// Tune timeout_seconds (30 -> 31) and broker poll_interval_seconds (30 -> 35),
+	// enqueue a new event, and resume #2.
+	rcfg.TimeoutSeconds = 31
+	writeRelayCfg()
+	b.Config.PollIntervalSeconds = 35
+	if err := st.Update(func(sn *state.Snapshot) error {
+		sn.Events["ev-2"] = callback.Event{
+			ID: "ev-2", Sequence: 2, Bot: bcfg.Bot, Channel: "ch-1", Post: "p-2",
+			Kind: "topic_event", Change: 1, Transport: "poll", ObservationOnly: true,
+			ResourceCreator: "bob", ResourceCreatorKind: "user", SenderKind: "unknown",
+			Received: now.Unix(), Created: now.Unix(),
+		}
+		sn.NextEventSequence = 2
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "relay", "run",
+		"--whole-channel", "--config", cfgPath, "--state", statePath,
+		"--duration", "3s", "--interval", "1s", "--max-batches", "1",
+	)
+	if err != nil {
+		t.Fatalf("second resume after timeout_seconds + poll_interval tuning failed: %v", err)
+	}
+	if received.Load() != 1 {
+		t.Fatalf("expected 1 new batch delivered after tuning, got %d", received.Load())
+	}
+	after2, _, err := relay.Read(statePath)
+	if err != nil || len(after2.Receipts) != 2 {
+		t.Fatalf("expected 2 valid receipts (1 legacy + 1 new), got %d err=%v", len(after2.Receipts), err)
+	}
+
+	// Genuine destination URL change must still fail with RELAY_BINDING_CHANGED.
+	rcfg.URL = srv.URL + "/other"
+	writeRelayCfg()
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "relay", "run",
+		"--whole-channel", "--config", cfgPath, "--state", statePath,
+		"--duration", "1s", "--interval", "1s",
+	)
+	if e.Safe(err).Code != "RELAY_BINDING_CHANGED" {
+		t.Fatalf("expected RELAY_BINDING_CHANGED on destination URL change, got %v", err)
+	}
+}
+
+// TestEventWatchLegacyCheckpointTwoResumesWithIntervalChange verifies that
+// `event watch --checkpoint` migrates a v0.5.0 full-policy binding on its first
+// resume so a second resume after changing poll_interval_seconds succeeds,
+// while genuine scope changes still fail with WATCH_BINDING_CHANGED.
+func TestEventWatchLegacyCheckpointTwoResumesWithIntervalChange(t *testing.T) {
+	root := shortPrivateDir(t, "wcc-wcp-")
+	stateDir := filepath.Join(root, "bstate")
+	agentDir := filepath.Join(root, "agent")
+	adminDir := filepath.Join(root, "admin")
+	cpDir := filepath.Join(root, "cp")
+	for _, d := range []string{stateDir, agentDir, adminDir, cpDir} {
+		if err := os.Mkdir(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	bcfg := config.Default()
+	bcfg.Name = "eng"
+	bcfg.Bot = "bot-1"
+	bcfg.StateDir = stateDir
+	bcfg.AgentSocket = filepath.Join(agentDir, "a.sock")
+	bcfg.AdminSocket = filepath.Join(adminDir, "o.sock")
+	bcfg.WatchBackend = "poll"
+	bcfg.PollIntervalSeconds = 30
+	bcfg.Events = []string{"topic_event", "topic_reply_event"}
+	bcfg.Channels = []config.Channel{{ID: "ch-1", ReadAll: true, ObserveAll: true}}
+
+	st, err := state.Open(stateDir, bcfg.Bot, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ledger, _, _ := st.Inbox()
+	now := time.Now()
+	legacyPolicy := apiclient.Digest(bcfg)
+	if err := st.Update(func(snap *state.Snapshot) error {
+		snap.Polling = &state.PollState{
+			Policy: legacyPolicy,
+			Scopes: map[string]state.PollScope{
+				apiclient.Digest(struct {
+					Whole bool
+					Posts []string
+				}{true, []string{}}): {LastSuccess: now.Unix()},
+			},
+			Resources: map[string]state.PollResource{},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scan, err := broker.NormalizeScan(broker.ScanRequest{WholeChannel: true, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := broker.WatchIdentity{Context: bcfg.Name, Bot: bcfg.Bot, Channel: "ch-1", Ledger: ledger}
+	legacyBinding := apiclient.Digest(struct {
+		Identity broker.WatchIdentity
+		Policy   string
+		Whole    bool
+		Posts    []string
+		Partial  bool
+		Filter   string
+	}{identity, legacyPolicy, true, []string{}, false, "exclude-self-v1"})
+
+	cpPath := filepath.Join(cpDir, "watch.json")
+	rawCP, _ := json.Marshal(watchCheckpoint{
+		Version:  1,
+		Socket:   bcfg.AgentSocket,
+		Binding:  legacyBinding,
+		Identity: identity,
+		Scope:    watchScope(scan),
+		After:    0,
+	})
+	if err := securefs.WriteAtomic(cpPath, rawCP); err != nil {
+		t.Fatal(err)
+	}
+
+	b := broker.New(bcfg, st, &scriptPollAPI{}, nil)
+	b.Now = func() time.Time { return now }
+	serveCtx, stopBroker := context.WithCancel(context.Background())
+	ready := make(chan struct{})
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- broker.ServeContexts(serveCtx, []*broker.Broker{b}, "", func() { close(ready) })
+	}()
+	<-ready
+	defer func() { stopBroker(); <-serveDone }()
+
+	// Resume #1: upgrades checkpoint binding in place.
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "event", "watch",
+		"--whole-channel", "--checkpoint", cpPath, "--duration", "350ms", "--interval", "1s",
+	)
+	if err != nil {
+		t.Fatalf("first event watch resume failed: %v", err)
+	}
+	var cp watchCheckpoint
+	bcp, err := os.ReadFile(cpPath)
+	if err != nil || json.Unmarshal(bcp, &cp) != nil {
+		t.Fatalf("failed reading upgraded checkpoint: %v", err)
+	}
+	if cp.Binding == legacyBinding {
+		t.Fatal("expected checkpoint binding to migrate from legacyBinding on first resume")
+	}
+
+	// Change broker poll_interval_seconds by +5s, then resume #2.
+	b.Config.PollIntervalSeconds = 35
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "event", "watch",
+		"--whole-channel", "--checkpoint", cpPath, "--duration", "350ms", "--interval", "1s",
+	)
+	if err != nil {
+		t.Fatalf("second event watch resume after interval change failed: %v", err)
+	}
+
+	// Genuine channel scope change must still fail with WATCH_BINDING_CHANGED.
+	b.Config.Channels[0].ID = "ch-other"
+	_, _, err = runRootWithRuntime(context.Background(), newProfileRuntime(),
+		"--socket", bcfg.AgentSocket, "event", "watch",
+		"--whole-channel", "--checkpoint", cpPath, "--duration", "1s", "--interval", "1s",
+	)
+	if e.Safe(err).Code != "WATCH_BINDING_CHANGED" {
+		t.Fatalf("expected WATCH_BINDING_CHANGED on channel scope change, got %v", err)
+	}
+}
+
+// TestConnectSameBotOldChannelCollisionAvoidsServeConflict verifies that
+// `connect` reserves saved context names held by another channel of the SAME
+// bot, reuses a saved name only for the matching (bot_id, channel_id) pair, and
+// lets `serve --channel Engineering` run without CONTEXT_CONFLICT.
+func TestConnectSameBotOldChannelCollisionAvoidsServeConflict(t *testing.T) {
+	base := shortPrivateDir(t, "wcc-samebot-")
+	cfgDir := filepath.Join(base, "cfg")
+	dataDir := filepath.Join(base, "d")
+	if err := os.Mkdir(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	oldSock := filepath.Join(base, "old.sock")
+	keepSock := filepath.Join(base, "keep.sock")
+	if err := config.SaveClients(cfgDir, config.ClientFile{
+		Current: "engineering",
+		Contexts: []config.ClientContext{
+			{Name: "engineering", Server: apiclient.Origin, Socket: oldSock, Bot: "bot-same", Channel: "ch-old"},
+			{Name: "ops-custom", Server: apiclient.Origin, Socket: keepSock, Bot: "bot-same", Channel: "ch-keep"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	jsonResp := func(payload any) *http.Response {
+		b, _ := json.Marshal(payload)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(b))}
+	}
+	fakeWeCom := doerFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/cgi-bin/aibot/get_token":
+			return jsonResp(map[string]any{"errcode": 0, "access_token": "tok"}), nil
+		case "/cgi-bin/aibot/topic/get_topic_list":
+			return jsonResp(map[string]any{
+				"errcode": 0, "has_more": false,
+				"topic_list": []map[string]any{
+					{"topic_id": "ch-new", "topic_name": "Engineering", "create_time": 1700000001},
+					{"topic_id": "ch-keep", "topic_name": "Ops Renamed", "create_time": 1700000002},
+				},
+			}), nil
+		default:
+			return jsonResp(map[string]any{"errcode": 0, "has_more": false, "post_list": []any{}, "reply_list": []any{}}), nil
+		}
+	})
+
+	t.Setenv("WECOM_CHANNEL_BOT_SECRET", "sec-same")
+	creds := newMemProfileCreds()
+	rt := profileRuntime{
+		credentials: func(string) profileCredentials { return creds },
+		client: func(bot, secret string, tcfg transport.Config) (apiclient.Client, error) {
+			return apiclient.NewWithOptions(bot, secret, apiclient.Options{
+				Transport: tcfg,
+				HTTP:      kittransport.New(kittransport.Options{Doer: fakeWeCom, MaxRetries: 0}),
+			})
+		},
+	}
+
+	if _, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "connect", "--bot-id", "bot-same"); err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	p, _, err := config.LoadProfile(cfgDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var engCtx, keepCtx string
+	for _, ch := range p.Channels {
+		switch ch.ID {
+		case "ch-new":
+			engCtx = ch.Context
+		case "ch-keep":
+			keepCtx = ch.Context
+		}
+	}
+	if engCtx == "" || engCtx == "engineering" {
+		t.Fatalf("expected ch-new to receive a distinct non-colliding context name, got %q", engCtx)
+	}
+	if keepCtx != "ops-custom" {
+		t.Fatalf("expected matching (bot-same, ch-keep) to reuse ops-custom, got %q", keepCtx)
+	}
+
+	// serve --channel Engineering must succeed without CONTEXT_CONFLICT and leave
+	// the existing `engineering -> ch-old` entry untouched.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, _, runErr := runRootWithRuntime(ctx, rt, "--config-dir", cfgDir, "serve", "--channel", "Engineering", "--data-dir", dataDir)
+		done <- runErr
+	}()
+	waitFor(t, 8*time.Second, func() bool {
+		out, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status", "--data-dir", dataDir)
+		return err == nil && strings.Contains(out, `"state": "healthy"`)
+	}, "serve healthy with same-bot distinct context")
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("serve failed after connect: %v", err)
+	}
+
+	clients, err := config.ReadClients(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundOld, foundNew := false, false
+	for _, c := range clients.Contexts {
+		if c.Name == "engineering" && c.Bot == "bot-same" && c.Channel == "ch-old" && c.Socket == oldSock {
+			foundOld = true
+		}
+		if c.Name == engCtx && c.Bot == "bot-same" && c.Channel == "ch-new" {
+			foundNew = true
+		}
+	}
+	if !foundOld || !foundNew {
+		t.Fatalf("expected both old engineering->ch-old and new %s->ch-new preserved, got %+v", engCtx, clients.Contexts)
+	}
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestInteractiveSelectionPreservesConcurrentProfileRefresh verifies that
+// interactive channel selection in both `listen` and `serve` acquires
+// profile.lock and reloads the latest profile before saving, preserving
+// concurrent edits (such as interval changes and newly discovered channels)
+// and resolving numeric picks by stable topic_id.
+func TestInteractiveSelectionPreservesConcurrentProfileRefresh(t *testing.T) {
+	base := shortPrivateDir(t, "wcc-inter-")
+	cfgDir := filepath.Join(base, "cfg")
+	dataDir := filepath.Join(base, "d")
+	if err := os.Mkdir(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	creds := newMemProfileCreds()
+	_, _ = creds.Save("bot-i", "sec-i")
+	rt := profileRuntime{
+		credentials: func(string) profileCredentials { return creds },
+		client:      func(string, string, transport.Config) (apiclient.Client, error) { return &scriptPollAPI{}, nil },
+		isTerminal:  func(any) bool { return true },
+	}
+
+	seedProfile := func() {
+		p := config.DefaultProfile("bot-i")
+		p.DataDir = dataDir
+		p.Polling.IntervalSeconds = 30
+		p.Channels = []config.ProfileChannel{
+			{ID: "ch-alpha", Name: "Alpha", Context: "alpha"},
+			{ID: "ch-beta", Name: "Beta", Context: "beta"},
+		}
+		if err := config.SaveProfile(cfgDir, p, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 1. `listen` interactive prompt + concurrent interval change + channel refresh.
+	seedProfile()
+	pr, pw := io.Pipe()
+	var outBuf, errBuf syncBuffer
+	done := make(chan error, 1)
+	go func() {
+		root := newRootCmd(rt)
+		root.SetIn(pr)
+		root.SetOut(&outBuf)
+		root.SetErr(&errBuf)
+		root.SetArgs([]string{"--config-dir", cfgDir, "listen"})
+		done <- root.ExecuteContext(context.Background())
+	}()
+	waitFor(t, 5*time.Second, func() bool {
+		return strings.Contains(errBuf.String(), "Choose channel numbers")
+	}, "listen interactive prompt")
+
+	// Concurrently lock profile.lock, change interval 30 -> 90 and prepend AAA.
+	lk, err := lockProfile(cfgDir)
+	if err != nil {
+		t.Fatalf("expected profile.lock to be free during interactive prompt: %v", err)
+	}
+	latest, _, err := config.LoadProfile(cfgDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest.Polling.IntervalSeconds = 90
+	latest.Channels = append([]config.ProfileChannel{{ID: "ch-aaa", Name: "AAA", Context: "aaa"}}, latest.Channels...)
+	if err := config.SaveProfile(cfgDir, latest, false); err != nil {
+		t.Fatal(err)
+	}
+	_ = lk.Close()
+
+	_, _ = io.WriteString(pw, "none\n")
+	_ = pw.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("interactive listen failed: %v", err)
+	}
+	afterListen, _, err := config.LoadProfile(cfgDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterListen.Polling.IntervalSeconds != 90 || len(afterListen.Channels) != 3 || afterListen.Channels[0].ID != "ch-aaa" {
+		t.Fatalf("concurrent profile refresh was clobbered by listen: interval=%d channels=%+v", afterListen.Polling.IntervalSeconds, afterListen.Channels)
+	}
+
+	// 2. If profile.lock is still held when the user answers, listen must fail with PROFILE_IN_USE.
+	seedProfile()
+	pr2, pw2 := io.Pipe()
+	var errBuf2 syncBuffer
+	done2 := make(chan error, 1)
+	go func() {
+		root := newRootCmd(rt)
+		root.SetIn(pr2)
+		root.SetOut(io.Discard)
+		root.SetErr(&errBuf2)
+		root.SetArgs([]string{"--config-dir", cfgDir, "listen"})
+		done2 <- root.ExecuteContext(context.Background())
+	}()
+	waitFor(t, 5*time.Second, func() bool {
+		return strings.Contains(errBuf2.String(), "Choose channel numbers")
+	}, "listen prompt for lock contention")
+	held, err := lockProfile(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.WriteString(pw2, "none\n")
+	_ = pw2.Close()
+	if err := <-done2; e.Safe(err).Code != "PROFILE_IN_USE" {
+		_ = held.Close()
+		t.Fatalf("expected PROFILE_IN_USE when profile.lock is held during interactive save, got %v", err)
+	}
+	_ = held.Close()
+
+	// 3. `serve` interactive prompt (no --save, with one-run --interval 45s) +
+	//    concurrent interval change (30 -> 90) and prepended channel AAA.
+	//    User chooses "2" (Beta on the prompt screen): must select ch-beta by ID,
+	//    preserve interval=90 and AAA, and NOT persist the one-run --interval 45s.
+	seedProfile()
+	pr3, pw3 := io.Pipe()
+	var errBuf3 syncBuffer
+	serveCtx, cancelServe := context.WithCancel(context.Background())
+	defer cancelServe()
+	done3 := make(chan error, 1)
+	go func() {
+		root := newRootCmd(rt)
+		root.SetIn(pr3)
+		root.SetOut(io.Discard)
+		root.SetErr(&errBuf3)
+		root.SetArgs([]string{"--config-dir", cfgDir, "serve", "--interval", "45s"})
+		done3 <- root.ExecuteContext(serveCtx)
+	}()
+	waitFor(t, 5*time.Second, func() bool {
+		return strings.Contains(errBuf3.String(), "Choose channel numbers")
+	}, "serve interactive prompt")
+
+	lk3, err := lockProfile(cfgDir)
+	if err != nil {
+		t.Fatalf("expected profile.lock to be free during serve prompt: %v", err)
+	}
+	latest3, _, err := config.LoadProfile(cfgDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest3.Polling.IntervalSeconds = 90
+	latest3.Channels = append([]config.ProfileChannel{{ID: "ch-aaa", Name: "AAA", Context: "aaa"}}, latest3.Channels...)
+	if err := config.SaveProfile(cfgDir, latest3, false); err != nil {
+		t.Fatal(err)
+	}
+	_ = lk3.Close()
+
+	_, _ = io.WriteString(pw3, "2\n")
+	_ = pw3.Close()
+	waitFor(t, 8*time.Second, func() bool {
+		out, _, err := runRootWithRuntime(context.Background(), rt, "--config-dir", cfgDir, "status", "--data-dir", dataDir)
+		return err == nil && strings.Contains(out, `"state": "healthy"`)
+	}, "interactive serve healthy")
+	cancelServe()
+	if err := <-done3; err != nil {
+		t.Fatalf("interactive serve failed: %v", err)
+	}
+
+	afterServe, _, err := config.LoadProfile(cfgDir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterServe.Polling.IntervalSeconds != 90 || len(afterServe.Channels) != 3 {
+		t.Fatalf("concurrent refresh or one-run override leaked in serve: interval=%d channels=%+v", afterServe.Polling.IntervalSeconds, afterServe.Channels)
+	}
+	sel := afterServe.SelectedChannels()
+	if len(sel) != 1 || sel[0].ID != "ch-beta" {
+		t.Fatalf("expected stable interactive pick of ch-beta even after AAA was prepended, got %+v", sel)
 	}
 }

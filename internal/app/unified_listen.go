@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/angelmsger/agent-cli-kit/output"
-	"github.com/angelmsger/agent-cli-kit/terminal"
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
 	"github.com/angelmsger/wecom-channel-cli/internal/config"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
@@ -199,6 +198,27 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 		if !exists || p.Bot == "" {
 			return profileMissingError()
 		}
+		if !dry && !selection.explicit() && len(p.SelectedChannels()) == 0 && len(p.Channels) > 0 && runtime.interactive(cmd.InOrStdin()) {
+			selection, err = promptChannelSelection(cmd, p)
+			if err != nil {
+				return err
+			}
+			if selection.explicit() && profileLock == nil {
+				if dir, err = securefs.EnsurePrivateDir(dir, strictFS); err != nil {
+					return err
+				}
+				if profileLock, err = lockProfile(dir); err != nil {
+					return err
+				}
+				p, exists, err = config.LoadProfile(dir, strictFS)
+				if err != nil {
+					return err
+				}
+				if !exists || p.Bot == "" {
+					return profileMissingError()
+				}
+			}
+		}
 		baseProfile := p
 		baseProfile.Channels = append([]config.ProfileChannel(nil), p.Channels...)
 		if cmd.Flags().Changed("interval") {
@@ -209,12 +229,6 @@ func (s *appState) listenCommand(runtime profileRuntime) *cobra.Command {
 		}
 		if dataDir != "" {
 			p.DataDir = dataDir
-		}
-		if !dry && !selection.explicit() && len(p.SelectedChannels()) == 0 && len(p.Channels) > 0 && terminal.Is(cmd.InOrStdin()) {
-			selection, err = promptChannelSelection(cmd, p)
-			if err != nil {
-				return err
-			}
 		}
 		if selection.explicit() {
 			if err = selection.apply(&p); err != nil {

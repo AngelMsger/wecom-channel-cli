@@ -76,10 +76,15 @@ func (s *appState) relayCommand() *cobra.Command {
 		if exists && (!consumerOK || cmd.Flags().Changed("after-sequence")) {
 			return e.New(e.CategoryConflict, "RELAY_BINDING_CHANGED", "Use the original socket, scope, destination and filters with saved state, without --after-sequence. Drain or reconcile pending work before deliberately provisioning a new consumer.")
 		}
-		// Keep legacy st.Consumer intact whenever sealed batches or receipts
-		// depend on it; upgrade only empty, receipt-free state to the new digest.
-		if exists && st.Consumer == legacyConsumer && st.Inflight == nil && len(st.Receipts) == 0 && !dry {
+		// Migrate legacy full-config consumers to the tuning-independent digest,
+		// preserving LegacyConsumer when historical batches or receipts depend on it.
+		upgradedConsumer := false
+		if exists && st.Consumer == legacyConsumer && st.Consumer != consumer && !dry {
+			if st.Inflight != nil || len(st.Receipts) > 0 {
+				st.LegacyConsumer = st.Consumer
+			}
 			st.Consumer = consumer
+			upgradedConsumer = true
 		}
 		if retryScan && !exists {
 			return e.New(e.CategoryNotFound, "RELAY_STATE_MISSING", "A scan repair requires the original sender state.")
@@ -129,8 +134,10 @@ func (s *appState) relayCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if !exists || (st.Binding == "" && st.StartedAt == 0) {
-			st.StartedAt = time.Now().UnixMilli()
+		if !exists || (st.Binding == "" && st.StartedAt == 0) || upgradedConsumer {
+			if st.StartedAt == 0 {
+				st.StartedAt = time.Now().UnixMilli()
+			}
 			if err = save(st); err != nil {
 				return err
 			}
@@ -324,6 +331,9 @@ func pumpRelayWithWake(ctx context.Context, cfg relay.Config, scan broker.ScanRe
 				}
 				notice("scan_retry", st, e.Safe(err).Code)
 			} else if p.Progress != nil {
+				if p.MigratedFrom != "" && st.Binding == p.MigratedFrom {
+					st.Binding = p.Binding
+				}
 				st.Progress = p.Progress
 				st.NextScan = max(time.Now().Add(time.Millisecond*100).UnixMilli(), p.Progress.NextAt)
 				st.LastSnapshot = p.LastSnapshot
@@ -331,6 +341,9 @@ func pumpRelayWithWake(ctx context.Context, cfg relay.Config, scan broker.ScanRe
 					return fail(err)
 				}
 			} else {
+				if p.MigratedFrom != "" && st.Binding == p.MigratedFrom {
+					st.Binding = p.Binding
+				}
 				st.ResetScan()
 				st.LastSnapshot = p.LastSnapshot
 				// When the queue is full, validate without consuming the returned page.

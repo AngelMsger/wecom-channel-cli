@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/angelmsger/agent-cli-kit/output"
-	"github.com/angelmsger/agent-cli-kit/terminal"
 	"github.com/angelmsger/wecom-channel-cli/internal/broker"
 	"github.com/angelmsger/wecom-channel-cli/internal/config"
 	"github.com/angelmsger/wecom-channel-cli/internal/relay"
@@ -183,27 +182,6 @@ func buildServeRelayConfig(p config.Profile) (relay.Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// foreignContextNames returns context names in config.yaml that already belong
-// to a different (bot_id, channel_id) pair so auto-generated context names
-// avoid colliding with existing saved contexts.
-func foreignContextNames(configDir, bot string, channels []config.ProfileChannel) (map[string]bool, error) {
-	f, err := config.ReadClients(configDir)
-	if err != nil {
-		return nil, err
-	}
-	owned := make(map[string]bool, len(channels))
-	for _, ch := range channels {
-		owned[ch.ID] = true
-	}
-	foreign := make(map[string]bool)
-	for _, c := range f.Contexts {
-		if c.Bot != bot || !owned[c.Channel] {
-			foreign[c.Name] = true
-		}
-	}
-	return foreign, nil
-}
-
 func syncServeClientContexts(configDir, bot string, entries []ChannelStatus) error {
 	f, err := config.ReadClients(configDir)
 	if err != nil {
@@ -315,6 +293,27 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 		if !exists || p.Bot == "" {
 			return profileMissingError()
 		}
+		if !dry && !selection.explicit() && len(p.SelectedChannels()) == 0 && len(p.Channels) > 0 && runtime.interactive(cmd.InOrStdin()) {
+			selection, err = promptChannelSelection(cmd, p)
+			if err != nil {
+				return err
+			}
+			if selection.explicit() && profileLock == nil {
+				if dir, err = securefs.EnsurePrivateDir(dir, strictFS); err != nil {
+					return err
+				}
+				if profileLock, err = lockProfile(dir); err != nil {
+					return err
+				}
+				p, exists, err = config.LoadProfile(dir, strictFS)
+				if err != nil {
+					return err
+				}
+				if !exists || p.Bot == "" {
+					return profileMissingError()
+				}
+			}
+		}
 		baseProfile := p
 		baseProfile.Channels = append([]config.ProfileChannel(nil), p.Channels...)
 		if cmd.Flags().Changed("interval") {
@@ -338,12 +337,6 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 		if cmd.Flags().Changed("on-uncertain") {
 			p.Webhook.OnUncertain = strings.TrimSpace(onUncertain)
 		}
-		if !dry && !selection.explicit() && len(p.SelectedChannels()) == 0 && len(p.Channels) > 0 && terminal.Is(cmd.InOrStdin()) {
-			selection, err = promptChannelSelection(cmd, p)
-			if err != nil {
-				return err
-			}
-		}
 		if selection.explicit() {
 			if err = selection.apply(&p); err != nil {
 				return err
@@ -364,26 +357,15 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 				return err
 			}
 		}
-		foreignCtx, err := foreignContextNames(dir, p.Bot, channels)
+		savedClients, err := config.ReadClients(dir)
 		if err != nil {
 			return err
 		}
+		ctxNames := resolveChannelContexts(p.Bot, channels, savedClients.Contexts)
 		effectiveData := p.EffectiveDataDir(dir)
-		usedCtx := map[string]bool{}
-		for name := range foreignCtx {
-			usedCtx[name] = true
-		}
-		for _, ch := range channels {
-			if ch.Context != "" {
-				usedCtx[ch.Context] = true
-			}
-		}
 		previewChannels := make([]ChannelStatus, 0, len(channels))
-		for _, ch := range channels {
-			ctxName := ch.Context
-			if ctxName == "" {
-				ctxName = config.ChannelContextName(p.Bot, ch, usedCtx)
-			}
+		for i, ch := range channels {
+			ctxName := ctxNames[i]
 			slug := config.ChannelStateSlug(p.Bot, ch.ID)
 			agentSock, adminSock, sockErr := config.ChannelSocketPaths(effectiveData, slug)
 			if sockErr != nil {
@@ -465,15 +447,6 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 
 		// Recompute socket paths against canonical resolvedData so config.yaml
 		// and unixListener agree on exact paths.
-		usedCtx = map[string]bool{}
-		for name := range foreignCtx {
-			usedCtx[name] = true
-		}
-		for _, ch := range channels {
-			if ch.Context != "" {
-				usedCtx[ch.Context] = true
-			}
-		}
 		statuses := make([]ChannelStatus, 0, len(channels))
 		brokers := make([]*broker.Broker, 0, len(channels))
 		var stores []*state.Store
@@ -483,11 +456,8 @@ func (s *appState) serveCommand(runtime profileRuntime) *cobra.Command {
 			}
 		}()
 
-		for _, ch := range channels {
-			ctxName := ch.Context
-			if ctxName == "" {
-				ctxName = config.ChannelContextName(p.Bot, ch, usedCtx)
-			}
+		for i, ch := range channels {
+			ctxName := ctxNames[i]
 			slug := config.ChannelStateSlug(p.Bot, ch.ID)
 			chDir := filepath.Join(resolvedData, "channels", slug)
 			agentSock, adminSock, sockErr := config.ChannelSocketPaths(resolvedData, slug)
